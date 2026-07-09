@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "sources": {
+    "local_authorized": {
+      "status": "allowed",
+      "note": "Only import images owned by the project or covered by explicit written permission."
+    },
+    "openverse": {
+      "status": "candidate_only",
+      "allowed_licenses": ["cc0", "pdm"],
+      "note": "Provider metadata is not a legal guarantee. Review license, attribution, model and property rights before production use."
+    },
+    "unsplash": {
+      "status": "blocked_pending_written_permission",
+      "note": "Current API terms direct ML/AI uses to Unsplash data licensing. Do not collect through the ordinary API for this project."
+    },
+    "pexels": {
+      "status": "blocked_pending_written_permission",
+      "note": "Current terms prohibit unauthorized ML extraction and large-scale copying."
+    }
+  }
+}

@@ -15,6 +15,7 @@ engine/build/
 tools/.venv/
 __pycache__/
 *.pyc
+.env
 
 # 模型文件 (Git LFS 或独立管理)
 engine/models/*.tflite
@@ -22,6 +23,7 @@ engine/models/*.gguf
 engine/models/*.idx
 engine/models/*.pt
 engine/models/*.onnx
+*.task
 
 # 模板库照片
 tools/raw_photos/
