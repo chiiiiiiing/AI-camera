@@ -188,6 +188,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("jobs", type=Path)
     parser.add_argument("--model", type=Path, required=True)
+    parser.add_argument("--report", type=Path, help="Write per-job preprocessing status JSONL")
+    parser.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help="Return success even when some jobs fail; useful for exploratory pilots",
+    )
     args = parser.parse_args()
     jobs = [json.loads(line) for line in args.jobs.read_text().splitlines() if line.strip()]
     print(f"Loading {len(jobs)} jobs, initializing MediaPipe...", flush=True)
@@ -208,8 +214,18 @@ def main() -> int:
         status_counts[s] = status_counts.get(s, 0) + 1
     for s, c in sorted(status_counts.items()):
         print(f"  {s}: {c}")
+    failures = [r for r in results if r["status"] not in {"non_portrait", "pose_detected"}]
+    for failure in failures:
+        reason = failure.get("reason", "")
+        print(f"  failed {failure['photo_id']}: {failure['status']} {reason}".rstrip())
     print(f"Total: {len(results)} (portrait={portrait_count})")
-    return 0
+    report_path = args.report or args.jobs.with_suffix(".cv_report.jsonl")
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    with report_path.open("w", encoding="utf-8") as handle:
+        for result in results:
+            handle.write(json.dumps(result, ensure_ascii=False, sort_keys=True) + "\n")
+    print(f"Report: {report_path}")
+    return 0 if args.allow_partial or not failures else 1
 
 
 if __name__ == "__main__":

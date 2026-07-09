@@ -30,6 +30,22 @@
 - 29 条未通过记录均为 `sha256_mismatch`；在修复或重采前不得进入 `preprocess.py` 正式任务。
 - 当前批次只可作为链路验证和失败案例，不可作为模板库。
 
+## pilot-v2 clean 派生清单
+
+2026-07-09 已建立两级隔离流程：
+
+1. `manifest.clean.jsonl`：隔离 29 条 accepted 但 SHA-256 不一致的记录，剩余 146 条 accepted。
+2. `manifest.cv-clean.jsonl`：进一步隔离 3 条 torso anchors 置信度不足、无法稳定归一化的人像记录，剩余 143 条 accepted。
+
+最终 clean pilot 验证结果：
+
+- `validate_manifest.py` 通过。
+- `audit_dataset.py` 通过。
+- `screen_candidates.py`：143/143 通过，人像 6/6 检出 pose。
+- `run_cv_preprocess.py`：非人像 137、人像 `pose_detected` 6，返回成功。
+
+这 143 条只是技术链路 clean，不等于最终模板。入库前仍需人工美学、来源权利和肖像权复核。
+
 ## 姿态模型选择
 
 原设计的 Ultralytics YOLOv8 Pose 对闭源商业产品存在 AGPL-3.0 / Enterprise 授权要求。MVP 候选筛选优先验证 Apache-2.0 的 MediaPipe Pose Landmarker；最终端侧方案在精度评测后确认。

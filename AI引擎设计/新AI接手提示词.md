@@ -197,15 +197,16 @@
 
 2026-07-09 更新：
 1. MediaPipe Pose Landmarker 真实筛选已跑通；macOS 沙盒内会因图形/缓存服务不可用崩溃，需在非沙盒环境或设置可写缓存目录后运行
-2. `tools/build_template_db` 单元测试 26/26 通过；`validate_manifest.py` 结构校验 223 条通过
+2. `tools/build_template_db` 单元测试 31/31 通过；`validate_manifest.py` 结构校验 223 条通过
 3. `audit_dataset.py` 发现 35 条 SHA-256 不匹配，其中 29 条是 `accepted`，当前本地批次不得入库
 4. `screen_candidates.py` 和 `preprocess.py` 已新增 SHA-256 硬门槛；新筛选结果为 175 条非 rejected 候选中 146 条通过（人像 9、风景 106、静物 31）
-5. `preprocess.py` 当前会在第 23 行哈希不一致处停止，这是预期保护行为
+5. 已新增 `quarantine_integrity_failures.py` 和 `quarantine_cv_failures.py`，生成 `manifest.cv-clean.jsonl`
+6. 最终 clean pilot：143 条 accepted（人像 6、风景 106、静物 31），真实筛选 143/143 通过，正式 CV 预处理成功（非人像 137、人像 pose_detected 6）
 
 接下来：
-1. 修复或废弃 29 条 accepted 但哈希不一致的记录；更推荐重采 pilot-v2-clean
-2. 重采后必须依次通过 `validate_manifest.py`、`audit_dataset.py`、`screen_candidates.py`
-3. 三项检查全绿后再运行 `preprocess.py` 生成正式 CV jobs
+1. 对 143 条 clean pilot 做人工美学、来源权利和肖像权复核；未复核前不得作为模板入库
+2. 抽检 6 条人像预处理 JSON 的 COCO17 关键点、归一化坐标和关节角
+3. 复核通过后接入 MobileCLIP embedding 与背景处理；否则扩大重采 pilot-v2-clean
 4. 中国人像采用自有拍摄、创作者书面授权或权利明确来源，不直接抓取社交媒体
 5. 再进入 GPT-4V/Claude Vision 批量标注脚本、质量校验和 USearch 索引构建
 

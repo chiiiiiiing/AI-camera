@@ -67,6 +67,7 @@
         "rights_status": {"enum": ["pending", "accepted", "rejected"]},
         "portrait_release_status": {"enum": ["not_applicable", "pending", "accepted", "rejected"]},
         "rejection_reason": {"type": ["string", "null"]},
+        "cv_failure_reason": {"type": ["string", "null"]},
         "reviewed_at": {"type": ["string", "null"], "format": "date-time"}
       }
     }

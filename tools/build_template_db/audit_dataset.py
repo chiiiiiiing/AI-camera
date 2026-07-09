@@ -86,7 +86,7 @@ def audit_records(
                 errors.append(f"{prefix}: image file is missing")
             continue
         existing_count += 1
-        if sha256_file(image_path) != digest:
+        if sha256_file(image_path) != digest and quality_status != "rejected":
             errors.append(f"{prefix}: sha256 mismatch")
         try:
             with Image.open(image_path) as image:

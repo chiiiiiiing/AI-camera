@@ -36,9 +36,11 @@ class CoreValidationTests(unittest.TestCase):
                 "verification_status": "provider_declared_pending_review",
             },
             "review": {
-                "quality_status": "pending",
+                "quality_status": "rejected",
                 "rights_status": "pending",
                 "portrait_release_status": "not_applicable",
+                "rejection_reason": "cv_preprocess_error",
+                "cv_failure_reason": "torso anchors not confident enough",
             },
         }
         self.assertEqual(validate_manifest.validate_core(record), [])

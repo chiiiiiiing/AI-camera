@@ -93,12 +93,20 @@ python review_candidates.py ../raw_photos/manifest.jsonl PHOTO_ID rejected \
 python audit_dataset.py ../raw_photos/manifest.jsonl
 ```
 
+如果本地文件与 manifest 的 SHA-256 不一致，先生成隔离后的清单，不要直接进入预处理：
+
+```bash
+python quarantine_integrity_failures.py ../raw_photos/manifest.jsonl \
+  --output ../raw_photos/manifest.clean.jsonl
+```
+
 最终入库前使用 `--require-final`，届时所有照片必须通过质量和权利审核，人像还必须通过肖像权审核。
 
 为 CV 模型生成预处理任务：
 
 ```bash
-python preprocess.py ../raw_photos/manifest.jsonl
+python preprocess.py ../raw_photos/manifest.clean.jsonl \
+  --jobs ../preprocessed/jobs.clean.jsonl
 ```
 
 当前 `preprocess.py` 已固定主人物选择、COCO 17 点 Root-centered Scaling、关节角和 256 维向量校验接口。YOLOv8-Pose、MediaPipe 与 MobileCLIP 适配器将在下一步接入，任务状态在此之前明确为 `pending_cv_models`。
@@ -113,6 +121,22 @@ python screen_candidates.py ../raw_photos/manifest.jsonl \
 筛选和预处理都会校验文件 SHA-256。只要图片文件与 manifest 记录不一致，就会以 `sha256_mismatch` 拒绝，不能进入正式 CV 任务。
 
 默认正式预处理只接收人工标记为 `accepted` 的记录。仅在筛选阶段需要时使用 `preprocess.py --include-pending`。
+
+运行真实 CV 预处理后，若有人像因关键点质量不足失败，先隔离失败记录，再生成最终 jobs：
+
+```bash
+python run_cv_preprocess.py ../preprocessed/jobs.clean.jsonl \
+  --model models/pose_landmarker_lite.task \
+  --report ../preprocessed/cv_report.clean.jsonl \
+  --allow-partial
+
+python quarantine_cv_failures.py ../raw_photos/manifest.clean.jsonl \
+  ../preprocessed/cv_report.clean.jsonl \
+  --output ../raw_photos/manifest.cv-clean.jsonl
+
+python preprocess.py ../raw_photos/manifest.cv-clean.jsonl \
+  --jobs ../preprocessed/jobs.cv-clean.jsonl
+```
 
 运行单元测试：
 
