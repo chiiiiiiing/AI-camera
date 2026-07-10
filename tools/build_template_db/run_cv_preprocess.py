@@ -187,7 +187,7 @@ def process_non_portrait_job(job: dict) -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("jobs", type=Path)
-    parser.add_argument("--model", type=Path, required=True)
+    parser.add_argument("--model", type=Path)
     parser.add_argument("--report", type=Path, help="Write per-job preprocessing status JSONL")
     parser.add_argument(
         "--allow-partial",
@@ -196,18 +196,26 @@ def main() -> int:
     )
     args = parser.parse_args()
     jobs = [json.loads(line) for line in args.jobs.read_text().splitlines() if line.strip()]
-    print(f"Loading {len(jobs)} jobs, initializing MediaPipe...", flush=True)
-    mp, landmarker = load_pose_landmarker(args.model)
+    portrait_count = sum(1 for job in jobs if job.get("pose_required"))
+    landmarker = None
+    if portrait_count:
+        if args.model is None:
+            print("error: --model is required when jobs include pose_required=true", file=sys.stderr)
+            return 2
+        print(f"Loading {len(jobs)} jobs, initializing MediaPipe...", flush=True)
+        _, landmarker = load_pose_landmarker(args.model)
+    else:
+        print(f"Loading {len(jobs)} non-portrait jobs; MediaPipe not required.", flush=True)
     results = []
-    portrait_count = 0
     for job in jobs:
         if job.get("pose_required"):
-            portrait_count += 1
+            assert landmarker is not None
             result = process_portrait_job(job, landmarker)
         else:
             result = process_non_portrait_job(job)
         results.append(result)
-    landmarker.close()
+    if landmarker is not None:
+        landmarker.close()
     status_counts = {}
     for r in results:
         s = r["status"]

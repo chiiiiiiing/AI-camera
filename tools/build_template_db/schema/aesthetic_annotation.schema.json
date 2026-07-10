@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-camera.local/schema/aesthetic_annotation.schema.json",
+  "title": "AI Camera aesthetic annotation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "photo_id",
+    "photo_type",
+    "scene_category",
+    "visual_summary",
+    "composition",
+    "lighting",
+    "camera",
+    "subject",
+    "aesthetic_score",
+    "template_value",
+    "shooting_guidance"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "photo_id": {"type": "string", "minLength": 1},
+    "photo_type": {"enum": ["portrait", "landscape", "still_life"]},
+    "scene_category": {"type": "string", "minLength": 1},
+    "visual_summary": {"type": "string", "minLength": 1, "maxLength": 240},
+    "composition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "subject_position", "horizon_position", "leading_lines", "negative_space"],
+      "properties": {
+        "type": {"type": "string", "minLength": 1},
+        "subject_position": {"enum": ["left", "center", "right", "top", "bottom", "none", "unknown"]},
+        "horizon_position": {"enum": ["upper_third", "middle", "lower_third", "not_visible", "unknown"]},
+        "leading_lines": {"type": "boolean"},
+        "negative_space": {"enum": ["low", "medium", "high", "unknown"]}
+      }
+    },
+    "lighting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["quality", "direction", "time_of_day", "contrast"],
+      "properties": {
+        "quality": {"enum": ["soft", "hard", "mixed", "unknown"]},
+        "direction": {"enum": ["front", "side", "back", "top", "ambient", "unknown"]},
+        "time_of_day": {"enum": ["day", "golden_hour", "blue_hour", "night", "indoor", "unknown"]},
+        "contrast": {"enum": ["low", "medium", "high", "unknown"]}
+      }
+    },
+    "camera": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["angle", "distance", "orientation"],
+      "properties": {
+        "angle": {"enum": ["eye_level", "low", "high", "top_down", "unknown"]},
+        "distance": {"enum": ["close", "medium", "wide", "unknown"]},
+        "orientation": {"enum": ["landscape", "portrait", "square", "unknown"]}
+      }
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary_type", "count", "pose_description"],
+      "properties": {
+        "primary_type": {"enum": ["person", "landscape", "object", "food", "plant", "architecture", "unknown"]},
+        "count": {"type": "integer", "minimum": 0},
+        "pose_description": {"type": ["string", "null"], "maxLength": 160}
+      }
+    },
+    "aesthetic_score": {"type": "number", "minimum": 0, "maximum": 5},
+    "template_value": {"enum": ["reject", "low", "medium", "high"]},
+    "shooting_guidance": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "items": {"type": "string", "minLength": 1, "maxLength": 120}
+    }
+  }
+}

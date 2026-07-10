@@ -46,6 +46,37 @@
 
 这 143 条只是技术链路 clean，不等于最终模板。入库前仍需人工美学、来源权利和肖像权复核。
 
+## Openverse 人像批次判定失败
+
+2026-07-09 用户反馈人像目录中大量照片并非合格人像模板，且原始文件名太长，无法高效反馈。复查后确认：
+
+- `manifest.review-clean.jsonl` 通过敏感词过滤后仍剩 4 条 accepted 人像。
+- 审核包显示 2 条为明显成人/不适合内容，另 2 条也不是现代手机人像模板。
+- 已用短编号审核流程将 `P001`-`P004` 全部拒绝，生成 `manifest.portrait-clean.jsonl`。
+- 当前可用 pilot 仅保留 137 条非人像：风景 106、静物 31；人像 accepted 为 0。
+
+结论：Openverse 匿名搜索不再作为人像模板主来源。后续人像应改为自有拍摄、明确授权创作者投稿、或人工预筛的可信来源，再进入 Pose / CV 预处理。
+
+## 非人像 visual-clean 状态
+
+2026-07-09 继续对非人像 pilot 做自动质量清理：
+
+- `visual_quality_report.py` 对 137 条非人像 accepted 样本生成亮度、对比度和边缘细节指标。
+- `quarantine_visual_quality.py` 只按极端硬问题自动隔离，当前仅拒绝 1 张 `very_dark` 城市风景。
+- 最新清单为 `manifest.visual-clean.jsonl`：accepted 136，风景 105、静物 31、人像 0。
+- `jobs.visual-clean.jsonl` 生成 136 条非人像预处理任务。
+- `run_cv_preprocess.py` 已支持无人体任务时不加载 MediaPipe；136 条非人像预处理成功。
+- `validate_preprocessed.py` 校验 136 个 `preprocessed.json` 全部通过。
+- `build_annotation_requests.py` 生成 `annotation_requests.visual-clean.jsonl`，共 136 条，作为下一步视觉 LLM 美学标注输入。
+- `pack_annotation_batches.py` 已生成 `annotation_batches.visual-clean`：3 个批次，分别 50、50、36 条。
+- `merge_annotation_results.py` 已就绪，可合并批量标注结果并校验缺失、重复、未知 `photo_id`。
+- `quarantine_annotation_results.py`、`build_template_metadata.py`、`validate_template_metadata.py` 已就绪；标注结果回来后可自动隔离低价值样本并生成入库前元数据。
+- `validate_embeddings.py --allow-missing` 当前通过，确认 136 条 job 的 embedding 仍处于预期缺失状态。
+- `dataset_status.py --root ../..` 可汇总当前 136 条 visual-clean 状态。
+- `check_pipeline.py --root ../..` 当前为 6 项检查、0 失败、2 pending；pending 是缺 `annotations.visual-clean.jsonl` 与 `template_metadata.visual-clean.jsonl`。
+
+这批 136 条仍未完成最终人工美学/权利复核，也尚未接入视觉 LLM 标注、MobileCLIP embedding 与 USearch。没有 `annotations.visual-clean.jsonl` 前不要生成最终模板库索引。
+
 ## 姿态模型选择
 
 原设计的 Ultralytics YOLOv8 Pose 对闭源商业产品存在 AGPL-3.0 / Enterprise 授权要求。MVP 候选筛选优先验证 Apache-2.0 的 MediaPipe Pose Landmarker；最终端侧方案在精度评测后确认。

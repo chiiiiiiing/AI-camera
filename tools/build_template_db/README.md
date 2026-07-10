@@ -87,6 +87,26 @@ python review_candidates.py ../raw_photos/manifest.jsonl PHOTO_ID rejected \
 
 拒绝记录不会从清单消失，因此采集器不会在断点续跑时把同一张图重新下载。
 
+长文件名不适合人工沟通。先生成短编号审核包，再用 `P001`、`L012`、`S008` 这类编号批量处理：
+
+```bash
+python make_review_pack.py ../raw_photos/manifest.review-clean.jsonl \
+  --photo-type portrait \
+  --output-dir ../raw_photos/review_pack/portrait
+
+python apply_review_ids.py ../raw_photos/manifest.review-clean.jsonl \
+  ../raw_photos/review_pack/portrait/review_index.jsonl \
+  --reject P001 P002 \
+  --reason manual_portrait_quality_reject \
+  --output ../raw_photos/manifest.portrait-clean.jsonl
+```
+
+审核包会生成：
+
+- `index.html`：可点开原图的缩略图页面
+- `contact_sheet.jpg`：一张可截图/圈编号的总览图
+- `review_index.jsonl`：短编号到 `photo_id` / 文件路径的映射
+
 检查文件、哈希、重复项、尺寸、许可证和审核状态：
 
 ```bash
@@ -134,9 +154,63 @@ python quarantine_cv_failures.py ../raw_photos/manifest.clean.jsonl \
   ../preprocessed/cv_report.clean.jsonl \
   --output ../raw_photos/manifest.cv-clean.jsonl
 
-python preprocess.py ../raw_photos/manifest.cv-clean.jsonl \
-  --jobs ../preprocessed/jobs.cv-clean.jsonl
+python quarantine_metadata_terms.py ../raw_photos/manifest.cv-clean.jsonl \
+  --config config/search_queries.json \
+  --output ../raw_photos/manifest.review-clean.jsonl
+
+python visual_quality_report.py ../raw_photos/manifest.portrait-clean.jsonl \
+  --output ../raw_photos/visual_quality.portrait-clean.jsonl
+
+python quarantine_visual_quality.py ../raw_photos/manifest.portrait-clean.jsonl \
+  ../raw_photos/visual_quality.portrait-clean.jsonl \
+  --output ../raw_photos/manifest.visual-clean.jsonl
+
+python preprocess.py ../raw_photos/manifest.visual-clean.jsonl \
+  --jobs ../preprocessed/jobs.visual-clean.jsonl
+
+python run_cv_preprocess.py ../preprocessed/jobs.visual-clean.jsonl \
+  --report ../preprocessed/cv_report.visual-clean.jsonl
+
+python validate_preprocessed.py ../preprocessed/jobs.visual-clean.jsonl
 ```
+
+当前非人像 clean pilot 可以直接生成 LLM 视觉标注请求：
+
+```bash
+python build_annotation_requests.py ../raw_photos/manifest.visual-clean.jsonl \
+  --output ../preprocessed/annotation_requests.visual-clean.jsonl
+
+python pack_annotation_batches.py ../preprocessed/annotation_requests.visual-clean.jsonl \
+  --output-dir ../preprocessed/annotation_batches.visual-clean \
+  --max-items 50
+
+python merge_annotation_results.py ../preprocessed/annotation_requests.visual-clean.jsonl \
+  ../preprocessed/annotation_batches.visual-clean/results/*.jsonl \
+  --output ../preprocessed/annotations.visual-clean.jsonl
+
+python validate_annotations.py ../preprocessed/annotations.visual-clean.jsonl
+
+python quarantine_annotation_results.py ../raw_photos/manifest.visual-clean.jsonl \
+  ../preprocessed/annotations.visual-clean.jsonl \
+  --output ../raw_photos/manifest.annotation-clean.jsonl
+
+python build_template_metadata.py ../raw_photos/manifest.annotation-clean.jsonl \
+  ../preprocessed/jobs.visual-clean.jsonl \
+  ../preprocessed/annotations.visual-clean.jsonl \
+  --output ../preprocessed/template_metadata.visual-clean.jsonl
+
+python validate_template_metadata.py ../preprocessed/template_metadata.visual-clean.jsonl
+
+python validate_embeddings.py ../preprocessed/jobs.visual-clean.jsonl --allow-missing
+
+python dataset_status.py --root ../..
+
+python check_pipeline.py --root ../..
+```
+
+`validate_template_metadata.py` 是入库前闸门：`reject`、`low` 或低于 3 分的标注结果不得进入模板元数据。当前 MobileCLIP 尚未接入时，embedding 可保持 `pending`；接入后再去掉 `validate_embeddings.py --allow-missing`。
+
+`pack_annotation_batches.py` 已将当前 136 条请求切成 3 个批次（50、50、36）。`merge_annotation_results.py` 可以合并直接 JSON 标注结果，也能从常见的 `response_text`、`content`、`text` 或 `annotation` 包装字段里抽取 JSON。
 
 运行单元测试：
 

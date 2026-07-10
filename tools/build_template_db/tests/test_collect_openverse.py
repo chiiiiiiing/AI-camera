@@ -57,6 +57,10 @@ class CandidateTests(unittest.TestCase):
         candidate["title"] = "Natural light portrait photo"
         self.assertTrue(collector.looks_like_photo(candidate, {"painting", "drawing"}))
 
+    def test_rejects_sensitive_portrait_terms(self):
+        candidate = {"category": "photograph", "title": "Sexy sheer outdoor portrait", "tags": []}
+        self.assertFalse(collector.looks_like_photo(candidate, {"sexy", "sheer"}))
+
     def test_full_size_proxy_is_preferred_with_provider_fallback(self):
         candidate = {
             "url": "https://provider.test/preview.jpg",

@@ -202,13 +202,26 @@
 4. `screen_candidates.py` 和 `preprocess.py` 已新增 SHA-256 硬门槛；新筛选结果为 175 条非 rejected 候选中 146 条通过（人像 9、风景 106、静物 31）
 5. 已新增 `quarantine_integrity_failures.py` 和 `quarantine_cv_failures.py`，生成 `manifest.cv-clean.jsonl`
 6. 最终 clean pilot：143 条 accepted（人像 6、风景 106、静物 31），真实筛选 143/143 通过，正式 CV 预处理成功（非人像 137、人像 pose_detected 6）
+7. 用户反馈人像批次质量仍明显不合格；已新增短编号审核包和批量审核工具，并将剩余 4 条 accepted 人像全部拒绝
+8. 当前最新清单为 `manifest.portrait-clean.jsonl`：accepted 137 条，风景 106、静物 31、人像 0
+9. 已新增视觉质量报告与保守隔离：`manifest.visual-clean.jsonl` accepted 136 条，风景 105、静物 31、人像 0
+10. `run_cv_preprocess.py` 已支持无人体任务时不加载 MediaPipe；`jobs.visual-clean.jsonl` 的 136 条非人像预处理成功
+11. 已新增 `validate_preprocessed.py`，136 个预处理记录校验通过
+12. 已新增美学标注 schema、`validate_annotations.py`、`build_annotation_requests.py`，并生成 `annotation_requests.visual-clean.jsonl` 136 条
+13. 已新增标注后处理与入库元数据闸门：`quarantine_annotation_results.py`、`build_template_metadata.py`、`schema/template_metadata.schema.json`、`validate_template_metadata.py`
+14. 已新增 `validate_embeddings.py` 和 `dataset_status.py`；embedding 136/136 缺失属于预期待接入状态
+15. 已新增 `pack_annotation_batches.py` 和 `merge_annotation_results.py`；当前 136 条视觉标注请求已切成 3 个批次（50、50、36）
+16. 已新增 `check_pipeline.py`；当前一键检查为 6 项检查、0 失败、2 pending（缺视觉标注和模板元数据）
+17. 当前单元测试 76/76 通过，真实数据校验均通过
 
 接下来：
-1. 对 143 条 clean pilot 做人工美学、来源权利和肖像权复核；未复核前不得作为模板入库
-2. 抽检 6 条人像预处理 JSON 的 COCO17 关键点、归一化坐标和关节角
-3. 复核通过后接入 MobileCLIP embedding 与背景处理；否则扩大重采 pilot-v2-clean
-4. 中国人像采用自有拍摄、创作者书面授权或权利明确来源，不直接抓取社交媒体
-5. 再进入 GPT-4V/Claude Vision 批量标注脚本、质量校验和 USearch 索引构建
+1. 暂停 Openverse 人像扩采；人像改用自有拍摄、创作者明确授权或人工预筛可信来源
+2. 对 136 条 `visual-clean` 非人像 clean pilot 做人工美学和来源权利复核；未复核前不得作为模板入库
+3. 可直接使用 `tools/preprocessed/annotation_batches.visual-clean/` 下 3 个 JSONL 批次接入 GPT-4V/Claude Vision 等视觉 LLM 标注
+4. 标注结果用 `merge_annotation_results.py` 合并为 `annotations.visual-clean.jsonl`，输出必须符合 `schema/aesthetic_annotation.schema.json` 并通过 `validate_annotations.py`
+5. 标注结果先用 `quarantine_annotation_results.py` 隔离 `reject/low` 或低分样本，再用 `build_template_metadata.py` 与 `validate_template_metadata.py` 生成并校验入库元数据
+6. 非人像复核和标注通过后接入 MobileCLIP embedding、背景处理与 USearch
+7. 中国人像采用自有拍摄、创作者书面授权或权利明确来源，不直接抓取社交媒体
 
 ---
 

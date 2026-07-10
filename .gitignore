@@ -18,6 +18,7 @@ __pycache__/
 .env
 
 # 模型文件 (Git LFS 或独立管理)
+tools/build_template_db/models/
 engine/models/*.tflite
 engine/models/*.gguf
 engine/models/*.idx

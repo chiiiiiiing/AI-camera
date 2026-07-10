@@ -2,6 +2,7 @@ import unittest
 
 import quarantine_cv_failures
 import quarantine_integrity_failures
+import quarantine_metadata_terms
 import review_candidates
 
 
@@ -102,6 +103,38 @@ class QuarantineCvFailureTests(unittest.TestCase):
         ]
         report = [{"photo_id": "photo_1", "status": "pose_detected"}]
         updated, summary = quarantine_cv_failures.quarantine_records(records, report)
+        self.assertEqual(summary["newly_rejected"], 0)
+        self.assertEqual(updated[0]["review"]["quality_status"], "accepted")
+
+
+class QuarantineMetadataTests(unittest.TestCase):
+    def test_sensitive_title_is_rejected(self):
+        records = [
+            {
+                "photo_id": "photo_1",
+                "source": {"title": "Sexy sheer outdoor portrait", "tags": []},
+                "review": {"quality_status": "accepted"},
+            }
+        ]
+        updated, summary = quarantine_metadata_terms.quarantine_records(
+            records, {"sexy", "sheer"}, "2026-07-09T00:00:00+00:00"
+        )
+        self.assertEqual(summary["newly_rejected"], 1)
+        self.assertEqual(updated[0]["review"]["quality_status"], "rejected")
+        self.assertEqual(
+            updated[0]["review"]["rejection_reason"],
+            "metadata_excluded_terms:sexy,sheer",
+        )
+
+    def test_clean_title_is_kept(self):
+        records = [
+            {
+                "photo_id": "photo_1",
+                "source": {"title": "Natural light portrait", "tags": ["city"]},
+                "review": {"quality_status": "accepted"},
+            }
+        ]
+        updated, summary = quarantine_metadata_terms.quarantine_records(records, {"sexy"})
         self.assertEqual(summary["newly_rejected"], 0)
         self.assertEqual(updated[0]["review"]["quality_status"], "accepted")
 
