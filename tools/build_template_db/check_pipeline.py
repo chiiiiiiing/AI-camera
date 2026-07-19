@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import audit_dataset
+import check_annotation_results
 import dataset_status
 import validate_annotations
 import validate_embeddings
@@ -48,6 +49,20 @@ def fail_check(name: str, errors: list[str]) -> dict[str, Any]:
     return {"name": name, "status": "fail", "errors": errors}
 
 
+def metadata_embedding_readiness_errors(rows: list[dict[str, Any]]) -> list[str]:
+    errors: list[str] = []
+    for row in rows:
+        template_id = row.get("template_id", "<unknown>")
+        embedding = row.get("embedding", {})
+        if not isinstance(embedding, dict) or embedding.get("status") != "ready":
+            errors.append(f"{template_id}: embedding.status is not ready")
+            continue
+        embedding_path = Path(embedding.get("path", ""))
+        if not embedding_path.exists():
+            errors.append(f"{template_id}: missing ready embedding file: {embedding_path}")
+    return errors
+
+
 def validate_manifest_records(path: Path) -> list[str]:
     errors: list[str] = []
     for line_number, record in enumerate(jsonl_records(path), 1):
@@ -64,11 +79,24 @@ def validate_annotation_records(path: Path) -> list[str]:
     return errors
 
 
+def annotation_batch_result_errors(report: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    for batch in report.get("batches", []):
+        batch_id = str(batch.get("batch_id", "<unknown>"))
+        errors.extend(f"{batch_id}: {message}" for message in batch.get("errors", []))
+        errors.extend(
+            f"{batch_id}: unknown annotation photo_id: {photo_id}"
+            for photo_id in batch.get("unknown", [])
+        )
+    return errors or ["annotation batch result check failed"]
+
+
 def run_checks(root: Path, allow_missing_embeddings: bool = True) -> dict[str, Any]:
     raw = root / "tools" / "raw_photos"
     preprocessed = root / "tools" / "preprocessed"
     manifest = raw / "manifest.visual-clean.jsonl"
     jobs = preprocessed / "jobs.visual-clean.jsonl"
+    annotation_batches = preprocessed / "annotation_batches.visual-clean"
     annotations = preprocessed / "annotations.visual-clean.jsonl"
     metadata = preprocessed / "template_metadata.visual-clean.jsonl"
     checks: list[dict[str, Any]] = []
@@ -114,6 +142,35 @@ def run_checks(root: Path, allow_missing_embeddings: bool = True) -> dict[str, A
             else pass_check("embeddings", embedding_summary)
         )
 
+    if annotation_batches.exists():
+        try:
+            annotation_batch_report = check_annotation_results.inspect_results(annotation_batches)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            checks.append(fail_check("annotation_batch_results", [str(exc)]))
+        else:
+            summary = annotation_batch_report["summary"]
+            if summary["failed"]:
+                checks.append(
+                    fail_check(
+                        "annotation_batch_results",
+                        annotation_batch_result_errors(annotation_batch_report),
+                    )
+                )
+            elif summary["pending"]:
+                checks.append(
+                    pending_check(
+                        "annotation_batch_results",
+                        (
+                            f"received {summary['received']}/{summary['expected']} annotations; "
+                            f"pending batches {summary['pending']}"
+                        ),
+                    )
+                )
+            else:
+                checks.append(pass_check("annotation_batch_results", summary))
+    else:
+        checks.append(pending_check("annotation_batch_results", f"missing {annotation_batches}"))
+
     annotation_rows = jsonl_records(annotations)
     if annotation_rows:
         annotation_errors = validate_annotation_records(annotations)
@@ -132,6 +189,8 @@ def run_checks(root: Path, allow_missing_embeddings: bool = True) -> dict[str, A
             metadata,
             script_dir / "schema" / "template_metadata.schema.json",
         )
+        if not metadata_errors and not allow_missing_embeddings:
+            metadata_errors.extend(metadata_embedding_readiness_errors(metadata_rows))
         checks.append(
             fail_check("template_metadata", metadata_errors)
             if metadata_errors

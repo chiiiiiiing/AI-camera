@@ -80,6 +80,9 @@ file(GLOB_RECURSE TEST_SOURCES tests/*.cpp)
 if(TEST_SOURCES)
     add_executable(engine_tests ${TEST_SOURCES})
     target_link_libraries(engine_tests PRIVATE ai_photo_engine)
+    target_compile_definitions(engine_tests PRIVATE
+        AI_CAMERA_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/.."
+    )
 
     if(Catch2_FOUND)
         target_link_libraries(engine_tests PRIVATE Catch2::Catch2WithMain)

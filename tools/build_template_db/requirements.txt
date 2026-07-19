@@ -1,2 +1,9 @@
 Pillow>=10.4,<13
 jsonschema>=4.23,<5
+transformers>=4.55,<5
+safetensors>=0.5,<1
+usearch>=2,<3
+torch>=2.2,<3
+torchvision>=0.17,<1
+onnx>=1.16,<2
+onnxruntime>=1.18,<2

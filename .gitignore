@@ -26,6 +26,9 @@ engine/models/*.pt
 engine/models/*.onnx
 *.task
 
+# 图片素材
+图片素材/
+
 # 模板库照片
 tools/raw_photos/
 tools/curated_photos/

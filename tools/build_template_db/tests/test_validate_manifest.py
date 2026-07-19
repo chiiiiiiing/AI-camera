@@ -45,6 +45,43 @@ class CoreValidationTests(unittest.TestCase):
         }
         self.assertEqual(validate_manifest.validate_core(record), [])
 
+    def test_accepts_local_authorized_pending_record(self):
+        record = {
+            "schema_version": 1,
+            "photo_id": "new_batch_00001",
+            "photo_type": "portrait",
+            "scene_category": "closeup_portrait",
+            "query": "local_import:portrait:closeup_portrait",
+            "file_path": "images/portrait/a.jpg",
+            "sha256": "b" * 64,
+            "width": 1440,
+            "height": 1080,
+            "reported_width": 1440,
+            "reported_height": 1080,
+            "source": {
+                "provider": "local_xhs_export",
+                "provider_id": "note_1",
+                "landing_url": "local://ai-camera/local_xhs_export/note_1/landing",
+                "asset_url": "local://ai-camera/local_xhs_export/note_1/asset",
+                "creator": None,
+                "creator_url": None,
+                "title": "local import",
+                "tags": ["portrait"],
+            },
+            "rights": {
+                "license": "local_authorized",
+                "license_url": "local://ai-camera/rights/local_authorized",
+                "attribution": "local_xhs_export",
+                "verification_status": "user_declared_pending_review",
+            },
+            "review": {
+                "quality_status": "pending",
+                "rights_status": "pending",
+                "portrait_release_status": "pending",
+            },
+        }
+        self.assertEqual(validate_manifest.validate_core(record), [])
+
 
 if __name__ == "__main__":
     unittest.main()

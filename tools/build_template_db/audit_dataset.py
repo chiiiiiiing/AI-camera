@@ -12,6 +12,10 @@ from pathlib import Path
 from typing import Any
 
 
+CANDIDATE_LICENSES = {"cc0", "pdm", "local_authorized", "unknown", "cc-by", "cc-by-sa"}
+FINAL_ALLOWED_LICENSES = {"cc0", "pdm", "local_authorized"}
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -69,8 +73,11 @@ def audit_records(
         review_counts[str(quality_status)] += 1
         type_counts[str(record.get("photo_type"))] += 1
         category_counts[str(record.get("scene_category"))] += 1
-        if record.get("rights", {}).get("license") not in {"cc0", "pdm"}:
+        license_id = record.get("rights", {}).get("license")
+        if license_id not in CANDIDATE_LICENSES:
             errors.append(f"{prefix}: unsupported candidate license")
+        if require_final and license_id not in FINAL_ALLOWED_LICENSES:
+            errors.append(f"{prefix}: final dataset cannot use license {license_id}")
         if require_final and (quality_status != "accepted" or rights_status != "accepted"):
             errors.append(f"{prefix}: final dataset requires accepted quality and rights")
         if (

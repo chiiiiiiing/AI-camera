@@ -63,8 +63,15 @@ class CheckPipelineTests(unittest.TestCase):
             (preprocessed / "jobs.visual-clean.jsonl").write_text("", encoding="utf-8")
             report = check_pipeline.run_checks(root)
         pending = {check["name"] for check in report["checks"] if check["status"] == "pending"}
+        self.assertIn("annotation_batch_results", pending)
         self.assertIn("annotations", pending)
         self.assertIn("template_metadata", pending)
+
+    def test_require_embeddings_flags_pending_template_metadata(self):
+        errors = check_pipeline.metadata_embedding_readiness_errors(
+            [{"template_id": "template_1", "embedding": {"status": "pending", "path": "missing.f32"}}]
+        )
+        self.assertIn("template_1: embedding.status is not ready", errors)
 
 
 if __name__ == "__main__":

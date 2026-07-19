@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import validate_embeddings
+
 
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
@@ -53,6 +55,17 @@ def load_preprocessed_record(job: dict[str, Any]) -> dict[str, Any]:
     return json.loads(record_path.read_text(encoding="utf-8"))
 
 
+def embedding_status(job: dict[str, Any]) -> str:
+    photo_id = job.get("photo_id", "<unknown>")
+    embedding_path = Path(job.get("output", {}).get("embedding_path", ""))
+    if not embedding_path.exists():
+        return "pending"
+    errors = validate_embeddings.validate_embedding_values(validate_embeddings.read_f32(embedding_path))
+    if errors:
+        raise ValueError(f"invalid embedding for {photo_id}: {'; '.join(errors)}")
+    return "ready"
+
+
 def build_metadata_record(
     manifest_record: dict[str, Any],
     job: dict[str, Any],
@@ -92,7 +105,7 @@ def build_metadata_record(
             "shooting_guidance": annotation.get("shooting_guidance"),
         },
         "embedding": {
-            "status": "pending",
+            "status": embedding_status(job),
             "dimension": 256,
             "path": job.get("output", {}).get("embedding_path"),
         },

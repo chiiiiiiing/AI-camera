@@ -69,13 +69,44 @@
 - `validate_preprocessed.py` 校验 136 个 `preprocessed.json` 全部通过。
 - `build_annotation_requests.py` 生成 `annotation_requests.visual-clean.jsonl`，共 136 条，作为下一步视觉 LLM 美学标注输入。
 - `pack_annotation_batches.py` 已生成 `annotation_batches.visual-clean`：3 个批次，分别 50、50、36 条。
-- `merge_annotation_results.py` 已就绪，可合并批量标注结果并校验缺失、重复、未知 `photo_id`。
-- `quarantine_annotation_results.py`、`build_template_metadata.py`、`validate_template_metadata.py` 已就绪；标注结果回来后可自动隔离低价值样本并生成入库前元数据。
-- `validate_embeddings.py --allow-missing` 当前通过，确认 136 条 job 的 embedding 仍处于预期缺失状态。
-- `dataset_status.py --root ../..` 可汇总当前 136 条 visual-clean 状态。
-- `check_pipeline.py --root ../..` 当前为 6 项检查、0 失败、2 pending；pending 是缺 `annotations.visual-clean.jsonl` 与 `template_metadata.visual-clean.jsonl`。
+- `merge_annotation_results.py` 已合并正式批量标注结果为 `annotations.visual-clean.jsonl`，共 136 条。
+- `quarantine_annotation_results.py` 已隔离 5 条 low 样本，生成初版 `manifest.annotation-clean.jsonl`：accepted 131，rejected 92。
+- 用户人工复核拒绝清单已应用，当前 `manifest.annotation-clean.jsonl`：accepted 104，rejected 119。
+- `build_template_metadata.py` 与 `validate_template_metadata.py` 已生成并校验 `template_metadata.visual-clean.jsonl`，当前共 104 条，embedding status 全部为 `ready`。
+- `generate_mobileclip_embeddings.py` 已使用 MobileCLIP2-S0 checkpoint 生成 136 个真实 `embedding.f32`；MobileCLIP2-S0 原生输出 512 维，本阶段用显式 `--projection pairwise` 投影为 256 维并 L2 normalize。
+- `validate_embeddings.py` 当前通过，确认 136 条 job 的 embedding 全部存在且有效。
+- `dataset_status.py --root ../..` 可汇总当前 136 条 annotation 与 104 条 template metadata 状态。
+- `check_pipeline.py --root ../.. --require-embeddings` 当前为 7 项检查、0 failures、0 pending。
+- `build_template_index.py`、`validate_template_index.py` 与 `build_usearch_index.py` 已生成并校验 `tools/preprocessed/template_index.visual-clean/` 下的 portable index 与 USearch 原型索引。
 
-这批 136 条仍未完成最终人工美学/权利复核，也尚未接入视觉 LLM 标注、MobileCLIP embedding 与 USearch。没有 `annotations.visual-clean.jsonl` 前不要生成最终模板库索引。
+这批非人像样本已完成视觉 LLM 标注、人工复核、MobileCLIP2-S0 原型 embedding、模板元数据 ready、portable index 和 USearch 原型索引。后续风险不再是“缺 embedding”，而是需要评估 pairwise 512→256 投影的检索质量，并确认商业版本模型授权或替代模型路线。
+
+2026-07-14 索引质量评估补充：
+
+- 新增 `evaluate_template_index_quality.py`，已对 `template_index.visual-clean` 生成 `templates.quality_report.json` 与 `templates.quality_report.md`。
+- USearch `.idx` 抽样返回与 portable 精确检索一致，`usearch_check.status=passed`，检查 12 条，size 104。
+- 当前 pairwise 256 维投影可用于阶段 2 粗粒度 top5 召回，但不能直接把 ANN top1 当最终模板。
+- 同场景命中率：top1 约 56.73%，top3 约 76.92%，top5 约 87.50%；排除单例场景后 top5 约 88.35%。
+- 构图匹配：top1 命中约 36.54%，top5 约 81.73%；光线匹配 top1 约 16.35%，top5 约 57.69%。
+- 发现跨 `photo_type` top1 问题，主要集中在静物、植物、创意构图被自然风景或城市场景吸走。
+- 端侧接入必须 top5/top8 召回后按 `photo_type`、高置信 `scene_category`、构图字段和光线字段做过滤/重排；`top1/top2` margin 小于 0.01 时不要频繁切模板。
+- 未发现相似度 >= 0.985 的近重复候选。
+- 这不是“缺模型、缺 embedding、缺索引”的问题；索引产物已完成，当前风险是检索质量和商业授权边界。
+
+2026-07-12 复验状态：
+
+- SMB 挂载与本地数据目录可访问。
+- `check_annotation_results.py` 已验证正式结果目录 3 个批次全部通过，received 136/136。
+- `python3 -m unittest discover -s tests -v`：93 个测试通过，1 个因普通 Python 未安装 `usearch` skip。
+- `python3 dataset_status.py --root ../..`：annotations 136，template_metadata 104，embedding present 136 / missing 0，template_metadata embedding ready 104。
+- `python3 check_pipeline.py --root ../.. --require-embeddings`：7 项检查、0 failures、0 pending。
+- `python3 validate_template_index.py ../../tools/preprocessed/template_index.visual-clean`：通过，count 104、dimension 256。
+- `/private/tmp/mobileclip-hf-venv/bin/python build_usearch_index.py ../../tools/preprocessed/template_index.visual-clean`：生成 `templates.usearch.idx` 与 `templates.usearch.json`。
+- USearch 持久化加载复验：`.idx` 可 load，size 104，首条向量 top-1 key=1、distance=0.0。
+- Embedding 原型方案已定：MobileCLIP2-S0，接口保持 256 维、L2 normalize、cosine similarity、USearch；商业版本不直接使用 Apple 官方预训练权重。
+- 2026-07-12 已通过 `hf-mirror.com` 下载 `mobileclip2_s0.pt` 到 `tools/build_template_db/models/mobileclip2_s0/`，大小 299,864,852 bytes，SHA256 `bc3bc861baa680df2f9e3dc1aa0acbe5a21af21032df385026dda70c33505aa6`。
+- 仍需要用户或外部资源完成的任务是确认 MobileCLIP2-S0 许可边界/后续商业替代方案和后续人像素材。
+- 需要用户或外部资源完成的任务见 `AI引擎设计/需要用户完成的任务.md`。
 
 ## 姿态模型选择
 

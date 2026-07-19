@@ -29,7 +29,7 @@
     "scene_category": {"type": "string", "minLength": 1},
     "source_path": {"type": "string", "minLength": 1},
     "source_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-    "license": {"enum": ["cc0", "pdm"]},
+    "license": {"enum": ["cc0", "pdm", "local_authorized"]},
     "landing_url": {"type": "string", "format": "uri"},
     "creator": {"type": ["string", "null"]},
     "width": {"type": "integer", "minimum": 1},
@@ -106,7 +106,9 @@
       "properties": {
         "status": {"enum": ["pending", "ready"]},
         "dimension": {"type": "integer", "minimum": 1},
-        "path": {"type": "string", "minLength": 1}
+        "path": {"type": "string", "minLength": 1},
+        "model_id": {"type": "string", "minLength": 1},
+        "role": {"enum": ["prototype", "teacher", "student"]}
       }
     }
   },

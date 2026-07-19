@@ -98,8 +98,8 @@ def validate_core(record: Any) -> list[str]:
     else:
         if embedding.get("status") not in {"pending", "ready"}:
             errors.append("embedding.status must be pending or ready")
-        if embedding.get("dimension") != 256:
-            errors.append("embedding.dimension must be 256")
+        if not isinstance(embedding.get("dimension"), int) or embedding["dimension"] <= 0:
+            errors.append("embedding.dimension must be a positive integer")
         if not isinstance(embedding.get("path"), str) or not embedding["path"]:
             errors.append("embedding.path must be a non-empty string")
     return errors

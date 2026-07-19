@@ -52,10 +52,25 @@
       "additionalProperties": false,
       "required": ["license", "license_url", "attribution", "verification_status"],
       "properties": {
-        "license": {"enum": ["cc0", "pdm"]},
+        "license": {
+          "enum": [
+            "cc0",
+            "pdm",
+            "local_authorized",
+            "unknown",
+            "cc-by",
+            "cc-by-sa"
+          ]
+        },
         "license_url": {"type": "string", "format": "uri"},
         "attribution": {"type": "string"},
-        "verification_status": {"const": "provider_declared_pending_review"}
+        "verification_status": {
+          "enum": [
+            "provider_declared_pending_review",
+            "user_declared_pending_review",
+            "local_file_pending_review"
+          ]
+        }
       }
     },
     "review": {

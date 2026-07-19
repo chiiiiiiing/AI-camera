@@ -61,6 +61,10 @@ class CandidateTests(unittest.TestCase):
         candidate = {"category": "photograph", "title": "Sexy sheer outdoor portrait", "tags": []}
         self.assertFalse(collector.looks_like_photo(candidate, {"sexy", "sheer"}))
 
+    def test_rejects_excluded_phrases(self):
+        candidate = {"category": "photograph", "title": "AI generated portrait", "tags": []}
+        self.assertFalse(collector.looks_like_photo(candidate, {"ai generated"}))
+
     def test_full_size_proxy_is_preferred_with_provider_fallback(self):
         candidate = {
             "url": "https://provider.test/preview.jpg",

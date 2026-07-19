@@ -61,9 +61,21 @@ typedef struct {
     CameraFrame camera;
     SensorData  sensor;        /* 可为 NULL */
     float       focal_length_35mm_eq;
+    float       current_zoom_ratio;   /* 当前相机倍率, 用于自动变焦闭环 */
 } FrameInput;
 
-/* ── 相机目标点 (替代旋转箭头, 引导相机中心对准目标) ── */
+/* ── 相机动作提示: 区分原地转动、机位移动与构图精调 ── */
+typedef struct {
+    int32_t action_type;        /* 0=无, 1=偏航转动, 2=俯仰, 3=横滚校平,
+                                   4=左右移动, 5=前后移动, 6=高低移动, 7=绕行 */
+    float   direction_x;        /* 屏幕/用户坐标方向 [-1,1] */
+    float   direction_y;        /* 屏幕/用户坐标方向 [-1,1] */
+    float   magnitude;          /* 动作强度 [0,1] */
+    int32_t confidence;         /* 0-100 */
+    char    label[48];          /* 如 "向右走半步" */
+} CameraActionGuide;
+
+/* ── 构图锚点: 只用于最终画面对齐, 不再作为唯一移动指令 ── */
 typedef struct {
     float    x, y;             /* 归一化屏幕坐标 [0-1] */
     float    radius;           /* 目标点指示器大小 (dp), 建议 24-48 */
@@ -115,6 +127,16 @@ typedef struct {
     float   confidence;
 } TextSuggestion;
 
+/* ── 自动变焦: AI 输出目标倍率, App 相机控制层平滑执行 ── */
+typedef struct {
+    int32_t zoom_action;        /* 0=保持, 1=放大, 2=缩小, 3=切换镜头, 4=暂停自动 */
+    float   current_zoom_ratio; /* 当前倍率 */
+    float   target_zoom_ratio;  /* 建议目标倍率 */
+    float   max_step_per_second;/* 平滑速度上限 */
+    int32_t confidence;         /* 0-100 */
+    char    label[48];          /* 如 "自动放大一点" */
+} ZoomGuide;
+
 /* ── 汇总输出 ── */
 typedef struct {
     int64_t frame_timestamp_ns;
@@ -126,7 +148,9 @@ typedef struct {
 
     int32_t        pose_arrow_count;
     PoseArrow      pose_arrows[MAX_POSE_ARROWS];  /* 仅人像时有关节箭头 */
-    CameraTarget   camera_target;                 /* 相机中心对准目标点 */
+    CameraActionGuide camera_action;              /* 姿态环/机位轨迹 */
+    ZoomGuide      zoom;                          /* 自动变焦 */
+    CameraTarget   camera_target;                 /* 构图锚点 */
     PoseOverlay    pose;
     CompGuides     composition;
     TextSuggestion text;

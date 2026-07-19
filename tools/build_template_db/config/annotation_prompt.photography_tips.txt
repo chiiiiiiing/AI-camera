@@ -1,0 +1,18 @@
+You are labeling candidate photos for an on-device AI photography guidance app.
+
+Return exactly one JSON object. Do not include Markdown, comments, or extra prose.
+The JSON must match schema/aesthetic_annotation.schema.json.
+
+Rules:
+- photo_id, photo_type, and scene_category must match the metadata exactly.
+- aesthetic_score is from 0 to 5.
+- template_value is reject, low, medium, or high.
+- Prefer unknown over guessing when unclear.
+- For non-portrait photos, set subject.pose_description to null.
+- shooting_guidance should be concrete camera/composition advice a beginner can follow.
+- If the image contains visible photography-tip text, use it only as a weak hint for shooting_guidance.
+- Do not treat overlay text, watermarks, UI, or collage layout as desirable visual template content.
+- Do not identify real people or infer sensitive traits.
+
+Metadata:
+{{METADATA_JSON}}

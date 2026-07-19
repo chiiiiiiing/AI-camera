@@ -10,6 +10,32 @@
       "allowed_licenses": ["cc0", "pdm"],
       "note": "Provider metadata is not a legal guarantee. Review license, attribution, model and property rights before production use."
     },
+    "wikimedia_commons": {
+      "status": "candidate_only",
+      "allowed_licenses": ["cc0", "pdm"],
+      "note": "Use the Wikimedia Commons API only. Keep provider-declared public-domain records pending until source, license, model and property rights are manually reviewed."
+    },
+    "flickr": {
+      "status": "candidate_only",
+      "allowed_licenses": ["cc0", "pdm"],
+      "note": "Use the official Flickr API with safe_search and public-domain license filters. Requires FLICKR_API_KEY. Review source, license, model and property rights before production use."
+    },
+    "instagram": {
+      "status": "blocked_pending_written_permission",
+      "note": "Do not scrape feeds, profiles, stories, or login-gated content. Import only files covered by explicit written permission through local_authorized."
+    },
+    "tiktok": {
+      "status": "blocked_pending_written_permission",
+      "note": "Do not scrape feeds, profiles, videos, or login-gated content. Import only files covered by explicit written permission through local_authorized."
+    },
+    "xiaohongshu": {
+      "status": "blocked_pending_written_permission",
+      "note": "Do not scrape feeds, notes, user pages, or login-gated content. Import only files covered by explicit written permission through local_authorized."
+    },
+    "weibo": {
+      "status": "blocked_pending_written_permission",
+      "note": "Do not scrape feeds, posts, user pages, or login-gated content. Import only files covered by explicit written permission through local_authorized."
+    },
     "unsplash": {
       "status": "blocked_pending_written_permission",
       "note": "Current API terms direct ML/AI uses to Unsplash data licensing. Do not collect through the ordinary API for this project."

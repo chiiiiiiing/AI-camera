@@ -9,8 +9,11 @@
  */
 
 #include "engine.h"
+#include "core/template_index.h"
 #include <cstring>
 #include <cstdlib>
+#include <sstream>
+#include <string>
 
 /* ══════════════════════════════════════════════════════
  * 内部状态结构 — 当前阶段为占位
@@ -24,8 +27,59 @@
  * ══════════════════════════════════════════════════════ */
 struct EngineState {
     EngineConfig config;
+    std::string model_dir;
+    ai_photo::TemplateIndex template_index;
+    std::string template_index_status;
+    std::string template_index_warning;
+    std::string status_json;
     bool ready;
 };
+
+namespace {
+
+std::string escape_json(const std::string& value) {
+    std::string escaped;
+    escaped.reserve(value.size());
+    for (char c : value) {
+        switch (c) {
+            case '"':
+                escaped += "\\\"";
+                break;
+            case '\\':
+                escaped += "\\\\";
+                break;
+            case '\n':
+                escaped += "\\n";
+                break;
+            case '\r':
+                escaped += "\\r";
+                break;
+            case '\t':
+                escaped += "\\t";
+                break;
+            default:
+                escaped.push_back(c);
+                break;
+        }
+    }
+    return escaped;
+}
+
+void update_status_json(EngineState* state) {
+    std::ostringstream out;
+    out << "{"
+        << "\"status\":\"" << (state->ready ? "ready" : "not_ready") << "\","
+        << "\"version\":\"0.1.0-dev\","
+        << "\"template_index_ready\":" << (state->template_index.ready() ? "true" : "false") << ","
+        << "\"template_index_count\":" << state->template_index.count() << ","
+        << "\"template_index_dimension\":" << state->template_index.dimension() << ","
+        << "\"template_index_status\":\"" << escape_json(state->template_index_status) << "\","
+        << "\"template_index_warning\":\"" << escape_json(state->template_index_warning) << "\""
+        << "}";
+    state->status_json = out.str();
+}
+
+}  // namespace
 
 /* ── 版本号 ── */
 const char* engine_get_version(void) {
@@ -34,23 +88,47 @@ const char* engine_get_version(void) {
 
 /* ── 初始化 ── */
 InitResult engine_init(const EngineConfig* config, EngineHandle* out_handle) {
+    InitResult result = {};
+    if (out_handle == nullptr) {
+        result.code = -1;
+        result.message = "out_handle is null";
+        return result;
+    }
+
     auto* state = new EngineState();
-    state->config = *config;
+    state->config = config != nullptr ? *config : EngineConfig{};
+    state->model_dir = state->config.model_dir != nullptr ? state->config.model_dir : "";
+    state->config.model_dir = state->model_dir.c_str();
     state->ready = false;
 
-    InitResult result = {};
+    if (!state->model_dir.empty()) {
+        const std::string index_dir = state->model_dir + "/template_index.visual-clean";
+        ai_photo::TemplateLoadResult load_result = state->template_index.load(index_dir);
+        state->template_index_status = ai_photo::template_load_code_name(load_result.code);
+        state->template_index_warning = load_result.message;
+    } else {
+        state->template_index_status = "TEMPLATE_INDEX_DIR_MISSING";
+        state->template_index_warning = "model_dir is empty";
+    }
+
     result.code = 0;
-    result.message = "Engine initialized (skeleton mode)";
-    result.loaded_models_mask = 0;  // 阶段 3 后更新
+    result.message = state->template_index.ready()
+        ? "Engine initialized (template exact fallback loaded)"
+        : "Engine initialized (template index unavailable)";
+    result.loaded_models_mask = state->template_index.ready() ? 1 : 0;  // 阶段 3 后细化 bit 分配
     result.load_time_ms = 0.0f;
 
     state->ready = true;
+    update_status_json(state);
     *out_handle = static_cast<EngineHandle>(state);
     return result;
 }
 
 /* ── 销毁 ── */
 void engine_shutdown(EngineHandle handle) {
+    if (handle == nullptr) {
+        return;
+    }
     auto* state = static_cast<EngineState*>(handle);
     state->ready = false;
     delete state;
@@ -58,6 +136,9 @@ void engine_shutdown(EngineHandle handle) {
 
 /* ── 就绪检查 ── */
 int32_t engine_is_ready(EngineHandle handle) {
+    if (handle == nullptr) {
+        return 0;
+    }
     auto* state = static_cast<EngineState*>(handle);
     return state->ready ? 1 : 0;
 }
@@ -66,12 +147,40 @@ int32_t engine_is_ready(EngineHandle handle) {
 GuidanceOutput engine_process_frame(EngineHandle handle, const FrameInput* input) {
     GuidanceOutput out = {};
 
+    if (handle == nullptr || input == nullptr) {
+        out.photo_type = 0;
+        out.scene_category = -1;
+        out.template_id = -1;
+        out.zoom.current_zoom_ratio = 1.0f;
+        out.zoom.target_zoom_ratio = 1.0f;
+        out.camera_target.x = 0.5f;
+        out.camera_target.y = 0.5f;
+        out.camera_target.radius = 32.0f;
+        out.camera_target.color_hint = 2;
+        out.composition.horizon_y = -1.0f;
+        return out;
+    }
+
     out.frame_timestamp_ns = input->camera.timestamp_ns;
     out.processing_time_ms = 0.0f;
     out.photo_type = 0;
     out.scene_category = -1;
     out.template_id = -1;
     out.pose_arrow_count = 0;
+    out.camera_action.action_type = 0;
+    out.camera_action.direction_x = 0.0f;
+    out.camera_action.direction_y = 0.0f;
+    out.camera_action.magnitude = 0.0f;
+    out.camera_action.confidence = 0;
+    out.camera_action.label[0] = '\0';
+    out.zoom.zoom_action = 0;
+    out.zoom.current_zoom_ratio = input->current_zoom_ratio > 0.0f
+        ? input->current_zoom_ratio
+        : 1.0f;
+    out.zoom.target_zoom_ratio = out.zoom.current_zoom_ratio;
+    out.zoom.max_step_per_second = 0.0f;
+    out.zoom.confidence = 0;
+    out.zoom.label[0] = '\0';
     out.camera_target.x = 0.5f;
     out.camera_target.y = 0.5f;
     out.camera_target.radius = 32.0f;
@@ -96,5 +205,10 @@ void engine_trigger_scene_rescan(EngineHandle handle) {
 
 /* ── 状态 JSON (调试) ── */
 const char* engine_get_status_json(EngineHandle handle) {
-    return "{\"status\": \"skeleton\", \"version\": \"0.1.0-dev\"}";
+    if (handle == nullptr) {
+        return "{\"status\":\"not_ready\",\"version\":\"0.1.0-dev\",\"template_index_ready\":false}";
+    }
+    auto* state = static_cast<EngineState*>(handle);
+    update_status_json(state);
+    return state->status_json.c_str();
 }

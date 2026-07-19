@@ -12,6 +12,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -205,10 +206,46 @@ def candidate_terms(candidate: dict[str, Any]) -> set[str]:
     return words
 
 
+def candidate_text(candidate: dict[str, Any]) -> str:
+    values = [str(candidate.get("title") or "")]
+    tags = candidate.get("tags") or []
+    for tag in tags:
+        values.append(str(tag.get("name", "")) if isinstance(tag, dict) else str(tag))
+    normalized_values = [
+        re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+        for value in values
+        if value
+    ]
+    return f" {' '.join(value for value in normalized_values if value)} "
+
+
+def has_excluded_term(candidate: dict[str, Any], excluded_terms: set[str]) -> bool:
+    text = candidate_text(candidate)
+    words = set(text.split())
+    for term in excluded_terms:
+        normalized = re.sub(r"[^a-z0-9]+", " ", term.lower()).strip()
+        if not normalized:
+            continue
+        if " " in normalized:
+            if f" {normalized} " in text:
+                return True
+        elif normalized in words:
+            return True
+    return False
+
+
 def looks_like_photo(candidate: dict[str, Any], excluded_terms: set[str]) -> bool:
     if candidate.get("category") not in {None, "photograph"}:
         return False
-    return not bool(candidate_terms(candidate) & {term.lower() for term in excluded_terms})
+    return not has_excluded_term(candidate, excluded_terms)
+
+
+def excluded_terms_for_category(defaults: dict[str, Any], category: dict[str, Any]) -> set[str]:
+    terms = set(defaults.get("excluded_media_terms", DEFAULT_EXCLUDED_MEDIA_TERMS))
+    terms.update(defaults.get("excluded_ai_terms", []))
+    if category.get("photo_type") == "portrait":
+        terms.update(defaults.get("excluded_portrait_terms", []))
+    return terms
 
 
 def resolve_asset_urls(candidate: dict[str, Any]) -> list[str]:
@@ -339,10 +376,10 @@ def collect(args: argparse.Namespace) -> int:
     errors_path = manifest_path.with_name("collection_errors.jsonl")
     defaults = config["defaults"]
     allowed_licenses = set(defaults["licenses"])
-    excluded_media_terms = set(defaults.get("excluded_media_terms", DEFAULT_EXCLUDED_MEDIA_TERMS))
     attempted_ids = set(seen_ids)
 
     for category in iter_categories(config, selected):
+        excluded_media_terms = excluded_terms_for_category(defaults, category)
         for query in category["queries"]:
             accepted_query = 0
             examined_query = 0

@@ -5,6 +5,7 @@ from pathlib import Path
 
 import merge_annotation_results
 import pack_annotation_batches
+import check_annotation_results
 
 
 def request(photo_id):
@@ -135,6 +136,125 @@ class MergeAnnotationResultsTests(unittest.TestCase):
         wrapped = {"annotation": annotation}
         extracted = merge_annotation_results.annotation_from_record(wrapped)
         self.assertEqual(extracted["photo_id"], annotation["photo_id"])
+
+
+class CheckAnnotationResultsTests(unittest.TestCase):
+    def test_missing_result_file_is_pending(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            batch_dir = root / "batches"
+            batch_dir.mkdir()
+            (batch_dir / "batch_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "batches": [
+                            {
+                                "batch_id": "annotation_batch_0001",
+                                "items": 1,
+                                "path": "annotation_batch_0001.jsonl",
+                                "photo_ids": ["photo_1"],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            report = check_annotation_results.inspect_results(batch_dir)
+        self.assertEqual(report["summary"]["pending"], 1)
+        self.assertEqual(report["summary"]["missing"], 1)
+
+    def test_complete_result_file_passes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            batch_dir = root / "batches"
+            results_dir = batch_dir / "results"
+            results_dir.mkdir(parents=True)
+            (batch_dir / "batch_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "batches": [
+                            {
+                                "batch_id": "annotation_batch_0001",
+                                "items": 1,
+                                "path": "annotation_batch_0001.jsonl",
+                                "photo_ids": ["photo_1"],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (results_dir / "annotation_batch_0001.results.jsonl").write_text(
+                json.dumps(valid_annotation()) + "\n",
+                encoding="utf-8",
+            )
+            report = check_annotation_results.inspect_results(batch_dir)
+        self.assertEqual(report["summary"]["passed"], 1)
+        self.assertEqual(report["summary"]["received"], 1)
+
+    def test_unknown_result_id_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            batch_dir = root / "batches"
+            results_dir = batch_dir / "results"
+            results_dir.mkdir(parents=True)
+            (batch_dir / "batch_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "batches": [
+                            {
+                                "batch_id": "annotation_batch_0001",
+                                "items": 1,
+                                "path": "annotation_batch_0001.jsonl",
+                                "photo_ids": ["photo_1"],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            annotation = valid_annotation()
+            annotation["photo_id"] = "photo_2"
+            (results_dir / "annotation_batch_0001.results.jsonl").write_text(
+                json.dumps(annotation) + "\n",
+                encoding="utf-8",
+            )
+            report = check_annotation_results.inspect_results(batch_dir)
+        self.assertEqual(report["summary"]["failed"], 1)
+        self.assertEqual(report["summary"]["unknown"], 1)
+
+    def test_invalid_json_result_file_fails_batch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            batch_dir = root / "batches"
+            results_dir = batch_dir / "results"
+            results_dir.mkdir(parents=True)
+            (batch_dir / "batch_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "batches": [
+                            {
+                                "batch_id": "annotation_batch_0001",
+                                "items": 1,
+                                "path": "annotation_batch_0001.jsonl",
+                                "photo_ids": ["photo_1"],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (results_dir / "annotation_batch_0001.results.jsonl").write_text(
+                "{not json}\n",
+                encoding="utf-8",
+            )
+            report = check_annotation_results.inspect_results(batch_dir)
+        self.assertEqual(report["summary"]["failed"], 1)
+        self.assertEqual(report["summary"]["errors"], 1)
 
 
 if __name__ == "__main__":

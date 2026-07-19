@@ -12,10 +12,19 @@ from typing import Any
 from urllib.parse import urlparse
 
 
+ALLOWED_LICENSES = {"cc0", "pdm", "local_authorized", "unknown", "cc-by", "cc-by-sa"}
+ALLOWED_VERIFICATION_STATUSES = {
+    "provider_declared_pending_review",
+    "user_declared_pending_review",
+    "local_file_pending_review",
+}
+ALLOWED_URI_SCHEMES = {"http", "https", "file", "local"}
+
+
 def _is_url(value: Any) -> bool:
     if value is None:
         return True
-    return isinstance(value, str) and urlparse(value).scheme in {"http", "https"}
+    return isinstance(value, str) and urlparse(value).scheme in ALLOWED_URI_SCHEMES
 
 
 def validate_core(record: Any) -> list[str]:
@@ -50,9 +59,9 @@ def validate_core(record: Any) -> list[str]:
         errors.append("source contains an invalid URL")
 
     rights = record["rights"]
-    if not isinstance(rights, dict) or rights.get("license") not in {"cc0", "pdm"}:
-        errors.append("rights.license must be cc0 or pdm")
-    elif rights.get("verification_status") != "provider_declared_pending_review":
+    if not isinstance(rights, dict) or rights.get("license") not in ALLOWED_LICENSES:
+        errors.append("rights.license is not a supported candidate license")
+    elif rights.get("verification_status") not in ALLOWED_VERIFICATION_STATUSES:
         errors.append("invalid rights.verification_status")
     elif not _is_url(rights.get("license_url")):
         errors.append("invalid rights.license_url")
