@@ -122,6 +122,8 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradl
 
 详细设计与验收资料见 [`docs/`](./docs/)。
 
+`aicamera-app/` 保留了另一套独立的 Android 实现，包含 CameraX、帧管线、构图状态机和辅助线渲染。它与根目录 GenWow 原型的包名和 Gradle 工程相互独立，可用于对照和逐步迁移能力。
+
 ---
 
 > **最后更新**：2026-07-21
