@@ -83,3 +83,33 @@ internal fun scaledSubjectContour(
         }
     }.takeIf { it.size >= 2 }
 }
+
+internal fun scaledPoint(
+    point: NormalizedPoint?,
+    width: Float,
+    height: Float,
+): Offset? {
+    if (point == null) return null
+    if (!width.isFinite() || !height.isFinite() || width <= 0f || height <= 0f) return null
+    if (!point.x.isFinite() || !point.y.isFinite()) return null
+    return Offset(
+        x = point.x.coerceIn(0f, 1f) * width,
+        y = point.y.coerceIn(0f, 1f) * height,
+    )
+}
+
+internal fun deriveMoveAnchors(
+    cue: GuidanceCue,
+    progress: Float,
+): GuidanceAnchors? {
+    val target = NormalizedPoint(x = 0.5f, y = 0.44f)
+    val distance = (1f - progress.coerceIn(0f, 1f)) * 0.22f + 0.03f
+    val current = when (cue) {
+        GuidanceCue.MOVE_LEFT -> target.copy(x = target.x + distance)
+        GuidanceCue.MOVE_RIGHT -> target.copy(x = target.x - distance)
+        GuidanceCue.MOVE_UP -> target.copy(y = target.y + distance)
+        GuidanceCue.MOVE_DOWN -> target.copy(y = target.y - distance)
+        else -> return null
+    }
+    return GuidanceAnchors(current = current, target = target)
+}

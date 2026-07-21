@@ -14,7 +14,7 @@ class FeedScreenTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun feedShowsFigmaTabsPostsAndActions() {
+    fun feedShowsTabsImageCardsAndLikeActions() {
         val repository = DemoCommunityRepository()
         composeRule.setContent {
             GenWowTheme {
@@ -30,9 +30,8 @@ class FeedScreenTest {
         composeRule.onNodeWithText("消息").assertExists()
         composeRule.onNodeWithText("Helena").assertExists()
         composeRule.onNodeWithText("Daniel").assertExists()
-        composeRule.onNodeWithContentDescription("Helena 的郁金香照片").assertExists()
+        composeRule.onNodeWithContentDescription("Helena 的内容图片").assertExists()
         composeRule.onNodeWithContentDescription("点赞 Helena").assertExists()
-        composeRule.onNodeWithContentDescription("评论 Helena").assertExists()
     }
 
     @Test
@@ -48,6 +47,6 @@ class FeedScreenTest {
         }
 
         composeRule.onNodeWithContentDescription("点赞 Helena").performClick()
-        composeRule.onNodeWithText("22 赞").assertExists()
+        composeRule.onNodeWithText("22").assertExists()
     }
 }

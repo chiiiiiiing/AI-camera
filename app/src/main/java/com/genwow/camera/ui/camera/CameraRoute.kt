@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.collect
 fun CameraRoute(
     onOpenFeed: () -> Unit = {},
     onOpenProfile: () -> Unit = {},
+    onOpenEntryFlow: () -> Unit = {},
     /** Production AI output. When present it replaces the Debug demonstration stream. */
     guidanceSamples: Flow<GuidanceSample>? = null,
 ) {
@@ -53,6 +54,7 @@ fun CameraRoute(
     var cameraReady by remember { mutableStateOf(false) }
     var cameraError by remember { mutableStateOf<String?>(null) }
     var recentPhotoUri by remember { mutableStateOf<Uri?>(null) }
+    var selectedMode by remember { mutableStateOf(CameraGuideMode.COFFEE) }
     SystemBarsAppearance(light = !permissionGranted || cameraError != null)
     var uiState by remember { mutableStateOf(CameraUiState()) }
     val stateMachine = remember { GuidanceStateMachine() }
@@ -76,7 +78,7 @@ fun CameraRoute(
 
     // The repository has no model or output protocol yet. Debug builds cycle through
     // clearly labelled demo guidance so every interaction state remains reviewable.
-    LaunchedEffect(cameraReady, guidanceSamples, BuildConfig.DEBUG) {
+    LaunchedEffect(cameraReady, guidanceSamples, BuildConfig.DEBUG, selectedMode) {
         if (!cameraReady) return@LaunchedEffect
         if (guidanceSamples != null) {
             uiState = stateMachine.reduce(uiState, CameraEvent.AnalysisStarted)
@@ -95,55 +97,136 @@ fun CameraRoute(
             return@LaunchedEffect
         }
         if (!BuildConfig.DEBUG) return@LaunchedEffect
-        val cues = listOf(
-            GuidanceCue.MOVE_LEFT,
-            GuidanceCue.MOVE_UP,
-            GuidanceCue.PITCH_UP,
-            GuidanceCue.YAW_RIGHT,
-            GuidanceCue.ROLL_CLOCKWISE,
-        )
+        val cues = when (selectedMode) {
+            CameraGuideMode.COFFEE -> listOf(
+                GuidanceCue.MOVE_LEFT,
+                GuidanceCue.MOVE_UP,
+                GuidanceCue.MOVE_RIGHT,
+            )
+            CameraGuideMode.LANDSCAPE -> listOf(
+                GuidanceCue.PITCH_UP,
+                GuidanceCue.YAW_RIGHT,
+                GuidanceCue.ROLL_CLOCKWISE,
+            )
+            CameraGuideMode.PORTRAIT -> emptyList()
+        }
         while (true) {
             uiState = stateMachine.reduce(uiState, CameraEvent.AnalysisStarted)
             delay(900)
-            cues.forEach { cue ->
-                uiState = stateMachine.reduce(uiState, CameraEvent.FrameEvaluated(cue, 0.28f))
-                delay(1_600)
-                uiState = stateMachine.reduce(uiState, CameraEvent.FrameEvaluated(cue, 0.78f))
-                delay(1_400)
-            }
-            uiState = stateMachine.reduce(
-                uiState,
-                CameraEvent.WrongDirectionDetected(GuidanceCue.YAW_LEFT, 0.34f),
-            )
-            delay(1_100)
-            repeat(7) { frame ->
-                val progress = 0.4f + frame * 0.075f
-                uiState = stateMachine.reduce(
-                    uiState,
-                    CameraEvent.FrameEvaluated(
-                        cue = GuidanceCue.SUBJECT_TARGET,
-                        progress = progress,
-                        subjectOutline = debugGeneratedSubjectOutline(
-                            horizontalShift = -0.08f + frame * 0.012f,
-                            stance = frame / 6f,
+            if (selectedMode != CameraGuideMode.PORTRAIT) {
+                cues.forEach { cue ->
+                    uiState = stateMachine.reduce(uiState, CameraEvent.FrameEvaluated(cue, 0.28f))
+                    delay(1_600)
+                    uiState = stateMachine.reduce(
+                        uiState,
+                        CameraEvent.FrameEvaluated(
+                            cue = cue,
+                            progress = 0.78f,
+                            anchors = debugTranslationAnchors(cue = cue, progress = 0.78f),
                         ),
-                    ),
-                )
-                delay(220)
+                    )
+                    delay(1_400)
+                }
+                if (selectedMode == CameraGuideMode.LANDSCAPE) {
+                    uiState = stateMachine.reduce(
+                        uiState,
+                        CameraEvent.WrongDirectionDetected(GuidanceCue.YAW_LEFT, 0.34f),
+                    )
+                    delay(1_100)
+                }
             }
-            repeat(5) {
-                uiState = stateMachine.reduce(
-                    uiState,
-                    CameraEvent.FrameEvaluated(
-                        cue = GuidanceCue.SUBJECT_TARGET,
-                        progress = 0.98f,
-                        subjectOutline = debugGeneratedSubjectOutline(
-                            horizontalShift = 0f,
-                            stance = 1f,
+            if (selectedMode == CameraGuideMode.PORTRAIT) {
+                repeat(5) { frame ->
+                    val progress = 0.28f + frame * 0.12f
+                    val shift = -0.12f + frame * 0.03f
+                    uiState = stateMachine.reduce(
+                        uiState,
+                        CameraEvent.FrameEvaluated(
+                            cue = GuidanceCue.SUBJECT_TARGET,
+                            progress = progress,
+                            anchors = debugSubjectAnchors(
+                                horizontalShift = shift,
+                                stance = 0.2f,
+                            ),
                         ),
-                    ),
-                )
-                delay(160)
+                    )
+                    delay(340)
+                }
+                repeat(5) { frame ->
+                    val progress = 0.42f + frame * 0.11f
+                    uiState = stateMachine.reduce(
+                        uiState,
+                        CameraEvent.FrameEvaluated(
+                            cue = GuidanceCue.SUBJECT_TARGET,
+                            progress = progress,
+                            subjectOutline = debugGeneratedSubjectOutline(
+                                horizontalShift = 0f,
+                                stance = frame / 4f,
+                            ),
+                            anchors = debugSubjectAnchors(
+                                horizontalShift = 0f,
+                                stance = frame / 4f,
+                            ),
+                        ),
+                    )
+                    delay(240)
+                }
+                repeat(4) {
+                    uiState = stateMachine.reduce(
+                        uiState,
+                        CameraEvent.FrameEvaluated(
+                            cue = GuidanceCue.SUBJECT_TARGET,
+                            progress = 0.98f,
+                            subjectOutline = debugGeneratedSubjectOutline(
+                                horizontalShift = 0f,
+                                stance = 1f,
+                            ),
+                            anchors = debugSubjectAnchors(
+                                horizontalShift = 0f,
+                                stance = 1f,
+                            ),
+                        ),
+                    )
+                    delay(180)
+                }
+            } else {
+                repeat(7) { frame ->
+                    val progress = 0.4f + frame * 0.075f
+                    uiState = stateMachine.reduce(
+                        uiState,
+                        CameraEvent.FrameEvaluated(
+                            cue = GuidanceCue.SUBJECT_TARGET,
+                            progress = progress,
+                            subjectOutline = debugGeneratedSubjectOutline(
+                                horizontalShift = -0.08f + frame * 0.012f,
+                                stance = frame / 6f,
+                            ),
+                            anchors = debugSubjectAnchors(
+                                horizontalShift = -0.08f + frame * 0.012f,
+                                stance = frame / 6f,
+                            ),
+                        ),
+                    )
+                    delay(220)
+                }
+                repeat(5) {
+                    uiState = stateMachine.reduce(
+                        uiState,
+                        CameraEvent.FrameEvaluated(
+                            cue = GuidanceCue.SUBJECT_TARGET,
+                            progress = 0.98f,
+                            subjectOutline = debugGeneratedSubjectOutline(
+                                horizontalShift = 0f,
+                                stance = 1f,
+                            ),
+                            anchors = debugSubjectAnchors(
+                                horizontalShift = 0f,
+                                stance = 1f,
+                            ),
+                        ),
+                    )
+                    delay(160)
+                }
             }
             delay(1_700)
             uiState = stateMachine.reduce(uiState, CameraEvent.SubjectLost)
@@ -191,6 +274,9 @@ fun CameraRoute(
             debugDemo = BuildConfig.DEBUG,
             recentPhotoUri = recentPhotoUri,
             onPreviewReady = { previewView = it },
+            selectedMode = selectedMode,
+            onModeSelected = { selectedMode = it },
+            onOpenEntryFlow = onOpenEntryFlow,
             onCapture = {
                 uiState = stateMachine.reduce(uiState, CameraEvent.CaptureRequested)
                 controller.capture(
@@ -219,7 +305,46 @@ fun CameraRoute(
 internal fun GuidanceSample.toCameraEvent(): CameraEvent = when {
     wrongDirection -> CameraEvent.WrongDirectionDetected(cue, progress)
     !hasSubject && cue == GuidanceCue.SUBJECT_TARGET -> CameraEvent.SubjectLost
-    else -> CameraEvent.FrameEvaluated(cue, progress, subjectOutline)
+    else -> CameraEvent.FrameEvaluated(cue, progress, subjectOutline, anchors)
+}
+
+private fun debugTranslationAnchors(
+    cue: GuidanceCue,
+    progress: Float,
+): GuidanceAnchors? {
+    if (cue !in setOf(
+            GuidanceCue.MOVE_LEFT,
+            GuidanceCue.MOVE_RIGHT,
+            GuidanceCue.MOVE_UP,
+            GuidanceCue.MOVE_DOWN,
+        )
+    ) {
+        return null
+    }
+    val distance = (1f - progress.coerceIn(0f, 1f)) * 0.2f + 0.02f
+    val target = NormalizedPoint(x = 0.5f, y = 0.44f)
+    val current = when (cue) {
+        GuidanceCue.MOVE_LEFT -> target.copy(x = target.x + distance)
+        GuidanceCue.MOVE_RIGHT -> target.copy(x = target.x - distance)
+        GuidanceCue.MOVE_UP -> target.copy(y = target.y + distance)
+        GuidanceCue.MOVE_DOWN -> target.copy(y = target.y - distance)
+        else -> target
+    }
+    return GuidanceAnchors(current = current, target = target)
+}
+
+private fun debugSubjectAnchors(
+    horizontalShift: Float,
+    stance: Float,
+): GuidanceAnchors {
+    val currentCenter = NormalizedPoint(
+        x = (0.5f + horizontalShift).coerceIn(0.1f, 0.9f),
+        y = (0.59f - (stance * 0.015f)).coerceIn(0.1f, 0.9f),
+    )
+    return GuidanceAnchors(
+        current = currentCenter,
+        target = NormalizedPoint(0.5f, 0.57f),
+    )
 }
 
 /**
@@ -240,24 +365,49 @@ private fun debugGeneratedSubjectOutline(
             y = 0.31f + kotlin.math.sin(angle).toFloat() * 0.075f,
         )
     }
-    val bodyLean = (1f - settled) * 0.035f
-    val body = listOf(
-        NormalizedPoint(centerX - 0.07f, 0.38f),
-        NormalizedPoint(centerX - 0.12f + bodyLean, 0.5f),
-        NormalizedPoint(centerX - 0.08f, 0.63f),
-        NormalizedPoint(centerX - 0.095f, 0.82f),
-        NormalizedPoint(centerX - 0.025f, 0.84f),
-        NormalizedPoint(centerX, 0.66f),
-        NormalizedPoint(centerX + 0.045f, 0.84f),
-        NormalizedPoint(centerX + 0.11f, 0.82f),
-        NormalizedPoint(centerX + 0.075f, 0.62f),
-        NormalizedPoint(centerX + 0.12f - bodyLean, 0.5f),
-        NormalizedPoint(centerX + 0.07f, 0.38f),
+    val bodyLean = (1f - settled) * 0.03f
+    val shoulderDrop = (1f - settled) * 0.025f
+    val torso = listOf(
+        NormalizedPoint(centerX - 0.055f, 0.40f),
+        NormalizedPoint(centerX - 0.07f + bodyLean, 0.52f),
+        NormalizedPoint(centerX - 0.045f, 0.66f),
+        NormalizedPoint(centerX + 0.045f, 0.66f),
+        NormalizedPoint(centerX + 0.07f - bodyLean, 0.52f),
+        NormalizedPoint(centerX + 0.055f, 0.40f),
+    )
+    val leftArm = listOf(
+        NormalizedPoint(centerX - 0.055f, 0.42f + shoulderDrop),
+        NormalizedPoint(centerX - 0.13f - bodyLean, 0.50f),
+        NormalizedPoint(centerX - 0.15f - bodyLean, 0.64f),
+    )
+    val rightArm = listOf(
+        NormalizedPoint(centerX + 0.055f, 0.42f),
+        NormalizedPoint(centerX + 0.13f - bodyLean, 0.49f),
+        NormalizedPoint(centerX + 0.16f - bodyLean, 0.63f),
+    )
+    val leftLeg = listOf(
+        NormalizedPoint(centerX - 0.02f, 0.66f),
+        NormalizedPoint(centerX - 0.055f, 0.80f),
+        NormalizedPoint(centerX - 0.07f, 0.92f),
+    )
+    val rightLeg = listOf(
+        NormalizedPoint(centerX + 0.02f, 0.66f),
+        NormalizedPoint(centerX + 0.06f, 0.79f),
+        NormalizedPoint(centerX + 0.075f, 0.92f),
+    )
+    val hips = listOf(
+        NormalizedPoint(centerX - 0.038f, 0.67f),
+        NormalizedPoint(centerX + 0.038f, 0.67f),
     )
     return SubjectOutline(
         contours = listOf(
             SubjectContour(points = head, closed = true),
-            SubjectContour(points = body, closed = true),
+            SubjectContour(points = torso, closed = true),
+            SubjectContour(points = leftArm),
+            SubjectContour(points = rightArm),
+            SubjectContour(points = hips),
+            SubjectContour(points = leftLeg),
+            SubjectContour(points = rightLeg),
         ),
         confidence = 0.96f,
     )

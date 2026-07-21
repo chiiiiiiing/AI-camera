@@ -26,8 +26,11 @@ fun CameraScreen(
     state: CameraUiState,
     cameraReady: Boolean,
     debugDemo: Boolean,
+    selectedMode: CameraGuideMode,
     recentPhotoUri: Uri? = null,
     onPreviewReady: (PreviewView) -> Unit,
+    onModeSelected: (CameraGuideMode) -> Unit,
+    onOpenEntryFlow: () -> Unit,
     onCapture: () -> Unit,
     onSwitchLens: () -> Unit,
     onOpenFeed: () -> Unit,
@@ -35,7 +38,12 @@ fun CameraScreen(
 ) {
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         Column(Modifier.fillMaxSize()) {
-            CameraTopControls(debugDemo = debugDemo)
+            CameraTopControls(
+                selectedMode = selectedMode,
+                debugDemo = debugDemo,
+                onModeSelected = onModeSelected,
+                onOpenEntryFlow = onOpenEntryFlow,
+            )
             Box(Modifier.weight(1f).fillMaxSize().clip(RoundedCornerShape(5.dp))) {
                 CameraPreview(modifier = Modifier.fillMaxSize(), onPreviewReady = onPreviewReady)
                 CompositionGuideOverlay(state = state, modifier = Modifier.fillMaxSize())
@@ -76,7 +84,10 @@ private fun CameraAlignedPreview() {
             ),
             cameraReady = true,
             debugDemo = true,
+            selectedMode = CameraGuideMode.COFFEE,
             onPreviewReady = {},
+            onModeSelected = {},
+            onOpenEntryFlow = {},
             onCapture = {},
             onSwitchLens = {},
             onOpenFeed = {},
@@ -100,7 +111,10 @@ private fun CameraRotationPreview() {
             ),
             cameraReady = true,
             debugDemo = true,
+            selectedMode = CameraGuideMode.LANDSCAPE,
             onPreviewReady = {},
+            onModeSelected = {},
+            onOpenEntryFlow = {},
             onCapture = {},
             onSwitchLens = {},
             onOpenFeed = {},

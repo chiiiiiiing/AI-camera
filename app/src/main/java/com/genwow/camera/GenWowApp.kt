@@ -11,7 +11,7 @@ import com.genwow.camera.ui.theme.GenWowTheme
 @Composable
 fun GenWowApp(
     startDestination: AppDestination = AppDestination.Splash,
-    splashDurationMillis: Long = 700,
+    splashDurationMillis: Long = 2_000,
 ) {
     val authRepository = remember { DemoAuthRepository() }
     val communityRepository = remember { DemoCommunityRepository() }

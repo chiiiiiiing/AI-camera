@@ -1,25 +1,25 @@
 package com.genwow.camera.ui.feed
 
 import androidx.annotation.DrawableRes
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -38,24 +38,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.genwow.camera.R
 import com.genwow.camera.data.demo.DemoPost
+import com.genwow.camera.ui.icon.HeartOutlineIcon
 import com.genwow.camera.ui.theme.BrandOnSurface
 import com.genwow.camera.ui.theme.BrandOnSurfaceMuted
 import com.genwow.camera.ui.theme.BrandPink
@@ -73,20 +70,21 @@ fun CommunityTopTabs(
         val tabWidth = maxWidth / CommunityTabs.size
         val indicatorOffset by animateDpAsState(
             targetValue = tabWidth * selectedIndex + (tabWidth - 28.dp) / 2,
-            animationSpec = tween(GenWowMotion.ModeChangeMillis, easing = GenWowMotion.StandardEasing),
+            animationSpec = tween(
+                durationMillis = GenWowMotion.ModeChangeMillis,
+                easing = GenWowMotion.StandardEasing,
+            ),
             label = "community tab indicator",
         )
         Row(
-            modifier = Modifier.fillMaxWidth().height(52.dp).selectableGroup(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp)
+                .selectableGroup(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             CommunityTabs.forEachIndexed { index, label ->
                 val selected = index == selectedIndex
-                val color by animateColorAsState(
-                    if (selected) BrandOnSurface else BrandOnSurfaceMuted,
-                    tween(GenWowMotion.ModeChangeMillis),
-                    label = "community tab color",
-                )
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -100,7 +98,7 @@ fun CommunityTopTabs(
                 ) {
                     Text(
                         text = label,
-                        color = color,
+                        color = if (selected) BrandOnSurface else BrandOnSurfaceMuted,
                         fontSize = 14.sp,
                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                     )
@@ -123,141 +121,131 @@ fun FeedPostCard(
     onToggleLike: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 10.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Image(
-                painter = painterResource(authorAvatar(post.author)),
-                contentDescription = "${post.author} 的头像",
-                modifier = Modifier.size(32.dp).clip(CircleShape),
-                contentScale = ContentScale.Crop,
-            )
-            Column(Modifier.padding(start = 12.dp)) {
-                Text(post.author, color = Color.Black, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                Text(post.elapsedTime, color = Color(0xFF9A909E), fontSize = 12.sp)
-            }
-            Spacer(Modifier.weight(1f))
-            Text(
-                text = "•••",
-                color = Color.Black,
-                fontSize = 14.sp,
-                letterSpacing = 1.sp,
-                modifier = Modifier.semantics { contentDescription = "${post.author} 的更多操作" },
-            )
-        }
-
-        Column(Modifier.padding(start = 44.dp, end = 36.dp, top = 12.dp)) {
-            post.imageAssetKey?.let { assetKey ->
-                var visible by remember(post.id) { mutableStateOf(false) }
-                LaunchedEffect(post.id) { visible = true }
-                val imageAlpha by animateFloatAsState(
-                    if (visible) 1f else 0f,
-                    tween(180),
-                    label = "feed image fade",
-                )
-                Image(
-                    painter = painterResource(communityAssetResource(assetKey)),
-                    contentDescription = "${post.author} 的郁金香照片",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(1f)
-                        .clip(RoundedCornerShape(4.dp))
-                        .graphicsLayer { alpha = imageAlpha },
-                    contentScale = ContentScale.Crop,
-                )
-                Spacer(Modifier.height(10.dp))
-            }
+    var visible by remember(post.id) { mutableStateOf(false) }
+    LaunchedEffect(post.id) { visible = true }
+    val imageAlpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(180),
+        label = "feed image fade",
+    )
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .aspectRatio(0.68f)
+            .clip(RoundedCornerShape(22.dp))
+            .background(Color.White.copy(alpha = 0.92f))
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.72f),
+                shape = RoundedCornerShape(22.dp),
+            ),
+    ) {
+        Image(
+            painter = painterResource(communityAssetResource(post.imageAssetKey)),
+            contentDescription = "${post.author} 的内容图片",
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1.55f)
+                .graphicsLayer { alpha = imageAlpha },
+            contentScale = ContentScale.Crop,
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .padding(horizontal = 14.dp, vertical = 13.dp),
+        ) {
             Text(
                 text = post.body,
-                color = Color.Black,
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
+                color = BrandOnSurface,
+                fontSize = 13.sp,
+                lineHeight = 19.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.semantics { heading() },
             )
-            Spacer(Modifier.height(8.dp))
-            PostActions(post = post, onToggleLike = onToggleLike)
-        }
-    }
-}
-
-@Composable
-private fun PostActions(post: DemoPost, onToggleLike: (String) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) {
-        val interaction = remember(post.id) { MutableInteractionSource() }
-        val pressed by interaction.collectIsPressedAsState()
-        val scale by animateFloatAsState(
-            if (pressed) .88f else 1f,
-            tween(if (pressed) GenWowMotion.PressMillis else GenWowMotion.PressReleaseMillis),
-            label = "like press",
-        )
-        Row(
-            modifier = Modifier
-                .scale(scale)
-                .semantics { contentDescription = "点赞 ${post.author}" }
-                .clickable(
-                    role = Role.Button,
-                    interactionSource = interaction,
-                    indication = null,
-                    onClick = { onToggleLike(post.id) },
+            Spacer(Modifier.heightIn(min = 10.dp).weight(1f))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(42.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Image(
+                    painter = painterResource(authorAvatar(post.author)),
+                    contentDescription = "${post.author} 的头像",
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop,
                 )
-                .padding(vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            HeartIcon(filled = post.liked)
-            Text("${post.likes} 赞", color = Color.Black, fontSize = 12.sp, modifier = Modifier.padding(start = 7.dp))
-        }
-        Row(
-            modifier = Modifier
-                .semantics { contentDescription = "评论 ${post.author}" }
-                .clickable(role = Role.Button, onClick = {})
-                .padding(vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            CommentIcon()
-            Text("${post.comments} 评论", color = Color.Black, fontSize = 12.sp, modifier = Modifier.padding(start = 7.dp))
+                Column(
+                    modifier = Modifier
+                        .padding(start = 8.dp)
+                        .weight(1f),
+                ) {
+                    Text(
+                        text = post.author,
+                        color = BrandOnSurface,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                    )
+                    Text(
+                        text = post.elapsedTime,
+                        color = BrandOnSurfaceMuted,
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                    )
+                }
+                LikePill(post = post, onToggleLike = onToggleLike)
+            }
         }
     }
 }
 
 @Composable
-private fun HeartIcon(filled: Boolean) {
-    Canvas(Modifier.size(20.dp)) {
-        val path = Path().apply {
-            moveTo(size.width * .5f, size.height * .86f)
-            cubicTo(size.width * .42f, size.height * .76f, size.width * .1f, size.height * .55f, size.width * .1f, size.height * .3f)
-            cubicTo(size.width * .1f, size.height * .08f, size.width * .38f, size.height * .02f, size.width * .5f, size.height * .22f)
-            cubicTo(size.width * .62f, size.height * .02f, size.width * .9f, size.height * .08f, size.width * .9f, size.height * .3f)
-            cubicTo(size.width * .9f, size.height * .55f, size.width * .58f, size.height * .76f, size.width * .5f, size.height * .86f)
-            close()
-        }
-        if (filled) drawPath(path, BrandPink)
-        drawPath(path, Color.Black, style = Stroke(1.6.dp.toPx(), cap = StrokeCap.Round))
-    }
-}
-
-@Composable
-private fun CommentIcon() {
-    Canvas(Modifier.size(20.dp)) {
-        val stroke = Stroke(1.6.dp.toPx(), cap = StrokeCap.Round)
-        drawRoundRect(
-            Color.Black,
-            topLeft = Offset(2.dp.toPx(), 2.dp.toPx()),
-            size = Size(16.dp.toPx(), 13.dp.toPx()),
-            cornerRadius = CornerRadius(2.dp.toPx()),
-            style = stroke,
+private fun LikePill(
+    post: DemoPost,
+    onToggleLike: (String) -> Unit,
+) {
+    val interaction = remember(post.id) { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) .92f else 1f,
+        animationSpec = tween(
+            durationMillis = if (pressed) {
+                GenWowMotion.PressMillis
+            } else {
+                GenWowMotion.PressReleaseMillis
+            },
+        ),
+        label = "like press",
+    )
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(Color(0xFFFFF3F7))
+            .scale(scale)
+            .semantics { contentDescription = "点赞 ${post.author}" }
+            .clickable(
+                role = Role.Button,
+                interactionSource = interaction,
+                indication = null,
+                onClick = { onToggleLike(post.id) },
+            )
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        HeartOutlineIcon(
+            modifier = Modifier.size(17.dp),
+            tint = BrandOnSurface,
+            filled = post.liked,
+            fillColor = BrandPink,
         )
-        drawLine(
-            Color.Black,
-            Offset(6.dp.toPx(), 15.dp.toPx()),
-            Offset(5.dp.toPx(), 19.dp.toPx()),
-            strokeWidth = stroke.width,
-            cap = StrokeCap.Round,
-        )
-        drawLine(
-            Color.Black,
-            Offset(5.dp.toPx(), 19.dp.toPx()),
-            Offset(10.dp.toPx(), 15.dp.toPx()),
-            strokeWidth = stroke.width,
-            cap = StrokeCap.Round,
-        )
+        Spacer(Modifier.size(6.dp))
+        Text("${post.likes}", color = BrandOnSurface, fontSize = 11.sp, fontWeight = FontWeight.Medium)
     }
 }
 

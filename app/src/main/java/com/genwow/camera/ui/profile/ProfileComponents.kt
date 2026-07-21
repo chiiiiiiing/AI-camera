@@ -28,7 +28,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
@@ -42,6 +41,7 @@ import androidx.compose.ui.unit.sp
 import com.genwow.camera.data.demo.DemoGalleryItem
 import com.genwow.camera.data.demo.DemoProfile
 import com.genwow.camera.ui.feed.communityAssetResource
+import com.genwow.camera.ui.icon.SettingsOutlineIcon
 import com.genwow.camera.ui.theme.BrandOnSurface
 import com.genwow.camera.ui.theme.BrandOnSurfaceMuted
 import com.genwow.camera.ui.theme.GenWowMotion
@@ -149,30 +149,17 @@ private fun GalleryCell(item: DemoGalleryItem, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun ProfileSettingsButton(modifier: Modifier = Modifier) {
+fun ProfileSettingsButton(
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
     Box(
         modifier = modifier
             .size(48.dp)
             .semantics { contentDescription = "主页设置" }
-            .clickable(role = Role.Button, onClick = {}),
+            .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.size(27.dp)) {
-            val stroke = Stroke(1.5.dp.toPx(), cap = StrokeCap.Round)
-            drawCircle(BrandOnSurface, 5.dp.toPx(), center, style = stroke)
-            drawCircle(BrandOnSurface, 9.dp.toPx(), center, style = stroke)
-            repeat(8) { index ->
-                val angle = Math.toRadians(index * 45.0)
-                val inner = Offset(
-                    center.x + kotlin.math.cos(angle).toFloat() * 8.dp.toPx(),
-                    center.y + kotlin.math.sin(angle).toFloat() * 8.dp.toPx(),
-                )
-                val outer = Offset(
-                    center.x + kotlin.math.cos(angle).toFloat() * 11.dp.toPx(),
-                    center.y + kotlin.math.sin(angle).toFloat() * 11.dp.toPx(),
-                )
-                drawLine(BrandOnSurface, inner, outer, stroke.width, StrokeCap.Round)
-            }
-        }
+        SettingsOutlineIcon(modifier = Modifier.size(27.dp), tint = BrandOnSurface)
     }
 }

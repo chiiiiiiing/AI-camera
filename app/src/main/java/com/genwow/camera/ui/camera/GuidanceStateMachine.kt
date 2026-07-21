@@ -130,6 +130,7 @@ class GuidanceStateMachine(
                 phase = phase,
                 progress = progress,
                 subjectOutline = event.subjectOutline,
+                anchors = event.anchors,
                 stableFrameCount = stableFrames,
             )
         }
@@ -146,6 +147,7 @@ class GuidanceStateMachine(
             phase = phaseFor(progress = progress, cue = event.cue),
             progress = progress,
             subjectOutline = event.subjectOutline,
+            anchors = event.anchors,
             unstableFrameCount = if (current.phase == GuidancePhase.ALIGNED) {
                 config.framesToExitAligned
             } else {

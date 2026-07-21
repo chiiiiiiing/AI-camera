@@ -7,6 +7,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +37,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
@@ -49,6 +52,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.genwow.camera.R
+import com.genwow.camera.ui.icon.QqOutlineIcon
+import com.genwow.camera.ui.icon.WeChatOutlineIcon
 import com.genwow.camera.ui.theme.BrandOnSurface
 import com.genwow.camera.ui.theme.BrandOnSurfaceMuted
 import com.genwow.camera.ui.theme.BrandPurple
@@ -259,84 +265,17 @@ private fun ThirdPartyIconButton(provider: ThirdPartyProvider) {
             .semantics { contentDescription = provider.description },
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.size(30.dp)) {
-            val color = BrandPurple
-            val cutout = Color.White.copy(alpha = 0.82f)
-            when (provider) {
-                ThirdPartyProvider.WECHAT -> {
-                    drawOval(
-                        color = color,
-                        topLeft = Offset(size.width * 0.02f, size.height * 0.08f),
-                        size = androidx.compose.ui.geometry.Size(size.width * 0.68f, size.height * 0.58f),
-                    )
-                    val leftTail = Path().apply {
-                        moveTo(size.width * 0.18f, size.height * 0.58f)
-                        lineTo(size.width * 0.12f, size.height * 0.78f)
-                        lineTo(size.width * 0.34f, size.height * 0.64f)
-                        close()
-                    }
-                    drawPath(leftTail, color)
-                    drawCircle(cutout, radius = size.width * 0.035f, center = Offset(size.width * 0.25f, size.height * 0.34f))
-                    drawCircle(cutout, radius = size.width * 0.035f, center = Offset(size.width * 0.47f, size.height * 0.34f))
-                    drawOval(
-                        color = color,
-                        topLeft = Offset(size.width * 0.37f, size.height * 0.38f),
-                        size = androidx.compose.ui.geometry.Size(size.width * 0.61f, size.height * 0.52f),
-                    )
-                    val rightTail = Path().apply {
-                        moveTo(size.width * 0.78f, size.height * 0.82f)
-                        lineTo(size.width * 0.9f, size.height * 0.98f)
-                        lineTo(size.width * 0.62f, size.height * 0.86f)
-                        close()
-                    }
-                    drawPath(rightTail, color)
-                    drawCircle(cutout, radius = size.width * 0.03f, center = Offset(size.width * 0.58f, size.height * 0.62f))
-                    drawCircle(cutout, radius = size.width * 0.03f, center = Offset(size.width * 0.77f, size.height * 0.62f))
-                }
-
-                ThirdPartyProvider.QQ -> {
-                    drawOval(
-                        color = color,
-                        topLeft = Offset(size.width * 0.25f, size.height * 0.04f),
-                        size = androidx.compose.ui.geometry.Size(size.width * 0.5f, size.height * 0.46f),
-                    )
-                    drawOval(
-                        color = color,
-                        topLeft = Offset(size.width * 0.2f, size.height * 0.32f),
-                        size = androidx.compose.ui.geometry.Size(size.width * 0.6f, size.height * 0.55f),
-                    )
-                    drawOval(
-                        color = color,
-                        topLeft = Offset(size.width * 0.04f, size.height * 0.38f),
-                        size = androidx.compose.ui.geometry.Size(size.width * 0.32f, size.height * 0.42f),
-                    )
-                    drawOval(
-                        color = color,
-                        topLeft = Offset(size.width * 0.64f, size.height * 0.38f),
-                        size = androidx.compose.ui.geometry.Size(size.width * 0.32f, size.height * 0.42f),
-                    )
-                    drawOval(
-                        color = color,
-                        topLeft = Offset(size.width * 0.11f, size.height * 0.78f),
-                        size = androidx.compose.ui.geometry.Size(size.width * 0.38f, size.height * 0.18f),
-                    )
-                    drawOval(
-                        color = color,
-                        topLeft = Offset(size.width * 0.51f, size.height * 0.78f),
-                        size = androidx.compose.ui.geometry.Size(size.width * 0.38f, size.height * 0.18f),
-                    )
-                    drawCircle(cutout, radius = size.width * 0.035f, center = Offset(size.width * 0.4f, size.height * 0.22f))
-                    drawCircle(cutout, radius = size.width * 0.035f, center = Offset(size.width * 0.6f, size.height * 0.22f))
-                    val beak = Path().apply {
-                        moveTo(size.width * 0.43f, size.height * 0.31f)
-                        lineTo(size.width * 0.57f, size.height * 0.31f)
-                        lineTo(size.width * 0.5f, size.height * 0.39f)
-                        close()
-                    }
-                    drawPath(beak, cutout)
-                }
-            }
-        }
+        Image(
+            painter = painterResource(
+                id = when (provider) {
+                    ThirdPartyProvider.WECHAT -> R.drawable.third_party_wechat_1
+                    ThirdPartyProvider.QQ -> R.drawable.third_party_qq_1
+                },
+            ),
+            contentDescription = null,
+            modifier = Modifier.size(width = 32.dp, height = 31.dp),
+            contentScale = ContentScale.Fit,
+        )
     }
 }
 

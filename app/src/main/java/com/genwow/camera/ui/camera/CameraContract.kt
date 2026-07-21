@@ -51,6 +51,20 @@ data class SubjectOutline(
     val confidence: Float = 1f,
 )
 
+/**
+ * Optional AI-provided anchors for guidance visuals.
+ *
+ * `current` usually represents the subject center or current framing center, while `target`
+ * represents the recommended position in the same normalized coordinate space.
+ *
+ * Translation cues interpret these points as "current frame center vs recommended frame center".
+ * Subject cues interpret them as "current detected body center vs recommended body center".
+ */
+data class GuidanceAnchors(
+    val current: NormalizedPoint? = null,
+    val target: NormalizedPoint? = null,
+)
+
 enum class AnalysisStatus {
     IDLE,
     ANALYZING,
@@ -70,6 +84,7 @@ data class GuidanceState(
     val phase: GuidancePhase = GuidancePhase.NEUTRAL,
     val progress: Float = 0f,
     val subjectOutline: SubjectOutline? = null,
+    val anchors: GuidanceAnchors? = null,
     /** State-machine bookkeeping. Presentation code should not animate this value. */
     val stableFrameCount: Int = 0,
     /** Prevents a single noisy frame from dismissing the aligned state. */
@@ -93,6 +108,7 @@ sealed interface CameraEvent {
         val cue: GuidanceCue,
         val progress: Float,
         val subjectOutline: SubjectOutline? = null,
+        val anchors: GuidanceAnchors? = null,
     ) : CameraEvent
 
     data class WrongDirectionDetected(

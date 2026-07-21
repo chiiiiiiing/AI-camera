@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -31,10 +33,11 @@ fun GenWowNavHost(
     navController: NavHostController = rememberNavController(),
     startDestination: AppDestination = AppDestination.Splash,
     splashDurationMillis: Long = 700,
-    cameraContent: @Composable ((() -> Unit), (() -> Unit)) -> Unit = { onFeed, onProfile ->
-        CameraRoute(onOpenFeed = onFeed, onOpenProfile = onProfile)
+    cameraContent: @Composable ((() -> Unit), (() -> Unit), (() -> Unit)) -> Unit = { onFeed, onProfile, onEntryFlow ->
+        CameraRoute(onOpenFeed = onFeed, onOpenProfile = onProfile, onOpenEntryFlow = onEntryFlow)
     },
 ) {
+    val currentSession by authRepository.currentSession.collectAsStateWithLifecycle()
     NavHost(
         navController = navController,
         startDestination = startDestination.route,
@@ -44,7 +47,7 @@ fun GenWowNavHost(
             SplashScreen()
             LaunchedEffect(splashDurationMillis) {
                 if (splashDurationMillis > 0) delay(splashDurationMillis)
-                navController.navigate(AppDestination.Login.route) {
+                navController.navigate(AppDestination.Camera.route) {
                     popUpTo(AppDestination.Splash.route) { inclusive = true }
                     launchSingleTop = true
                 }
@@ -72,13 +75,28 @@ fun GenWowNavHost(
         composable(AppDestination.Camera.route) {
             cameraContent(
                 { navController.openMainDestination(AppDestination.Feed) },
-                { navController.openMainDestination(AppDestination.Profile) },
+                {
+                    navController.navigateToProfileOrAuth(
+                        authenticated = currentSession != null,
+                    )
+                },
+                {
+                    navController.navigate(AppDestination.Splash.route) {
+                        popUpTo(AppDestination.Camera.route) { inclusive = false }
+                        launchSingleTop = true
+                    }
+                },
             )
         }
         composable(AppDestination.Feed.route) {
             MainDestinationScaffold(
                 currentDestination = AppDestination.Feed,
-                navController = navController,
+                onDestinationSelected = { destination ->
+                    navController.navigateMainDestination(
+                        destination = destination,
+                        authenticated = currentSession != null,
+                    )
+                },
             ) {
                 FeedScreen(
                     posts = communityRepository.posts,
@@ -87,11 +105,31 @@ fun GenWowNavHost(
             }
         }
         composable(AppDestination.Profile.route) {
-            MainDestinationScaffold(
-                currentDestination = AppDestination.Profile,
-                navController = navController,
-            ) {
-                ProfileScreen(profile = communityRepository.profile)
+            if (currentSession == null) {
+                LoginRoute(
+                    repository = authRepository,
+                    onLoginSucceeded = {
+                        navController.openMainDestination(AppDestination.Profile, clearAuth = true)
+                    },
+                    onRegister = {
+                        navController.navigate(AppDestination.Register.route)
+                    },
+                )
+            } else {
+                MainDestinationScaffold(
+                    currentDestination = AppDestination.Profile,
+                    onDestinationSelected = { destination ->
+                        navController.navigateMainDestination(
+                            destination = destination,
+                            authenticated = true,
+                        )
+                    },
+                ) {
+                    ProfileScreen(
+                        profile = communityRepository.profile,
+                        onOpenEntryFlow = { navController.navigate(AppDestination.Login.route) },
+                    )
+                }
             }
         }
     }
@@ -100,18 +138,14 @@ fun GenWowNavHost(
 @Composable
 private fun MainDestinationScaffold(
     currentDestination: AppDestination,
-    navController: NavHostController,
+    onDestinationSelected: (AppDestination) -> Unit,
     content: @Composable () -> Unit,
 ) {
     Column(Modifier.fillMaxSize().background(Color.Black)) {
         Box(Modifier.weight(1f).fillMaxWidth()) { content() }
         MainBottomBar(
             currentDestination = currentDestination,
-            onDestinationSelected = { destination ->
-                if (destination != currentDestination) {
-                    navController.openMainDestination(destination)
-                }
-            },
+            onDestinationSelected = onDestinationSelected,
         )
     }
 }
@@ -128,5 +162,23 @@ private fun NavHostController.openMainDestination(
         }
         launchSingleTop = true
         restoreState = !clearAuth
+    }
+}
+
+private fun NavHostController.navigateMainDestination(
+    destination: AppDestination,
+    authenticated: Boolean,
+) {
+    when {
+        destination == AppDestination.Profile -> navigateToProfileOrAuth(authenticated)
+        else -> openMainDestination(destination)
+    }
+}
+
+private fun NavHostController.navigateToProfileOrAuth(authenticated: Boolean) {
+    if (authenticated) {
+        openMainDestination(AppDestination.Profile)
+    } else {
+        openMainDestination(AppDestination.Profile)
     }
 }

@@ -16,7 +16,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -30,47 +32,63 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.genwow.camera.ui.theme.GenWowMotion
 import com.genwow.camera.ui.theme.GuideAccent
 import com.genwow.camera.ui.theme.GuideAligned
 import com.genwow.camera.ui.theme.GuideWarning
-import com.genwow.camera.ui.theme.GenWowMotion
 
 @Composable
 fun CompositionGuideOverlay(state: CameraUiState, modifier: Modifier = Modifier) {
     val guidance = state.guidance
+    val visualFamily = guidance.cue.visualFamily()
+    val subjectMode = visualFamily == GuideVisualFamily.SUBJECT
+    var lockedSubjectOutline by remember { mutableStateOf<SubjectOutline?>(null) }
+    var lockedSubjectAnchors by remember { mutableStateOf<GuidanceAnchors?>(null) }
     val looping = guidance.phase == GuidancePhase.ADJUST || guidance.phase == GuidancePhase.NEAR
-    val subjectMode = guidance.cue == GuidanceCue.SUBJECT_TARGET ||
-        guidance.cue == GuidanceCue.SUBJECT_ALIGNED
     val motion = remember { Animatable(0f) }
     val guideAlpha by animateFloatAsState(
         targetValue = when {
             state.analysisStatus == AnalysisStatus.FAILED -> .28f
             guidance.phase == GuidancePhase.NEUTRAL -> .32f
-            guidance.phase == GuidancePhase.ALIGNED -> .9f
+            guidance.phase == GuidancePhase.ALIGNED -> .94f
             else -> 1f
         },
         animationSpec = tween(GenWowMotion.ModeChangeMillis),
-        label = "guide visibility",
+        label = "guide alpha",
     )
     val guideColor by animateColorAsState(
         targetValue = when {
             state.analysisStatus == AnalysisStatus.FAILED -> GuideWarning
             guidance.phase == GuidancePhase.WRONG_DIRECTION -> GuideWarning
             guidance.phase == GuidancePhase.ALIGNED -> GuideAligned
-            guidance.phase == GuidancePhase.NEUTRAL -> Color.White
             else -> GuideAccent
         },
         animationSpec = tween(GenWowMotion.ModeChangeMillis),
-        label = "guide state color",
+        label = "guide color",
     )
 
-    // One cancellable clock expresses “keep moving”. Changing cue/phase cancels the
-    // previous loop immediately, so recomposition cannot accumulate animation jobs.
+    if (!subjectMode || state.analysisStatus != AnalysisStatus.TRACKING) {
+        lockedSubjectOutline = null
+        lockedSubjectAnchors = null
+    } else if (lockedSubjectOutline == null && guidance.subjectOutline != null) {
+        lockedSubjectOutline = guidance.subjectOutline
+        lockedSubjectAnchors = guidance.anchors
+    }
+
+    val portraitTranslationGuidance = if (
+        subjectMode &&
+        lockedSubjectOutline == null &&
+        guidance.anchors?.current != null &&
+        guidance.anchors?.target != null
+    ) {
+        guidance.toPortraitAlignmentCue()
+    } else {
+        null
+    }
+
     LaunchedEffect(looping, guidance.cue, guidance.phase) {
         when {
             guidance.phase == GuidancePhase.WRONG_DIRECTION -> {
-                // A single short reverse rebound says “that was the wrong way” without shaking
-                // the preview or starting another repeating job.
                 motion.snapTo(-1f)
                 motion.animateTo(
                     0f,
@@ -102,59 +120,67 @@ fun CompositionGuideOverlay(state: CameraUiState, modifier: Modifier = Modifier)
 
     Box(modifier) {
         Canvas(Modifier.fillMaxSize()) {
-            drawThirdsGrid(alpha = (if (subjectMode) .05f else .14f) * guideAlpha)
+            drawThirdsGrid(alpha = if (subjectMode) .05f * guideAlpha else .12f * guideAlpha)
             if (!subjectMode) {
                 drawTargetFrame(
                     color = guideColor,
-                    alpha = if (guidance.phase == GuidancePhase.ALIGNED) .92f else .34f * guideAlpha,
+                    alpha = if (guidance.phase == GuidancePhase.ALIGNED) .88f else .24f * guideAlpha,
                     aligned = guidance.phase == GuidancePhase.ALIGNED,
                 )
             }
+
             val wrongDirection = guidance.phase == GuidancePhase.WRONG_DIRECTION
-            val displayMotion = if (wrongDirection) {
-                .5f + motion.value * .18f
-            } else {
-                motion.value
-            }
-            when (guidance.cue) {
-                GuidanceCue.MOVE_LEFT,
-                GuidanceCue.MOVE_RIGHT,
-                GuidanceCue.MOVE_UP,
-                GuidanceCue.MOVE_DOWN,
-                -> drawMoveIndicator(
-                    guidance,
-                    guideColor,
-                    displayMotion,
-                    guideAlpha,
-                    wrongDirection,
+            val displayMotion = if (wrongDirection) .5f + motion.value * .18f else motion.value
+            when (visualFamily) {
+                GuideVisualFamily.TRANSLATION -> drawTranslationGuide(
+                    guidance = guidance,
+                    color = guideColor,
+                    motionPhase = displayMotion,
+                    alpha = guideAlpha,
+                    wrongDirection = wrongDirection,
                 )
 
-                GuidanceCue.PITCH_UP,
-                GuidanceCue.PITCH_DOWN,
-                GuidanceCue.YAW_LEFT,
-                GuidanceCue.YAW_RIGHT,
-                GuidanceCue.ROLL_CLOCKWISE,
-                GuidanceCue.ROLL_COUNTERCLOCKWISE,
-                -> drawRotationIndicator(
-                    guidance,
-                    guideColor,
-                    displayMotion,
-                    guideAlpha,
-                    wrongDirection,
+                GuideVisualFamily.AXIS_ROTATION -> drawAxisRotationGuide(
+                    cue = guidance.cue,
+                    phase = guidance.phase,
+                    color = guideColor,
+                    motionPhase = displayMotion,
+                    alpha = guideAlpha,
+                    wrongDirection = wrongDirection,
                 )
 
-                GuidanceCue.NONE -> if (guidance.phase == GuidancePhase.ALIGNED) {
+                GuideVisualFamily.PLANAR_ROTATION -> drawPlanarRotationGuide(
+                    cue = guidance.cue,
+                    phase = guidance.phase,
+                    color = guideColor,
+                    motionPhase = displayMotion,
+                    alpha = guideAlpha,
+                    wrongDirection = wrongDirection,
+                )
+
+                GuideVisualFamily.NONE -> if (guidance.phase == GuidancePhase.ALIGNED) {
                     drawAlignedMark(guideColor)
                 }
 
-                GuidanceCue.SUBJECT_TARGET,
-                GuidanceCue.SUBJECT_ALIGNED,
-                -> Unit
+                GuideVisualFamily.SUBJECT -> {
+                    portraitTranslationGuidance?.let { translationGuidance ->
+                        drawTranslationGuide(
+                            guidance = translationGuidance,
+                            color = guideColor,
+                            motionPhase = displayMotion,
+                            alpha = guideAlpha,
+                            wrongDirection = wrongDirection,
+                        )
+                    }
+                }
             }
         }
-        guidance.subjectOutline?.takeIf { subjectMode }?.let { outline ->
+
+        lockedSubjectOutline?.takeIf { subjectMode }?.let { outline ->
             SubjectOutlineOverlay(
                 outline = outline,
+                anchors = lockedSubjectAnchors,
+                guideColor = guideColor,
                 aligned = guidance.phase == GuidancePhase.ALIGNED ||
                     guidance.cue == GuidanceCue.SUBJECT_ALIGNED,
                 motionPhase = motion.value.coerceIn(0f, 1f),
@@ -167,10 +193,20 @@ fun CompositionGuideOverlay(state: CameraUiState, modifier: Modifier = Modifier)
 private fun DrawScope.drawThirdsGrid(alpha: Float) {
     val stroke = 0.8.dp.toPx()
     listOf(size.width / 3f, size.width * 2f / 3f).forEach { x ->
-        drawLine(Color.White.copy(alpha = alpha), Offset(x, size.height * .13f), Offset(x, size.height * .74f), stroke)
+        drawLine(
+            Color.White.copy(alpha = alpha),
+            Offset(x, size.height * .13f),
+            Offset(x, size.height * .74f),
+            stroke,
+        )
     }
     listOf(size.height * .34f, size.height * .58f).forEach { y ->
-        drawLine(Color.White.copy(alpha = alpha), Offset(size.width * .08f, y), Offset(size.width * .92f, y), stroke)
+        drawLine(
+            Color.White.copy(alpha = alpha),
+            Offset(size.width * .08f, y),
+            Offset(size.width * .92f, y),
+            stroke,
+        )
     }
 }
 
@@ -190,158 +226,374 @@ private fun DrawScope.drawTargetFrame(color: Color, alpha: Float, aligned: Boole
     drawCorner(frame.bottomRight, Offset(-corner, 0f), Offset(0f, -corner), c, stroke)
 }
 
-private fun DrawScope.drawCorner(origin: Offset, horizontal: Offset, vertical: Offset, color: Color, stroke: Float) {
+private fun DrawScope.drawCorner(
+    origin: Offset,
+    horizontal: Offset,
+    vertical: Offset,
+    color: Color,
+    stroke: Float,
+) {
     drawLine(color, origin, origin + horizontal, stroke, StrokeCap.Round)
     drawLine(color, origin, origin + vertical, stroke, StrokeCap.Round)
 }
 
-private fun DrawScope.drawMoveIndicator(
+private fun DrawScope.drawTranslationGuide(
     guidance: GuidanceState,
     color: Color,
-    phase: Float,
+    motionPhase: Float,
     alpha: Float,
     wrongDirection: Boolean,
 ) {
-    val horizontal = guidance.cue == GuidanceCue.MOVE_LEFT || guidance.cue == GuidanceCue.MOVE_RIGHT
-    val positive = guidance.cue == GuidanceCue.MOVE_RIGHT || guidance.cue == GuidanceCue.MOVE_DOWN
-    val amplitude = 16.dp.toPx() * guideMotionScale(guidance.phase)
-    val shift = (phase - .5f) * amplitude * if (positive) 1f else -1f
-    val center = Offset(size.width / 2f, size.height * .44f) +
-        if (horizontal) Offset(shift, 0f) else Offset(0f, shift)
-    val halfLength = if (guidance.phase == GuidancePhase.NEAR) 34.dp.toPx() else 48.dp.toPx()
-    val start = if (horizontal) Offset(center.x - halfLength, center.y) else Offset(center.x, center.y - halfLength)
-    val end = if (horizontal) Offset(center.x + halfLength, center.y) else Offset(center.x, center.y + halfLength)
-    drawLine(Color.Black.copy(alpha = .25f * alpha), start, end, 3.4.dp.toPx(), StrokeCap.Round)
-    drawLine(color.copy(alpha = .78f * alpha), start, end, 1.7.dp.toPx(), StrokeCap.Round)
-    val tip = if (positive) end else start
-    val direction = if (horizontal) Offset(if (positive) 1f else -1f, 0f) else Offset(0f, if (positive) 1f else -1f)
-    drawOpenArrow(tip, direction, color.copy(alpha = .94f * alpha), 1.8.dp.toPx())
-    if (wrongDirection) {
-        val reverseTip = if (positive) start else end
+    val derivedAnchors = deriveMoveAnchors(guidance.cue, guidance.progress)
+    val targetAnchor = scaledPoint(
+        point = guidance.anchors?.target ?: derivedAnchors?.target,
+        width = size.width,
+        height = size.height,
+    ) ?: Offset(size.width / 2f, size.height * .44f)
+    val currentAnchor = scaledPoint(
+        point = guidance.anchors?.current ?: derivedAnchors?.current,
+        width = size.width,
+        height = size.height,
+    ) ?: targetAnchor
+    val isHorizontal = guidance.cue == GuidanceCue.MOVE_LEFT || guidance.cue == GuidanceCue.MOVE_RIGHT
+    val sign = when (guidance.cue) {
+        GuidanceCue.MOVE_RIGHT, GuidanceCue.MOVE_DOWN -> 1f
+        else -> -1f
+    }
+    val swing = 18.dp.toPx() * guideMotionScale(guidance.phase) * (motionPhase - .5f) * sign
+    var animatedCurrent = if (isHorizontal) {
+        currentAnchor.copy(x = currentAnchor.x + swing)
+    } else {
+        currentAnchor.copy(y = currentAnchor.y + swing)
+    }
+    val minGap = 18.dp.toPx()
+    val offset = animatedCurrent - targetAnchor
+    val axisGap = if (isHorizontal) kotlin.math.abs(offset.x) else kotlin.math.abs(offset.y)
+    if (axisGap < minGap && guidance.phase != GuidancePhase.ALIGNED) {
+        animatedCurrent = if (isHorizontal) {
+            targetAnchor.copy(x = targetAnchor.x + minGap * sign)
+        } else {
+            targetAnchor.copy(y = targetAnchor.y + minGap * sign)
+        }
+    }
+    drawTranslationTrack(animatedCurrent, targetAnchor, color, alpha)
+    drawTargetSun(center = targetAnchor, color = color, alpha = alpha)
+    drawCrosshair(center = animatedCurrent, color = color, alpha = alpha)
+
+    val direction = when (guidance.cue) {
+        GuidanceCue.MOVE_LEFT -> Offset(-1f, 0f)
+        GuidanceCue.MOVE_RIGHT -> Offset(1f, 0f)
+        GuidanceCue.MOVE_UP -> Offset(0f, -1f)
+        GuidanceCue.MOVE_DOWN -> Offset(0f, 1f)
+        else -> Offset.Zero
+    }
+    if (direction != Offset.Zero) {
+        val tip = animatedCurrent + direction * 20.dp.toPx()
         drawOpenArrow(
-            reverseTip,
-            direction * -1f,
-            color.copy(alpha = .34f * alpha),
-            1.35.dp.toPx(),
+            tip = tip,
+            direction = direction,
+            color = color.copy(alpha = .94f * alpha),
+            stroke = 1.65.dp.toPx(),
         )
-        val normal = Offset(-direction.y, direction.x) * 5.dp.toPx()
+    }
+
+    if (wrongDirection) {
+        val reverseTip = animatedCurrent - direction * 16.dp.toPx()
+        drawOpenArrow(
+            tip = reverseTip,
+            direction = -direction,
+            color = color.copy(alpha = .36f * alpha),
+            stroke = 1.35.dp.toPx(),
+        )
+    }
+}
+
+private fun DrawScope.drawTranslationTrack(
+    current: Offset,
+    target: Offset,
+    color: Color,
+    alpha: Float,
+) {
+    drawLine(
+        Color.Black.copy(alpha = .18f * alpha),
+        current,
+        target,
+        3.dp.toPx(),
+        StrokeCap.Round,
+    )
+    drawLine(
+        color.copy(alpha = .38f * alpha),
+        current,
+        target,
+        1.1.dp.toPx(),
+        StrokeCap.Round,
+    )
+    val mid = Offset((current.x + target.x) / 2f, (current.y + target.y) / 2f)
+    drawCircle(
+        color = color.copy(alpha = .2f * alpha),
+        radius = 2.6.dp.toPx(),
+        center = mid,
+    )
+}
+
+private fun DrawScope.drawTargetSun(center: Offset, color: Color, alpha: Float) {
+    val radius = 16.dp.toPx()
+    val coreRadius = 4.5.dp.toPx()
+    drawCircle(Color.Black.copy(alpha = .18f * alpha), radius = radius + 4.dp.toPx(), center = center)
+    drawCircle(color.copy(alpha = .1f * alpha), radius = radius + 1.5.dp.toPx(), center = center)
+    drawCircle(color.copy(alpha = .54f * alpha), radius = radius - 4.dp.toPx(), center = center, style = Stroke(1.dp.toPx()))
+    drawCircle(color.copy(alpha = .92f * alpha), radius = radius, center = center, style = Stroke(1.35.dp.toPx()))
+    drawCircle(color.copy(alpha = .9f * alpha), radius = coreRadius, center = center)
+    repeat(8) { index ->
+        val angle = Math.toRadians((index * 45).toDouble()).toFloat()
+        val unit = Offset(kotlin.math.cos(angle), kotlin.math.sin(angle))
         drawLine(
-            color.copy(alpha = .88f * alpha),
-            reverseTip - normal,
-            reverseTip + normal,
-            1.7.dp.toPx(),
+            color.copy(alpha = .84f * alpha),
+            center + unit * 8.dp.toPx(),
+            center + unit * 13.dp.toPx(),
+            1.15.dp.toPx(),
             StrokeCap.Round,
         )
     }
 }
 
-private fun DrawScope.drawRotationIndicator(
-    guidance: GuidanceState,
+private fun DrawScope.drawCrosshair(center: Offset, color: Color, alpha: Float) {
+    val radius = 10.dp.toPx()
+    val gap = 4.dp.toPx()
+    val stroke = 1.5.dp.toPx()
+    drawCircle(Color.Black.copy(alpha = .2f * alpha), radius = radius + 2.dp.toPx(), center = center)
+    drawCircle(color = color.copy(alpha = .96f * alpha), radius = radius, center = center, style = Stroke(stroke))
+    drawLine(color, Offset(center.x - radius - gap, center.y), Offset(center.x - gap, center.y), stroke, StrokeCap.Round)
+    drawLine(color, Offset(center.x + gap, center.y), Offset(center.x + radius + gap, center.y), stroke, StrokeCap.Round)
+    drawLine(color, Offset(center.x, center.y - radius - gap), Offset(center.x, center.y - gap), stroke, StrokeCap.Round)
+    drawLine(color, Offset(center.x, center.y + gap), Offset(center.x, center.y + radius + gap), stroke, StrokeCap.Round)
+}
+
+private fun DrawScope.drawAxisRotationGuide(
+    cue: GuidanceCue,
+    phase: GuidancePhase,
     color: Color,
-    phase: Float,
+    motionPhase: Float,
     alpha: Float,
     wrongDirection: Boolean,
 ) {
-    val cue = guidance.cue
     val isPitch = cue == GuidanceCue.PITCH_UP || cue == GuidanceCue.PITCH_DOWN
     val isYaw = cue == GuidanceCue.YAW_LEFT || cue == GuidanceCue.YAW_RIGHT
-    val clockwise = cue == GuidanceCue.ROLL_CLOCKWISE || cue == GuidanceCue.PITCH_DOWN || cue == GuidanceCue.YAW_RIGHT
-    val center = Offset(size.width / 2f, size.height * .43f)
-    val axisHalf = 82.dp.toPx()
-
-    if (isPitch) drawFadingAxis(center, horizontal = true, axisHalf, color, alpha)
-    if (isYaw) drawFadingAxis(center, horizontal = false, axisHalf, color, alpha)
-
-    val arcWidth = when {
-        isYaw -> 74.dp.toPx()
-        isPitch -> 132.dp.toPx()
-        else -> 146.dp.toPx()
-    }
-    val arcHeight = when {
-        isYaw -> 132.dp.toPx()
-        isPitch -> 64.dp.toPx()
-        else -> 126.dp.toPx()
-    }
-    val bounds = Rect(
-        center.x - arcWidth / 2f,
-        center.y - arcHeight / 2f,
-        center.x + arcWidth / 2f,
-        center.y + arcHeight / 2f,
+    val clockwise = cue == GuidanceCue.PITCH_DOWN || cue == GuidanceCue.YAW_RIGHT
+    val center = Offset(size.width / 2f, size.height * .44f)
+    val axisHalf = 80.dp.toPx()
+    val axisHorizontal = isPitch
+    drawFadingAxis(
+        center = center,
+        horizontal = axisHorizontal,
+        half = axisHalf,
+        color = color,
+        guideAlpha = alpha,
     )
-    val start = if (clockwise) -145f else -35f
-    val sweep = if (clockwise) 110f else -110f
-    val motionSweep = 18f * guideMotionScale(guidance.phase) * (phase - .5f)
+
+    val bounds = when {
+        isPitch -> Rect(
+            left = center.x - 72.dp.toPx(),
+            top = center.y - 30.dp.toPx(),
+            right = center.x + 72.dp.toPx(),
+            bottom = center.y + 30.dp.toPx(),
+        )
+        isYaw -> Rect(
+            left = center.x - 34.dp.toPx(),
+            top = center.y - 72.dp.toPx(),
+            right = center.x + 34.dp.toPx(),
+            bottom = center.y + 72.dp.toPx(),
+        )
+        else -> return
+    }
+    drawPerspectiveArc(
+        bounds = bounds,
+        clockwise = clockwise,
+        phase = phase,
+        motionPhase = motionPhase,
+        color = color,
+        alpha = alpha,
+        wrongDirection = wrongDirection,
+    )
+}
+
+private fun DrawScope.drawPerspectiveArc(
+    bounds: Rect,
+    clockwise: Boolean,
+    phase: GuidancePhase,
+    motionPhase: Float,
+    color: Color,
+    alpha: Float,
+    wrongDirection: Boolean,
+) {
+    val start = if (clockwise) -150f else -30f
+    val sweep = if (clockwise) 118f else -118f
+    val movingAngle = start + sweep * .8f + 16f * guideMotionScale(phase) * (motionPhase - .5f)
+
     drawArc(
-        Color.Black.copy(alpha = .28f * alpha),
+        color = Color.Black.copy(alpha = .24f * alpha),
         startAngle = start,
         sweepAngle = sweep,
         useCenter = false,
         topLeft = bounds.topLeft,
         size = bounds.size,
-        style = Stroke(2.6.dp.toPx(), cap = StrokeCap.Round),
+        style = Stroke(2.8.dp.toPx(), cap = StrokeCap.Round),
     )
     drawArc(
-        color.copy(alpha = .26f * alpha),
+        color = color.copy(alpha = .22f * alpha),
         startAngle = start,
-        sweepAngle = sweep * .42f,
+        sweepAngle = sweep * .34f,
         useCenter = false,
         topLeft = bounds.topLeft,
         size = bounds.size,
-        style = Stroke(1.35.dp.toPx(), cap = StrokeCap.Round),
+        style = Stroke(1.dp.toPx(), cap = StrokeCap.Round),
     )
     drawArc(
-        color.copy(alpha = .86f * alpha),
-        startAngle = start + sweep * .42f,
-        sweepAngle = sweep * .58f,
+        color = color.copy(alpha = .92f * alpha),
+        startAngle = start + sweep * .34f,
+        sweepAngle = sweep * .66f,
         useCenter = false,
         topLeft = bounds.topLeft,
         size = bounds.size,
         style = Stroke(1.5.dp.toPx(), cap = StrokeCap.Round),
     )
 
-    val arrowAngle = start + sweep * .83f + motionSweep
-    val point = ellipsePoint(
-        centerX = center.x,
-        centerY = center.y,
-        radiusX = arcWidth / 2f,
-        radiusY = arcHeight / 2f,
-        angleDegrees = arrowAngle,
+    val tip = ellipsePoint(
+        centerX = bounds.center.x,
+        centerY = bounds.center.y,
+        radiusX = bounds.width / 2f,
+        radiusY = bounds.height / 2f,
+        angleDegrees = movingAngle,
     )
     val tangent = ellipseTangent(
-        radiusX = arcWidth / 2f,
-        radiusY = arcHeight / 2f,
-        angleDegrees = arrowAngle,
+        radiusX = bounds.width / 2f,
+        radiusY = bounds.height / 2f,
+        angleDegrees = movingAngle,
         clockwise = clockwise,
     )
-    drawOpenArrow(point, tangent, color.copy(alpha = .98f * alpha), 1.8.dp.toPx())
+    drawOpenArrow(
+        tip = tip,
+        direction = tangent,
+        color = color.copy(alpha = .98f * alpha),
+        stroke = 1.75.dp.toPx(),
+    )
+
     if (wrongDirection) {
-        val reverseAngle = start + sweep * .18f
-        val reversePoint = ellipsePoint(
-            center.x,
-            center.y,
-            arcWidth / 2f,
-            arcHeight / 2f,
-            reverseAngle,
+        val reverseAngle = start + sweep * .2f
+        val reverseTip = ellipsePoint(
+            centerX = bounds.center.x,
+            centerY = bounds.center.y,
+            radiusX = bounds.width / 2f,
+            radiusY = bounds.height / 2f,
+            angleDegrees = reverseAngle,
         )
         val reverseTangent = ellipseTangent(
-            arcWidth / 2f,
-            arcHeight / 2f,
-            reverseAngle,
+            radiusX = bounds.width / 2f,
+            radiusY = bounds.height / 2f,
+            angleDegrees = reverseAngle,
             clockwise = !clockwise,
         )
         drawOpenArrow(
-            reversePoint,
-            reverseTangent,
-            color.copy(alpha = .38f * alpha),
-            1.3.dp.toPx(),
+            tip = reverseTip,
+            direction = reverseTangent,
+            color = color.copy(alpha = .34f * alpha),
+            stroke = 1.25.dp.toPx(),
         )
-        val normal = Offset(-reverseTangent.y, reverseTangent.x) * 5.dp.toPx()
-        drawLine(
-            color.copy(alpha = .9f * alpha),
-            reversePoint - normal,
-            reversePoint + normal,
-            1.6.dp.toPx(),
-            StrokeCap.Round,
+    }
+}
+
+private fun DrawScope.drawPlanarRotationGuide(
+    cue: GuidanceCue,
+    phase: GuidancePhase,
+    color: Color,
+    motionPhase: Float,
+    alpha: Float,
+    wrongDirection: Boolean,
+) {
+    val clockwise = cue == GuidanceCue.ROLL_CLOCKWISE
+    val center = Offset(size.width / 2f, size.height * .44f)
+    val phoneRect = Rect(
+        left = center.x - 36.dp.toPx(),
+        top = center.y - 56.dp.toPx(),
+        right = center.x + 36.dp.toPx(),
+        bottom = center.y + 56.dp.toPx(),
+    )
+    drawRoundRect(
+        color = Color.Black.copy(alpha = .18f * alpha),
+        topLeft = phoneRect.topLeft,
+        size = phoneRect.size,
+        cornerRadius = CornerRadius(18.dp.toPx(), 18.dp.toPx()),
+    )
+    drawRoundRect(
+        color = color.copy(alpha = .88f * alpha),
+        topLeft = phoneRect.topLeft,
+        size = phoneRect.size,
+        cornerRadius = CornerRadius(18.dp.toPx(), 18.dp.toPx()),
+        style = Stroke(1.2.dp.toPx()),
+    )
+    drawRoundRect(
+        color = color.copy(alpha = .18f * alpha),
+        topLeft = Offset(phoneRect.left + 8.dp.toPx(), phoneRect.top + 10.dp.toPx()),
+        size = Size(phoneRect.width - 16.dp.toPx(), phoneRect.height - 20.dp.toPx()),
+        cornerRadius = CornerRadius(13.dp.toPx(), 13.dp.toPx()),
+        style = Stroke(.95.dp.toPx()),
+    )
+
+    val orbit = Rect(
+        left = center.x - 76.dp.toPx(),
+        top = center.y - 76.dp.toPx(),
+        right = center.x + 76.dp.toPx(),
+        bottom = center.y + 76.dp.toPx(),
+    )
+    val start = if (clockwise) -118f else 62f
+    val sweep = if (clockwise) 136f else -136f
+    val arrowAngle = start + sweep * .84f + 18f * guideMotionScale(phase) * (motionPhase - .5f)
+
+    drawArc(
+        color = Color.Black.copy(alpha = .2f * alpha),
+        startAngle = start,
+        sweepAngle = sweep,
+        useCenter = false,
+        topLeft = orbit.topLeft,
+        size = orbit.size,
+        style = Stroke(2.4.dp.toPx(), cap = StrokeCap.Round),
+    )
+    drawArc(
+        color = color.copy(alpha = .88f * alpha),
+        startAngle = start,
+        sweepAngle = sweep,
+        useCenter = false,
+        topLeft = orbit.topLeft,
+        size = orbit.size,
+        style = Stroke(1.55.dp.toPx(), cap = StrokeCap.Round),
+    )
+
+    val tip = ellipsePoint(
+        centerX = orbit.center.x,
+        centerY = orbit.center.y,
+        radiusX = orbit.width / 2f,
+        radiusY = orbit.height / 2f,
+        angleDegrees = arrowAngle,
+    )
+    val tangent = ellipseTangent(
+        radiusX = orbit.width / 2f,
+        radiusY = orbit.height / 2f,
+        angleDegrees = arrowAngle,
+        clockwise = clockwise,
+    )
+    drawOpenArrow(
+        tip = tip,
+        direction = tangent,
+        color = color.copy(alpha = .96f * alpha),
+        stroke = 1.8.dp.toPx(),
+    )
+
+    if (wrongDirection) {
+        drawOpenArrow(
+            tip = center + Offset(if (clockwise) -54.dp.toPx() else 54.dp.toPx(), -30.dp.toPx()),
+            direction = if (clockwise) Offset(-1f, -0.15f) else Offset(1f, -0.15f),
+            color = color.copy(alpha = .34f * alpha),
+            stroke = 1.25.dp.toPx(),
         )
     }
 }
@@ -360,7 +612,11 @@ private fun DrawScope.drawFadingAxis(
         val alpha = fadingAxisAlpha(normalizedPosition)
         val length = 4.dp.toPx() + 5.dp.toPx() * alpha
         val gap = half / segments
-        val origin = if (horizontal) Offset(center.x + index * gap, center.y) else Offset(center.x, center.y + index * gap)
+        val origin = if (horizontal) {
+            Offset(center.x + index * gap, center.y)
+        } else {
+            Offset(center.x, center.y + index * gap)
+        }
         val start = if (horizontal) origin - Offset(length / 2f, 0f) else origin - Offset(0f, length / 2f)
         val end = if (horizontal) origin + Offset(length / 2f, 0f) else origin + Offset(0f, length / 2f)
         drawLine(
@@ -380,11 +636,21 @@ private fun DrawScope.drawFadingAxis(
     }
 }
 
-private fun DrawScope.drawOpenArrow(tip: Offset, direction: Offset, color: Color, stroke: Float) {
+private fun DrawScope.drawOpenArrow(
+    tip: Offset,
+    direction: Offset,
+    color: Color,
+    stroke: Float,
+) {
+    val safeDirection = if (direction.getDistance() > 0.001f) {
+        direction / direction.getDistance()
+    } else {
+        Offset(1f, 0f)
+    }
     val length = 9.dp.toPx()
     val side = 5.dp.toPx()
-    val normal = Offset(-direction.y, direction.x)
-    val base = tip - direction * length
+    val normal = Offset(-safeDirection.y, safeDirection.x)
+    val base = tip - safeDirection * length
     drawLine(color, tip, base + normal * side, stroke, StrokeCap.Round)
     drawLine(color, tip, base - normal * side, stroke, StrokeCap.Round)
 }
@@ -409,6 +675,7 @@ fun GuidanceMessage(state: CameraUiState) {
         state.analysisStatus == AnalysisStatus.FAILED -> state.errorMessage ?: "分析暂时不可用"
         state.analysisStatus == AnalysisStatus.ANALYZING -> "正在分析画面"
         state.guidance.phase == GuidancePhase.WRONG_DIRECTION -> "方向相反，稍微回一点"
+        state.guidance.cue == GuidanceCue.SUBJECT_TARGET && state.guidance.subjectOutline == null -> "左右移动画面，让人物进入目标位置"
         state.guidance.cue == GuidanceCue.SUBJECT_TARGET -> "将人物移入轮廓"
         state.guidance.cue == GuidanceCue.SUBJECT_ALIGNED -> "保持，人物构图已对齐"
         state.guidance.phase == GuidancePhase.ALIGNED -> "保持，构图已对齐"
@@ -446,4 +713,15 @@ fun CaptureFeedbackOverlay(modifier: Modifier = Modifier) {
         flash.animateTo(0f, tween(190, easing = FastOutSlowInEasing))
     }
     Box(modifier.background(Color.White.copy(alpha = flash.value)))
+}
+
+private fun GuidanceState.toPortraitAlignmentCue(): GuidanceState {
+    val safeAnchors = anchors ?: return this
+    val current = safeAnchors.current ?: return this
+    val target = safeAnchors.target ?: return this
+    val cue = if (current.x >= target.x) GuidanceCue.MOVE_LEFT else GuidanceCue.MOVE_RIGHT
+    return copy(
+        cue = cue,
+        subjectOutline = null,
+    )
 }

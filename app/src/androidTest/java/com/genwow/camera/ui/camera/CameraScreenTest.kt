@@ -29,7 +29,10 @@ class CameraScreenTest {
                     ),
                     cameraReady = true,
                     debugDemo = false,
+                    selectedMode = CameraGuideMode.COFFEE,
                     onPreviewReady = {},
+                    onModeSelected = {},
+                    onOpenEntryFlow = {},
                     onCapture = {},
                     onSwitchLens = {},
                     onOpenFeed = {},
@@ -50,7 +53,10 @@ class CameraScreenTest {
                     state = CameraUiState(),
                     cameraReady = false,
                     debugDemo = false,
+                    selectedMode = CameraGuideMode.COFFEE,
                     onPreviewReady = {},
+                    onModeSelected = {},
+                    onOpenEntryFlow = {},
                     onCapture = {},
                     onSwitchLens = {},
                     onOpenFeed = {},
@@ -77,7 +83,10 @@ class CameraScreenTest {
                     state = CameraUiState(),
                     cameraReady = true,
                     debugDemo = false,
+                    selectedMode = CameraGuideMode.COFFEE,
                     onPreviewReady = {},
+                    onModeSelected = {},
+                    onOpenEntryFlow = {},
                     onCapture = {},
                     onSwitchLens = {},
                     onOpenFeed = {},
@@ -108,7 +117,10 @@ class CameraScreenTest {
                     ),
                     cameraReady = true,
                     debugDemo = false,
+                    selectedMode = CameraGuideMode.LANDSCAPE,
                     onPreviewReady = {},
+                    onModeSelected = {},
+                    onOpenEntryFlow = {},
                     onCapture = {},
                     onSwitchLens = {},
                     onOpenFeed = {},
@@ -150,7 +162,10 @@ class CameraScreenTest {
                     ),
                     cameraReady = true,
                     debugDemo = false,
+                    selectedMode = CameraGuideMode.PORTRAIT,
                     onPreviewReady = {},
+                    onModeSelected = {},
+                    onOpenEntryFlow = {},
                     onCapture = {},
                     onSwitchLens = {},
                     onOpenFeed = {},
@@ -189,7 +204,10 @@ class CameraScreenTest {
                     ),
                     cameraReady = true,
                     debugDemo = false,
+                    selectedMode = CameraGuideMode.PORTRAIT,
                     onPreviewReady = {},
+                    onModeSelected = {},
+                    onOpenEntryFlow = {},
                     onCapture = {},
                     onSwitchLens = {},
                     onOpenFeed = {},
@@ -200,5 +218,22 @@ class CameraScreenTest {
 
         composeRule.onNodeWithText("保持，人物构图已对齐").assertExists()
         composeRule.onNodeWithContentDescription("AI人物轮廓：已对齐").assertExists()
+    }
+
+    @Test
+    fun topModeControlsReflectSelectionAndAreClickable() {
+        composeRule.setContent {
+            GenWowTheme {
+                CameraTopControls(
+                    selectedMode = CameraGuideMode.LANDSCAPE,
+                    debugDemo = false,
+                    onModeSelected = {},
+                    onOpenEntryFlow = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("风景构图模式").assertIsSelected()
+        composeRule.onNodeWithContentDescription("静物构图模式").performClick()
     }
 }

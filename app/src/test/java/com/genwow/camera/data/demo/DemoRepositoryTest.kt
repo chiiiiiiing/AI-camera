@@ -26,7 +26,9 @@ class DemoRepositoryTest {
     fun `community content is fixed local demo data`() {
         val repository = DemoCommunityRepository()
 
-        assertEquals(listOf("Helena", "Daniel"), repository.posts.map(DemoPost::author))
+        assertEquals(6, repository.posts.size)
+        assertEquals(listOf("Helena", "Daniel"), repository.posts.map(DemoPost::author).distinct())
+        assertTrue(repository.posts.all { it.imageAssetKey.isNotBlank() })
         assertEquals(128, repository.profile.works)
         assertEquals(256, repository.profile.followers)
         assertEquals(64, repository.profile.following)

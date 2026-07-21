@@ -10,10 +10,12 @@
 ## 已验证页面与状态
 
 - 启动、登录、注册：常规尺寸与小屏均检查；输入区可滚动，键盘和系统栏不遮挡主要操作。
+- 冷启动产品流：带 Logo 初始页会先展示，再自动进入相机页；不再把登录页作为默认冷启动落点。
 - 相机：真实 CameraX 预览、黑色上下控制区、模式入口、快门、切镜头和三目的地导航无裁切。
 - 构图引导：平移、俯仰、偏航、滚转、错误方向、接近、对齐、人物目标和人物对齐均检查。
+- 人像模式：增加“两阶段引导”——先整体画面水平对齐，再展示静态人物目标轮廓；轮廓出现后不随手机轻微移动抖动漂移。
 - 信息流：常规与小屏均可滚动，标签、帖子动作和底部入口不互相遮挡。
-- 摄影师主页：常规与小屏均可滚动，统计与两排作品网格可访问。
+- 摄影师主页：常规与小屏均可滚动，统计与两排作品网格可访问；未登录点击个人主页时先进入认证页，已登录后进入主页。
 - 权限、相机初始化失败和分析失败：品牌化状态页、重试/授权动作和系统栏对比度已检查。
 - 拍摄反馈：白闪、MediaStore 保存和左下真实缩略图更新已在最终 APK 上验证。
 
@@ -21,6 +23,7 @@
 
 - 常规信息流：`/tmp/genwow-feed-final.png`
 - 常规摄影师主页：`/tmp/genwow-profile-final.png`
+- 产品演示视频：`/tmp/genwow-demo-2026-07-21.mp4`
 - 小屏登录/相机/信息流/主页：`/tmp/genwow-small-login.png`、`/tmp/genwow-small-camera.png`、`/tmp/genwow-feed-small-final.png`、`/tmp/genwow-profile-small-final.png`
 - 拍摄缩略图：`/tmp/genwow-camera-thumbnail-final.png`
 - 构图代表状态：`/tmp/genwow-stage6-final-roll.png`、`/tmp/genwow-stage6-final-subject-23.png`、`/tmp/genwow-stage6-final-subject-24.png`、`/tmp/genwow-stage6-final-subject-29.png`

@@ -126,16 +126,22 @@ class GuidanceStateMachineTest {
         val outline = SubjectOutline(
             listOf(SubjectContour(listOf(NormalizedPoint(0.25f, 0.2f), NormalizedPoint(0.7f, 0.8f)))),
         )
+        val anchors = GuidanceAnchors(
+            current = NormalizedPoint(0.4f, 0.45f),
+            target = NormalizedPoint(0.5f, 0.44f),
+        )
 
         val event = GuidanceSample(
             hasSubject = true,
             cue = GuidanceCue.SUBJECT_TARGET,
             progress = 0.64f,
             subjectOutline = outline,
+            anchors = anchors,
         ).toCameraEvent() as CameraEvent.FrameEvaluated
 
         assertEquals(outline, event.subjectOutline)
         assertEquals(GuidanceCue.SUBJECT_TARGET, event.cue)
+        assertEquals(anchors, event.anchors)
     }
 
     @Test

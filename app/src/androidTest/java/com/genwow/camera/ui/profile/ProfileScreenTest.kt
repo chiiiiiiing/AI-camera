@@ -16,7 +16,7 @@ class ProfileScreenTest {
     fun profileShowsFigmaIdentityStatsGalleryAndSettings() {
         val profile = DemoCommunityRepository().profile
         composeRule.setContent {
-            GenWowTheme { ProfileScreen(profile = profile) }
+            GenWowTheme { ProfileScreen(profile = profile, onOpenEntryFlow = {}) }
         }
 
         composeRule.onNodeWithText("摄影师").assertExists()

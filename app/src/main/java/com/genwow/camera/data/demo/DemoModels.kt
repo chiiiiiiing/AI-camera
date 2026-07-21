@@ -16,7 +16,8 @@ data class DemoPost(
     val body: String,
     val likes: Int,
     val comments: Int,
-    val imageAssetKey: String? = null,
+    val imageAssetKey: String,
+    val imageAspectRatio: Float = 0.78f,
     val liked: Boolean = false,
 )
 

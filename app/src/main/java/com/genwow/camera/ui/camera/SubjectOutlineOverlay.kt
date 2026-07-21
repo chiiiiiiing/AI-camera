@@ -24,6 +24,8 @@ import com.genwow.camera.ui.theme.GuideAligned
 @Composable
 fun SubjectOutlineOverlay(
     outline: SubjectOutline,
+    anchors: GuidanceAnchors?,
+    guideColor: Color,
     aligned: Boolean,
     motionPhase: Float,
     modifier: Modifier = Modifier,
@@ -38,19 +40,19 @@ fun SubjectOutlineOverlay(
         }
         if (contours.isEmpty()) return@Canvas
 
-        val foreground = if (aligned) GuideAligned else Color.White
+        val foreground = if (aligned) GuideAligned else guideColor
         val dash = PathEffect.dashPathEffect(
-            intervals = floatArrayOf(7.dp.toPx(), 6.dp.toPx()),
-            phase = if (aligned) 0f else motionPhase * 13.dp.toPx(),
+            intervals = floatArrayOf(8.dp.toPx(), 6.dp.toPx()),
+            phase = if (aligned) 0f else motionPhase * 14.dp.toPx(),
         )
         val underStroke = Stroke(
-            width = 2.4.dp.toPx(),
+            width = 2.8.dp.toPx(),
             cap = StrokeCap.Round,
             join = StrokeJoin.Round,
             pathEffect = dash,
         )
         val foregroundStroke = Stroke(
-            width = if (aligned) 1.4.dp.toPx() else 1.15.dp.toPx(),
+            width = if (aligned) 1.5.dp.toPx() else 1.2.dp.toPx(),
             cap = StrokeCap.Round,
             join = StrokeJoin.Round,
             pathEffect = dash,
@@ -64,6 +66,52 @@ fun SubjectOutlineOverlay(
                 foreground.copy(alpha = if (aligned) .92f else .78f),
                 style = foregroundStroke,
             )
+            if (contour.points.size >= 4) {
+                points
+                    .filterIndexed { index, _ -> index % maxOf(1, contour.points.size / 5) == 0 }
+                    .forEach { point ->
+                        drawCircle(
+                            color = foreground.copy(alpha = if (aligned) .88f else .62f),
+                            radius = if (aligned) 2.7.dp.toPx() else 2.2.dp.toPx(),
+                            center = point,
+                        )
+                    }
+            }
+        }
+
+        val currentAnchor = scaledPoint(anchors?.current, size.width, size.height)
+        val targetAnchor = scaledPoint(anchors?.target, size.width, size.height)
+        if (currentAnchor != null && targetAnchor != null) {
+            drawCircle(
+                color = Color.Black.copy(alpha = .18f),
+                radius = 20.dp.toPx(),
+                center = targetAnchor,
+            )
+            drawCircle(
+                color = foreground.copy(alpha = if (aligned) .32f else .18f),
+                radius = 16.dp.toPx(),
+                center = targetAnchor,
+                style = Stroke(1.2.dp.toPx()),
+            )
+            drawCircle(
+                color = foreground.copy(alpha = .92f),
+                radius = 4.5.dp.toPx(),
+                center = targetAnchor,
+            )
+            if (!aligned) {
+                drawLine(
+                    color = foreground.copy(alpha = .5f),
+                    start = currentAnchor,
+                    end = targetAnchor,
+                    strokeWidth = 1.1.dp.toPx(),
+                    cap = StrokeCap.Round,
+                )
+                drawCircle(
+                    color = foreground.copy(alpha = .9f),
+                    radius = 4.dp.toPx(),
+                    center = currentAnchor,
+                )
+            }
         }
 
         if (aligned) {

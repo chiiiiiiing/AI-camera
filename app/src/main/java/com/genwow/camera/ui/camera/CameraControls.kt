@@ -62,8 +62,22 @@ import com.genwow.camera.ui.theme.GuideAligned
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+enum class CameraGuideMode(
+    val description: String,
+    internal val glyph: TopGlyph,
+) {
+    COFFEE("静物构图模式", TopGlyph.COFFEE),
+    LANDSCAPE("风景构图模式", TopGlyph.LANDSCAPE),
+    PORTRAIT("人像构图模式", TopGlyph.PERSON),
+}
+
 @Composable
-fun CameraTopControls(debugDemo: Boolean) {
+fun CameraTopControls(
+    selectedMode: CameraGuideMode,
+    debugDemo: Boolean,
+    onModeSelected: (CameraGuideMode) -> Unit,
+    onOpenEntryFlow: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -74,34 +88,60 @@ fun CameraTopControls(debugDemo: Boolean) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            TopModeControl("咖啡构图模式", selected = true, glyph = TopGlyph.COFFEE)
-            TopModeControl("风景构图模式", selected = false, glyph = TopGlyph.LANDSCAPE)
-            TopModeControl("人像构图模式", selected = false, glyph = TopGlyph.PERSON)
+            CameraGuideMode.entries.forEach { mode ->
+                TopModeControl(
+                    description = mode.description,
+                    selected = selectedMode == mode,
+                    glyph = mode.glyph,
+                    onClick = { onModeSelected(mode) },
+                )
+            }
         }
         Spacer(Modifier.weight(1f))
         if (debugDemo) {
             Box(Modifier.size(5.dp).background(BrandPink, CircleShape))
             Spacer(Modifier.size(8.dp))
         }
-        TopModeControl("相机设置", selected = false, glyph = TopGlyph.SETTINGS)
+        TopModeControl(
+            description = "相机设置",
+            selected = false,
+            glyph = TopGlyph.SETTINGS,
+            onClick = onOpenEntryFlow,
+        )
     }
 }
 
-private enum class TopGlyph { COFFEE, LANDSCAPE, PERSON, SETTINGS }
+internal enum class TopGlyph { COFFEE, LANDSCAPE, PERSON, SETTINGS }
 
 @Composable
-private fun TopModeControl(description: String, selected: Boolean, glyph: TopGlyph) {
+private fun TopModeControl(
+    description: String,
+    selected: Boolean,
+    glyph: TopGlyph,
+    onClick: () -> Unit,
+) {
+    val iconColor by animateColorAsState(
+        targetValue = if (selected) BrandPink else Color.White,
+        animationSpec = tween(GenWowMotion.ModeChangeMillis),
+        label = "top mode color",
+    )
     Box(
         modifier = Modifier
             .size(30.dp)
             .background(Color.Transparent, CircleShape)
-            .semantics { contentDescription = description }
-            .clickable(role = Role.Button, onClick = {}),
+            .semantics {
+                contentDescription = description
+                this.selected = selected
+            }
+            .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.size(24.dp)) {
-            val color = if (selected) BrandPink else Color.White.copy(alpha = 0.9f)
-            drawCircle(color.copy(alpha = 0.9f), style = Stroke(1.dp.toPx()))
+            val color = iconColor
+            drawCircle(
+                color = color.copy(alpha = if (selected) 0.92f else 0.76f),
+                style = Stroke(if (selected) 1.2.dp.toPx() else 1.dp.toPx()),
+            )
             val stroke = Stroke(1.2.dp.toPx(), cap = StrokeCap.Round)
             when (glyph) {
                 TopGlyph.COFFEE -> {

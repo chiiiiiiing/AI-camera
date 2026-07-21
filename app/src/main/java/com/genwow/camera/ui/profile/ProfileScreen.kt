@@ -31,7 +31,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.genwow.camera.data.demo.DemoCommunityRepository
 import com.genwow.camera.data.demo.DemoProfile
-import com.genwow.camera.ui.feed.CommunityTopTabs
 import com.genwow.camera.ui.theme.BrandOnSurface
 import com.genwow.camera.ui.theme.BrandOnSurfaceMuted
 import com.genwow.camera.ui.theme.GenWowMotion
@@ -50,6 +49,7 @@ private val ProfileBackground = Brush.linearGradient(
 @Composable
 fun ProfileScreen(
     profile: DemoProfile,
+    onOpenEntryFlow: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     SystemBarsAppearance(light = true)
@@ -67,9 +67,11 @@ fun ProfileScreen(
     )
 
     Column(modifier.fillMaxSize().background(ProfileBackground).statusBarsPadding()) {
-        CommunityTopTabs(selectedIndex = 1, onSelected = {})
         Box(Modifier.fillMaxSize()) {
-            ProfileSettingsButton(Modifier.align(Alignment.TopEnd).padding(top = 12.dp, end = 18.dp))
+            ProfileSettingsButton(
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 12.dp, end = 18.dp),
+                onClick = onOpenEntryFlow,
+            )
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -77,7 +79,14 @@ fun ProfileScreen(
                     .padding(horizontal = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Spacer(Modifier.height(60.dp))
+                Spacer(Modifier.height(26.dp))
+                Text(
+                    text = "我的主页",
+                    color = BrandOnSurface,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.height(28.dp))
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.graphicsLayer {
@@ -123,6 +132,6 @@ fun ProfileScreen(
 @Composable
 private fun ProfilePreview() {
     GenWowTheme {
-        ProfileScreen(profile = DemoCommunityRepository().profile)
+        ProfileScreen(profile = DemoCommunityRepository().profile, onOpenEntryFlow = {})
     }
 }

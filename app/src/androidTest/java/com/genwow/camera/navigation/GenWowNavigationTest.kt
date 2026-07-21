@@ -37,18 +37,19 @@ class GenWowNavigationTest {
             )
         }
 
-        composeRule.onNodeWithContentDescription("登录").assertExists()
+        composeRule.onNodeWithContentDescription("打开相机").assertExists()
     }
 
     @Test
     fun demoLoginOpensCameraAndMainDestinationsSwitch() {
+        val authRepository = DemoAuthRepository()
         composeRule.setContent {
             GenWowTheme {
                 GenWowNavHost(
-                    authRepository = DemoAuthRepository(),
+                    authRepository = authRepository,
                     communityRepository = DemoCommunityRepository(),
                     startDestination = AppDestination.Login,
-                    cameraContent = { onFeed, onProfile ->
+                    cameraContent = { onFeed, onProfile, _ ->
                         Row {
                             Text("相机", Modifier.semantics { contentDescription = "打开相机" })
                             Text("推荐", Modifier.semantics { contentDescription = "打开推荐" }.clickable(onClick = onFeed))
@@ -82,7 +83,7 @@ class GenWowNavigationTest {
                     authRepository = DemoAuthRepository(),
                     communityRepository = DemoCommunityRepository(),
                     startDestination = AppDestination.Camera,
-                    cameraContent = { onFeed, _ ->
+                    cameraContent = { onFeed, _, _ ->
                         openFeed = onFeed
                         DisposableEffect(Unit) {
                             onDispose { cameraDisposed = true }
@@ -108,7 +109,7 @@ class GenWowNavigationTest {
                     communityRepository = DemoCommunityRepository(),
                     navController = navController,
                     startDestination = AppDestination.Login,
-                    cameraContent = { _, _ -> Text("测试相机内容") },
+                    cameraContent = { _, _, _ -> Text("测试相机内容") },
                 )
             }
         }
@@ -119,5 +120,45 @@ class GenWowNavigationTest {
         composeRule.onNodeWithContentDescription("登录").performClick()
         composeRule.runOnIdle { assertFalse(navController.popBackStack()) }
         composeRule.onNodeWithText("测试相机内容").assertExists()
+    }
+
+    @Test
+    fun unauthenticatedProfileRouteShowsLoginAndSuccessfulLoginOpensProfile() {
+        val authRepository = DemoAuthRepository()
+        composeRule.setContent {
+            GenWowTheme {
+                GenWowNavHost(
+                    authRepository = authRepository,
+                    communityRepository = DemoCommunityRepository(),
+                    startDestination = AppDestination.Profile,
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("登录").assertExists()
+        composeRule.onNodeWithContentDescription("手机号或邮箱输入框")
+            .performTextInput("demo@genwow.local")
+        composeRule.onNodeWithContentDescription("密码输入框").performTextInput("local-only")
+        composeRule.onNodeWithContentDescription("登录").performClick()
+        composeRule.onNodeWithText("我的主页").assertExists()
+    }
+
+    @Test
+    fun authenticatedProfileRouteShowsProfileContent() {
+        val authRepository = DemoAuthRepository().apply {
+            login("demo@genwow.local", "local-only")
+        }
+        composeRule.setContent {
+            GenWowTheme {
+                GenWowNavHost(
+                    authRepository = authRepository,
+                    communityRepository = DemoCommunityRepository(),
+                    startDestination = AppDestination.Profile,
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("我的主页").assertExists()
+        composeRule.onNodeWithText("摄影师").assertExists()
     }
 }
