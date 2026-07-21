@@ -32,6 +32,7 @@ class LoginScreenTest {
                     onTogglePasswordVisibility = {},
                     onSubmit = { submissions++ },
                     onRegister = {},
+                    onForgotPassword = {},
                 )
             }
         }
@@ -48,7 +49,7 @@ class LoginScreenTest {
     @Test
     fun thirdPartyProvidersUseIconsInsteadOfVisibleTextLabels() {
         composeRule.setContent {
-            GenWowTheme { LoginScreen(AuthUiState(), {}, {}, {}, {}, {}) }
+            GenWowTheme { LoginScreen(AuthUiState(), {}, {}, {}, {}, {}, {}) }
         }
 
         composeRule.onNodeWithContentDescription("微信登录（未接入）").assertExists()

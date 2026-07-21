@@ -10,6 +10,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -46,12 +47,14 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.genwow.camera.R
 import com.genwow.camera.data.demo.DemoPost
+import com.genwow.camera.ui.icon.CommentOutlineIcon
 import com.genwow.camera.ui.icon.HeartOutlineIcon
 import com.genwow.camera.ui.theme.BrandOnSurface
 import com.genwow.camera.ui.theme.BrandOnSurfaceMuted
@@ -108,7 +111,7 @@ fun CommunityTopTabs(
         Box(
             Modifier
                 .align(Alignment.BottomStart)
-                .offset(x = indicatorOffset)
+                .offset { androidx.compose.ui.unit.IntOffset(indicatorOffset.roundToPx(), 0) }
                 .size(width = 28.dp, height = 2.dp)
                 .background(BrandOnSurface, RoundedCornerShape(1.dp)),
         )
@@ -132,12 +135,12 @@ fun FeedPostCard(
         modifier = modifier
             .fillMaxWidth()
             .aspectRatio(0.68f)
-            .clip(RoundedCornerShape(22.dp))
-            .background(Color.White.copy(alpha = 0.92f))
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color.White.copy(alpha = 0.95f))
             .border(
                 width = 1.dp,
-                color = Color.White.copy(alpha = 0.72f),
-                shape = RoundedCornerShape(22.dp),
+                color = Color.White.copy(alpha = 0.78f),
+                shape = RoundedCornerShape(24.dp),
             ),
     ) {
         Image(
@@ -145,63 +148,107 @@ fun FeedPostCard(
             contentDescription = "${post.author} 的内容图片",
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1.55f)
+                .weight(1.62f)
                 .graphicsLayer { alpha = imageAlpha },
             contentScale = ContentScale.Crop,
         )
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f)
-                .padding(horizontal = 14.dp, vertical = 13.dp),
+                .weight(0.94f)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
         ) {
             Text(
                 text = post.body,
                 color = BrandOnSurface,
-                fontSize = 13.sp,
-                lineHeight = 19.sp,
+                fontSize = 12.5.sp,
+                lineHeight = 18.sp,
                 fontWeight = FontWeight.Medium,
-                maxLines = 3,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.semantics { heading() },
             )
-            Spacer(Modifier.heightIn(min = 10.dp).weight(1f))
+            Spacer(Modifier.heightIn(min = 9.dp).weight(1f))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(42.dp),
+                    .height(40.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Image(
                     painter = painterResource(authorAvatar(post.author)),
                     contentDescription = "${post.author} 的头像",
                     modifier = Modifier
-                        .size(26.dp)
+                        .size(25.dp)
                         .clip(CircleShape),
                     contentScale = ContentScale.Crop,
                 )
                 Column(
                     modifier = Modifier
-                        .padding(start = 8.dp)
+                        .padding(start = 7.dp)
                         .weight(1f),
                 ) {
                     Text(
                         text = post.author,
                         color = BrandOnSurface,
-                        fontSize = 12.sp,
+                        fontSize = 11.5.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                     )
                     Text(
                         text = post.elapsedTime,
                         color = BrandOnSurfaceMuted,
-                        fontSize = 10.sp,
+                        fontSize = 9.5.sp,
                         maxLines = 1,
                     )
                 }
-                LikePill(post = post, onToggleLike = onToggleLike)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    CommentPill(commentCount = post.comments)
+                    LikePill(post = post, onToggleLike = onToggleLike)
+                }
             }
         }
+    }
+}
+
+@Composable
+fun FeedEmptyState(
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 34.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(108.dp)
+                .background(Color.White.copy(alpha = 0.62f), CircleShape)
+                .border(1.dp, Color.White.copy(alpha = 0.78f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            CommentOutlineIcon(
+                modifier = Modifier.size(38.dp),
+                tint = BrandOnSurface.copy(alpha = 0.76f),
+            )
+        }
+        Spacer(Modifier.height(18.dp))
+        Text(
+            text = "还没有内容更新",
+            color = BrandOnSurface,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "等你发布第一条图文后，这里会展示统一尺寸的社区卡片。",
+            color = BrandOnSurfaceMuted,
+            fontSize = 12.sp,
+            lineHeight = 19.sp,
+            fontStyle = FontStyle.Normal,
+        )
     }
 }
 
@@ -235,17 +282,40 @@ private fun LikePill(
                 indication = null,
                 onClick = { onToggleLike(post.id) },
             )
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .padding(horizontal = 9.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         HeartOutlineIcon(
-            modifier = Modifier.size(17.dp),
+            modifier = Modifier.size(16.dp),
             tint = BrandOnSurface,
             filled = post.liked,
             fillColor = BrandPink,
         )
-        Spacer(Modifier.size(6.dp))
-        Text("${post.likes}", color = BrandOnSurface, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+        Spacer(Modifier.size(5.dp))
+        Text("${post.likes}", color = BrandOnSurface, fontSize = 10.5.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun CommentPill(commentCount: Int) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(Color.White.copy(alpha = 0.78f))
+            .padding(horizontal = 9.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CommentOutlineIcon(
+            modifier = Modifier.size(15.dp),
+            tint = BrandOnSurface,
+        )
+        Spacer(Modifier.size(5.dp))
+        Text(
+            text = "$commentCount",
+            color = BrandOnSurface,
+            fontSize = 10.5.sp,
+            fontWeight = FontWeight.Medium,
+        )
     }
 }
 

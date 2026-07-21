@@ -11,6 +11,20 @@
 
 当前工程已经实现真实相机预览、拍照、构图引导、登录注册、本地社区页和个人主页，并把 AI 引导展示层与相机业务逻辑分离，方便后续接入真实模型输出。
 
+## 2026-07-21 最新补充
+
+这一轮按 App 队友的交付清单，已经把原型里缺失但必须可运行的 UI 项补齐：
+
+- 登录页加入品牌 Logo 头图与密码显隐眼睛图标
+- 新增忘记密码页，本地演示可闭环，不接入真实短信/邮件
+- 个人主页右上角设置按钮进入真实设置页
+- 个人主页补上编辑资料入口，并新增本地可运行的编辑资料页
+- 设置页支持辅助线、网格、原图保存、拍照音效等分组设置
+- 社区卡片补上评论信息，并增加统一空状态
+- 补齐 Android launcher / adaptive icon 基线资源
+- 相机页补上真实可切换的 compact 变焦条
+- 相机引导图示、顶部/底部 icon、提示条和完成态又做了一轮视觉收口
+
 ## 当前产品流
 
 截至 2026-07-21，本地原型的主流程如下：
@@ -29,9 +43,12 @@
 - 启动页
 - 登录页
 - 注册页
+- 忘记密码页
 - 相机主页
 - 推荐信息流
 - 个人主页
+- 编辑资料页
+- 设置页
 - 权限页 / 错误页
 
 ## 相机能力
@@ -43,6 +60,7 @@
 - 拍摄后写入系统相册
 - 左下角最近照片缩略图会刷新
 - 支持前后摄切换
+- 支持紧凑型变焦档位切换（当前提供 0.8x / 1x / 2x 的安全预设）
 
 ### 构图引导
 
@@ -122,7 +140,7 @@ git checkout UI
 从 GitHub 克隆后在本地构建 Debug APK，发送到手机直接安装：
 
 ```bash
-./gradlew assembleDebug
+JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradlew assembleDebug
 # APK 路径：app/build/outputs/apk/debug/app-debug.apk
 ```
 
@@ -130,22 +148,22 @@ git checkout UI
 
 ```bash
 # 构建 Debug APK
-./gradlew assembleDebug
+JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradlew assembleDebug
 
 # 编译检查
-./gradlew compileDebugKotlin
+JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradlew compileDebugKotlin
 
 # 运行单元测试
-./gradlew testDebugUnitTest
+JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradlew testDebugUnitTest
 
 # 编译 Android 测试
-./gradlew compileDebugAndroidTestKotlin
+JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradlew compileDebugAndroidTestKotlin
 
 # Lint 检查
-./gradlew lint
+JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradlew lintDebug
 
 # 如果本机有可用模拟器，可执行 UI 测试
-./gradlew connectedDebugAndroidTest
+JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradlew connectedDebugAndroidTest
 ```
 
 ## APK 输出
@@ -177,8 +195,12 @@ Debug APK：
 
 - [设计审查](docs/design-audit.md)
 - [实施清单](docs/implementation-plan.md)
+- [设计侧待办](docs/design-todo.md)
 - [视觉验收记录](docs/figma/visual-validation.md)
+- [UI 交付清单调整计划](docs/ui-design-adjustment-plan.md)
+- [给 UI 设计队友的校正版交付清单](docs/ui-design-handoff-adjusted.md)
 - [GitHub 上传清单](docs/github-upload-checklist.md)
+- [截图补拍清单](docs/screenshots/补拍清单.txt)
 
 ## 当前边界说明
 

@@ -41,6 +41,7 @@ fun LoginRoute(
     repository: DemoAuthRepository,
     onLoginSucceeded: () -> Unit,
     onRegister: () -> Unit,
+    onForgotPassword: () -> Unit,
 ) {
     val viewModel: AuthViewModel = viewModel(factory = AuthViewModel.factory(repository))
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -56,6 +57,7 @@ fun LoginRoute(
         onTogglePasswordVisibility = viewModel::togglePasswordVisibility,
         onSubmit = viewModel::submitLogin,
         onRegister = onRegister,
+        onForgotPassword = onForgotPassword,
     )
 }
 
@@ -67,6 +69,7 @@ fun LoginScreen(
     onTogglePasswordVisibility: () -> Unit,
     onSubmit: () -> Unit,
     onRegister: () -> Unit,
+    onForgotPassword: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LightSystemBars()
@@ -81,9 +84,12 @@ fun LoginScreen(
             .padding(horizontal = 52.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(Modifier.height(145.dp))
-        Text("登录", color = BrandOnSurface, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(102.dp))
+        Spacer(Modifier.height(76.dp))
+        AuthBrandHeader(
+            title = "登录",
+            subtitle = "继续你的 AI 构图拍摄",
+        )
+        Spacer(Modifier.height(68.dp))
         AuthField(
             value = state.account,
             onValueChange = onAccountChanged,
@@ -106,7 +112,12 @@ fun LoginScreen(
         )
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth()) {
-            Text("忘记密码", color = BrandOnSurfaceMuted, fontSize = 13.sp)
+            Text(
+                "忘记密码",
+                color = BrandOnSurfaceMuted,
+                fontSize = 13.sp,
+                modifier = Modifier.clickable(onClick = onForgotPassword).padding(vertical = 6.dp),
+            )
             Spacer(Modifier.weight(1f))
             Text(
                 "注册账号",
@@ -132,8 +143,8 @@ fun LoginScreen(
 
 @Preview(widthDp = 412, heightDp = 917, showBackground = true)
 @Composable
-private fun LoginPreview() = GenWowTheme { LoginScreen(AuthUiState(), {}, {}, {}, {}, {}) }
+private fun LoginPreview() = GenWowTheme { LoginScreen(AuthUiState(), {}, {}, {}, {}, {}, {}) }
 
 @Preview(widthDp = 360, heightDp = 640, showBackground = true)
 @Composable
-private fun LoginSmallPreview() = GenWowTheme { LoginScreen(AuthUiState(), {}, {}, {}, {}, {}) }
+private fun LoginSmallPreview() = GenWowTheme { LoginScreen(AuthUiState(), {}, {}, {}, {}, {}, {}) }

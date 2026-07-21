@@ -42,15 +42,23 @@ fun FeedScreen(
     var selectedTab by rememberSaveable { mutableIntStateOf(1) }
     Column(modifier.fillMaxSize().background(FeedBackground).statusBarsPadding()) {
         CommunityTopTabs(selectedIndex = selectedTab, onSelected = { selectedTab = it })
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            modifier = Modifier.fillMaxWidth().weight(1f),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 24.dp),
-            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
-            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
-        ) {
-            items(posts, key = DemoPost::id) { post ->
-                FeedPostCard(post = post, onToggleLike = onToggleLike)
+        if (posts.isEmpty()) {
+            FeedEmptyState(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            )
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 24.dp),
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+            ) {
+                items(posts, key = DemoPost::id) { post ->
+                    FeedPostCard(post = post, onToggleLike = onToggleLike)
+                }
             }
         }
     }

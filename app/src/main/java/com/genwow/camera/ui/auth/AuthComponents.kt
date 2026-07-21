@@ -36,6 +36,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -53,11 +54,12 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.genwow.camera.R
-import com.genwow.camera.ui.icon.QqOutlineIcon
-import com.genwow.camera.ui.icon.WeChatOutlineIcon
 import com.genwow.camera.ui.theme.BrandOnSurface
 import com.genwow.camera.ui.theme.BrandOnSurfaceMuted
 import com.genwow.camera.ui.theme.BrandPurple
+import com.genwow.camera.ui.theme.BrandPink
+import com.genwow.camera.ui.theme.BrandChineseTextStyle
+import com.genwow.camera.ui.theme.BrandEnglishTextStyle
 import com.genwow.camera.ui.theme.GenWowMotion
 import com.genwow.camera.ui.theme.SystemBarsAppearance
 
@@ -133,10 +135,8 @@ fun AuthField(
                 },
             )
             if (password && onTogglePasswordVisibility != null) {
-                Text(
-                    text = if (passwordVisible) "隐藏" else "显示",
-                    color = BrandPurple.copy(alpha = 0.78f),
-                    fontSize = 11.sp,
+                PasswordVisibilityButton(
+                    visible = passwordVisible,
                     modifier = Modifier
                         .semantics { this.contentDescription = "切换密码可见性" }
                         .clickable(onClick = onTogglePasswordVisibility)
@@ -154,6 +154,34 @@ fun AuthField(
                 fontSize = 11.sp,
                 modifier = Modifier.padding(top = 4.dp),
             )
+        }
+    }
+}
+
+@Composable
+fun AuthBrandHeader(
+    title: String,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Image(
+            painter = painterResource(R.drawable.ic_genwow_logo),
+            contentDescription = "帧好 GenWow 标志",
+            modifier = Modifier.size(78.dp),
+        )
+        Spacer(Modifier.height(18.dp))
+        Text("帧好", style = BrandChineseTextStyle)
+        Spacer(Modifier.height(6.dp))
+        Text("GenWow", style = BrandEnglishTextStyle)
+        Spacer(Modifier.height(28.dp))
+        Text(title, color = BrandOnSurface, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+        if (subtitle != null) {
+            Spacer(Modifier.height(10.dp))
+            Text(subtitle, color = BrandOnSurfaceMuted, fontSize = 14.sp)
         }
     }
 }
@@ -196,6 +224,57 @@ fun BrandPrimaryButton(
         contentAlignment = Alignment.Center,
     ) {
         Text(label, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun PasswordVisibilityButton(
+    visible: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val tint = if (visible) BrandPurple else BrandPink.copy(alpha = 0.92f)
+    Canvas(modifier.size(20.dp)) {
+        val stroke = Stroke(
+            width = 1.6.dp.toPx(),
+            cap = StrokeCap.Round,
+            join = StrokeJoin.Round,
+        )
+        val eyePath = Path().apply {
+            moveTo(size.width * 0.08f, size.height * 0.5f)
+            cubicTo(
+                size.width * 0.24f,
+                size.height * 0.20f,
+                size.width * 0.76f,
+                size.height * 0.20f,
+                size.width * 0.92f,
+                size.height * 0.5f,
+            )
+            cubicTo(
+                size.width * 0.76f,
+                size.height * 0.80f,
+                size.width * 0.24f,
+                size.height * 0.80f,
+                size.width * 0.08f,
+                size.height * 0.5f,
+            )
+            close()
+        }
+        drawPath(eyePath, color = tint, style = stroke)
+        drawCircle(
+            color = tint,
+            radius = size.minDimension * 0.14f,
+            center = Offset(size.width * 0.5f, size.height * 0.5f),
+            style = stroke,
+        )
+        if (!visible) {
+            drawLine(
+                color = tint,
+                start = Offset(size.width * 0.20f, size.height * 0.82f),
+                end = Offset(size.width * 0.82f, size.height * 0.18f),
+                strokeWidth = stroke.width,
+                cap = StrokeCap.Round,
+            )
+        }
     }
 }
 

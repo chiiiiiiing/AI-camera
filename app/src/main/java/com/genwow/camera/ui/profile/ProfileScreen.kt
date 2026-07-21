@@ -49,7 +49,8 @@ private val ProfileBackground = Brush.linearGradient(
 @Composable
 fun ProfileScreen(
     profile: DemoProfile,
-    onOpenEntryFlow: () -> Unit,
+    onEditProfile: () -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     SystemBarsAppearance(light = true)
@@ -70,7 +71,7 @@ fun ProfileScreen(
         Box(Modifier.fillMaxSize()) {
             ProfileSettingsButton(
                 modifier = Modifier.align(Alignment.TopEnd).padding(top = 12.dp, end = 18.dp),
-                onClick = onOpenEntryFlow,
+                onClick = onOpenSettings,
             )
             Column(
                 modifier = Modifier
@@ -108,6 +109,8 @@ fun ProfileScreen(
                         color = BrandOnSurfaceMuted,
                         fontSize = 12.sp,
                     )
+                    Spacer(Modifier.height(18.dp))
+                    EditProfileButton(onClick = onEditProfile)
                     Spacer(Modifier.height(20.dp))
                     ProfileStats(profile)
                 }
@@ -132,6 +135,10 @@ fun ProfileScreen(
 @Composable
 private fun ProfilePreview() {
     GenWowTheme {
-        ProfileScreen(profile = DemoCommunityRepository().profile, onOpenEntryFlow = {})
+        ProfileScreen(
+            profile = DemoCommunityRepository().profile,
+            onEditProfile = {},
+            onOpenSettings = {},
+        )
     }
 }

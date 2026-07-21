@@ -81,11 +81,12 @@ fun RegisterScreen(
             .padding(horizontal = 52.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(Modifier.height(120.dp))
-        Text("注册", color = BrandOnSurface, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(16.dp))
-        Text("创建新账号", color = BrandOnSurface, fontSize = 16.sp)
-        Spacer(Modifier.height(82.dp))
+        Spacer(Modifier.height(64.dp))
+        AuthBrandHeader(
+            title = "注册",
+            subtitle = "创建你的 GenWow 账号",
+        )
+        Spacer(Modifier.height(56.dp))
         AuthField(
             value = state.userName,
             onValueChange = onUserNameChanged,

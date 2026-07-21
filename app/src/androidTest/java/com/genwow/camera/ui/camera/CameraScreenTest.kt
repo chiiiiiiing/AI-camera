@@ -35,6 +35,7 @@ class CameraScreenTest {
                     onOpenEntryFlow = {},
                     onCapture = {},
                     onSwitchLens = {},
+                    onZoomRatioSelected = {},
                     onOpenFeed = {},
                     onOpenProfile = {},
                 )
@@ -59,6 +60,7 @@ class CameraScreenTest {
                     onOpenEntryFlow = {},
                     onCapture = {},
                     onSwitchLens = {},
+                    onZoomRatioSelected = {},
                     onOpenFeed = {},
                     onOpenProfile = {},
                 )
@@ -89,6 +91,7 @@ class CameraScreenTest {
                     onOpenEntryFlow = {},
                     onCapture = {},
                     onSwitchLens = {},
+                    onZoomRatioSelected = {},
                     onOpenFeed = {},
                     onOpenProfile = {},
                 )
@@ -123,6 +126,7 @@ class CameraScreenTest {
                     onOpenEntryFlow = {},
                     onCapture = {},
                     onSwitchLens = {},
+                    onZoomRatioSelected = {},
                     onOpenFeed = {},
                     onOpenProfile = {},
                 )
@@ -168,6 +172,7 @@ class CameraScreenTest {
                     onOpenEntryFlow = {},
                     onCapture = {},
                     onSwitchLens = {},
+                    onZoomRatioSelected = {},
                     onOpenFeed = {},
                     onOpenProfile = {},
                 )
@@ -210,6 +215,7 @@ class CameraScreenTest {
                     onOpenEntryFlow = {},
                     onCapture = {},
                     onSwitchLens = {},
+                    onZoomRatioSelected = {},
                     onOpenFeed = {},
                     onOpenProfile = {},
                 )

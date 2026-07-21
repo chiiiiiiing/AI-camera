@@ -16,7 +16,7 @@ class ProfileScreenTest {
     fun profileShowsFigmaIdentityStatsGalleryAndSettings() {
         val profile = DemoCommunityRepository().profile
         composeRule.setContent {
-            GenWowTheme { ProfileScreen(profile = profile, onOpenEntryFlow = {}) }
+            GenWowTheme { ProfileScreen(profile = profile, onEditProfile = {}, onOpenSettings = {}) }
         }
 
         composeRule.onNodeWithText("摄影师").assertExists()
@@ -28,6 +28,7 @@ class ProfileScreenTest {
         composeRule.onNodeWithContentDescription("256 粉丝").assertExists()
         composeRule.onNodeWithContentDescription("64 关注").assertExists()
         composeRule.onNodeWithContentDescription("主页设置").assertExists()
+        composeRule.onNodeWithContentDescription("编辑资料").assertExists()
         profile.galleryItems.forEach { item ->
             composeRule.onNodeWithContentDescription(item.contentDescription).assertExists()
         }

@@ -24,6 +24,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.genwow.camera.BuildConfig
 import com.genwow.camera.camera.CameraController
+import com.genwow.camera.camera.CameraZoomState
 import com.genwow.camera.camera.GuidanceSample
 import com.genwow.camera.ui.theme.SystemBarsAppearance
 import kotlinx.coroutines.CancellationException
@@ -55,6 +56,7 @@ fun CameraRoute(
     var cameraError by remember { mutableStateOf<String?>(null) }
     var recentPhotoUri by remember { mutableStateOf<Uri?>(null) }
     var selectedMode by remember { mutableStateOf(CameraGuideMode.COFFEE) }
+    var zoomState by remember { mutableStateOf<CameraZoomState?>(null) }
     SystemBarsAppearance(light = !permissionGranted || cameraError != null)
     var uiState by remember { mutableStateOf(CameraUiState()) }
     val stateMachine = remember { GuidanceStateMachine() }
@@ -72,7 +74,10 @@ fun CameraRoute(
         cameraReady = false
         cameraError = null
         runCatching { controller.bind(lifecycleOwner, view) }
-            .onSuccess { cameraReady = true }
+            .onSuccess {
+                zoomState = it
+                cameraReady = true
+            }
             .onFailure { cameraError = it.message ?: "相机初始化失败" }
     }
 
@@ -271,6 +276,7 @@ fun CameraRoute(
         else -> CameraScreen(
             state = uiState,
             cameraReady = cameraReady,
+            zoomState = zoomState,
             debugDemo = BuildConfig.DEBUG,
             recentPhotoUri = recentPhotoUri,
             onPreviewReady = { previewView = it },
@@ -295,6 +301,9 @@ fun CameraRoute(
             },
             onSwitchLens = {
                 if (controller.toggleLens()) bindKey++
+            },
+            onZoomRatioSelected = { ratio ->
+                zoomState = controller.setZoomRatio(ratio) ?: zoomState
             },
             onOpenFeed = onOpenFeed,
             onOpenProfile = onOpenProfile,

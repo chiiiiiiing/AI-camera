@@ -19,12 +19,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
 import com.genwow.camera.camera.CameraPreview
+import com.genwow.camera.camera.CameraZoomState
 import com.genwow.camera.ui.theme.GenWowTheme
 
 @Composable
 fun CameraScreen(
     state: CameraUiState,
     cameraReady: Boolean,
+    zoomState: CameraZoomState? = null,
     debugDemo: Boolean,
     selectedMode: CameraGuideMode,
     recentPhotoUri: Uri? = null,
@@ -33,6 +35,7 @@ fun CameraScreen(
     onOpenEntryFlow: () -> Unit,
     onCapture: () -> Unit,
     onSwitchLens: () -> Unit,
+    onZoomRatioSelected: (Float) -> Unit,
     onOpenFeed: () -> Unit,
     onOpenProfile: () -> Unit,
 ) {
@@ -52,9 +55,11 @@ fun CameraScreen(
             CameraBottomControls(
                 state = state,
                 cameraReady = cameraReady,
+                zoomState = zoomState,
                 recentPhotoUri = recentPhotoUri,
                 onCapture = onCapture,
                 onSwitchLens = onSwitchLens,
+                onZoomRatioSelected = onZoomRatioSelected,
                 onOpenFeed = onOpenFeed,
                 onOpenProfile = onOpenProfile,
             )
@@ -90,6 +95,7 @@ private fun CameraAlignedPreview() {
             onOpenEntryFlow = {},
             onCapture = {},
             onSwitchLens = {},
+            onZoomRatioSelected = {},
             onOpenFeed = {},
             onOpenProfile = {},
         )
@@ -117,6 +123,7 @@ private fun CameraRotationPreview() {
             onOpenEntryFlow = {},
             onCapture = {},
             onSwitchLens = {},
+            onZoomRatioSelected = {},
             onOpenFeed = {},
             onOpenProfile = {},
         )

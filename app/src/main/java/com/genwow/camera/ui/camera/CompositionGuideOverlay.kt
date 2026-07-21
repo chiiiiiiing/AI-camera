@@ -27,6 +27,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
@@ -314,6 +315,11 @@ private fun DrawScope.drawTranslationTrack(
     color: Color,
     alpha: Float,
 ) {
+    val direction = target - current
+    val distance = direction.getDistance()
+    val unit = if (distance > 0.001f) direction / distance else Offset.Zero
+    val accentStart = current + unit * (distance * 0.38f)
+    val accentEnd = current + unit * (distance * 0.76f)
     drawLine(
         Color.Black.copy(alpha = .18f * alpha),
         current,
@@ -328,6 +334,15 @@ private fun DrawScope.drawTranslationTrack(
         1.1.dp.toPx(),
         StrokeCap.Round,
     )
+    if (distance > 0.001f) {
+        drawLine(
+            color.copy(alpha = .82f * alpha),
+            accentStart,
+            accentEnd,
+            1.55.dp.toPx(),
+            StrokeCap.Round,
+        )
+    }
     val mid = Offset((current.x + target.x) / 2f, (current.y + target.y) / 2f)
     drawCircle(
         color = color.copy(alpha = .2f * alpha),
@@ -337,36 +352,38 @@ private fun DrawScope.drawTranslationTrack(
 }
 
 private fun DrawScope.drawTargetSun(center: Offset, color: Color, alpha: Float) {
-    val radius = 16.dp.toPx()
-    val coreRadius = 4.5.dp.toPx()
+    val radius = 15.dp.toPx()
+    val coreRadius = 4.2.dp.toPx()
     drawCircle(Color.Black.copy(alpha = .18f * alpha), radius = radius + 4.dp.toPx(), center = center)
-    drawCircle(color.copy(alpha = .1f * alpha), radius = radius + 1.5.dp.toPx(), center = center)
-    drawCircle(color.copy(alpha = .54f * alpha), radius = radius - 4.dp.toPx(), center = center, style = Stroke(1.dp.toPx()))
-    drawCircle(color.copy(alpha = .92f * alpha), radius = radius, center = center, style = Stroke(1.35.dp.toPx()))
-    drawCircle(color.copy(alpha = .9f * alpha), radius = coreRadius, center = center)
+    drawCircle(color.copy(alpha = .08f * alpha), radius = radius + 2.dp.toPx(), center = center)
+    drawCircle(color.copy(alpha = .48f * alpha), radius = radius - 4.2.dp.toPx(), center = center, style = Stroke(.95.dp.toPx()))
+    drawCircle(color.copy(alpha = .94f * alpha), radius = radius, center = center, style = Stroke(1.25.dp.toPx()))
+    drawCircle(color.copy(alpha = .96f * alpha), radius = coreRadius, center = center)
     repeat(8) { index ->
         val angle = Math.toRadians((index * 45).toDouble()).toFloat()
         val unit = Offset(kotlin.math.cos(angle), kotlin.math.sin(angle))
         drawLine(
             color.copy(alpha = .84f * alpha),
-            center + unit * 8.dp.toPx(),
-            center + unit * 13.dp.toPx(),
-            1.15.dp.toPx(),
+            center + unit * 8.2.dp.toPx(),
+            center + unit * 12.2.dp.toPx(),
+            1.05.dp.toPx(),
             StrokeCap.Round,
         )
     }
 }
 
 private fun DrawScope.drawCrosshair(center: Offset, color: Color, alpha: Float) {
-    val radius = 10.dp.toPx()
-    val gap = 4.dp.toPx()
-    val stroke = 1.5.dp.toPx()
+    val radius = 9.5.dp.toPx()
+    val gap = 3.2.dp.toPx()
+    val arm = 8.4.dp.toPx()
+    val stroke = 1.42.dp.toPx()
     drawCircle(Color.Black.copy(alpha = .2f * alpha), radius = radius + 2.dp.toPx(), center = center)
-    drawCircle(color = color.copy(alpha = .96f * alpha), radius = radius, center = center, style = Stroke(stroke))
-    drawLine(color, Offset(center.x - radius - gap, center.y), Offset(center.x - gap, center.y), stroke, StrokeCap.Round)
-    drawLine(color, Offset(center.x + gap, center.y), Offset(center.x + radius + gap, center.y), stroke, StrokeCap.Round)
-    drawLine(color, Offset(center.x, center.y - radius - gap), Offset(center.x, center.y - gap), stroke, StrokeCap.Round)
-    drawLine(color, Offset(center.x, center.y + gap), Offset(center.x, center.y + radius + gap), stroke, StrokeCap.Round)
+    drawCircle(color = color.copy(alpha = .92f * alpha), radius = radius, center = center, style = Stroke(1.18.dp.toPx()))
+    drawCircle(color = color.copy(alpha = .52f * alpha), radius = 2.1.dp.toPx(), center = center)
+    drawLine(color, Offset(center.x - radius - gap, center.y), Offset(center.x - gap - arm * .28f, center.y), stroke, StrokeCap.Round)
+    drawLine(color, Offset(center.x + gap + arm * .28f, center.y), Offset(center.x + radius + gap, center.y), stroke, StrokeCap.Round)
+    drawLine(color, Offset(center.x, center.y - radius - gap), Offset(center.x, center.y - gap - arm * .28f), stroke, StrokeCap.Round)
+    drawLine(color, Offset(center.x, center.y + gap + arm * .28f), Offset(center.x, center.y + radius + gap), stroke, StrokeCap.Round)
 }
 
 private fun DrawScope.drawAxisRotationGuide(
@@ -446,7 +463,7 @@ private fun DrawScope.drawPerspectiveArc(
         useCenter = false,
         topLeft = bounds.topLeft,
         size = bounds.size,
-        style = Stroke(1.dp.toPx(), cap = StrokeCap.Round),
+        style = Stroke(.9.dp.toPx(), cap = StrokeCap.Round),
     )
     drawArc(
         color = color.copy(alpha = .92f * alpha),
@@ -455,7 +472,17 @@ private fun DrawScope.drawPerspectiveArc(
         useCenter = false,
         topLeft = bounds.topLeft,
         size = bounds.size,
-        style = Stroke(1.5.dp.toPx(), cap = StrokeCap.Round),
+        style = Stroke(1.35.dp.toPx(), cap = StrokeCap.Round),
+    )
+    val shimmerStart = start + sweep * (.18f + .34f * motionPhase.coerceIn(0f, 1f))
+    drawArc(
+        color = color.copy(alpha = .98f * alpha),
+        startAngle = shimmerStart,
+        sweepAngle = sweep * .14f,
+        useCenter = false,
+        topLeft = bounds.topLeft,
+        size = bounds.size,
+        style = Stroke(1.7.dp.toPx(), cap = StrokeCap.Round),
     )
 
     val tip = ellipsePoint(
@@ -567,6 +594,16 @@ private fun DrawScope.drawPlanarRotationGuide(
         size = orbit.size,
         style = Stroke(1.55.dp.toPx(), cap = StrokeCap.Round),
     )
+    val orbitShimmer = start + sweep * (.2f + .36f * motionPhase.coerceIn(0f, 1f))
+    drawArc(
+        color = color.copy(alpha = .98f * alpha),
+        startAngle = orbitShimmer,
+        sweepAngle = sweep * .12f,
+        useCenter = false,
+        topLeft = orbit.topLeft,
+        size = orbit.size,
+        style = Stroke(1.85.dp.toPx(), cap = StrokeCap.Round),
+    )
 
     val tip = ellipsePoint(
         centerX = orbit.center.x,
@@ -653,19 +690,31 @@ private fun DrawScope.drawOpenArrow(
     val base = tip - safeDirection * length
     drawLine(color, tip, base + normal * side, stroke, StrokeCap.Round)
     drawLine(color, tip, base - normal * side, stroke, StrokeCap.Round)
+    drawLine(
+        color.copy(alpha = .62f),
+        base + normal * side * .24f,
+        base - normal * side * .24f,
+        stroke * .72f,
+        StrokeCap.Round,
+    )
 }
 
 private fun DrawScope.drawAlignedMark(color: Color) {
     val center = Offset(size.width / 2f, size.height * .43f)
     drawCircle(Color.Black.copy(alpha = .24f), 25.dp.toPx(), center)
-    drawCircle(color.copy(alpha = .18f), 24.dp.toPx(), center)
-    drawCircle(color.copy(alpha = .88f), 22.dp.toPx(), center, style = Stroke(1.4.dp.toPx()))
+    drawCircle(color.copy(alpha = .12f), 24.dp.toPx(), center)
+    drawCircle(color.copy(alpha = .36f), 18.dp.toPx(), center)
+    drawCircle(color.copy(alpha = .88f), 22.dp.toPx(), center, style = Stroke(1.35.dp.toPx()))
     val path = Path().apply {
         moveTo(center.x - 9.dp.toPx(), center.y)
         lineTo(center.x - 2.dp.toPx(), center.y + 7.dp.toPx())
         lineTo(center.x + 11.dp.toPx(), center.y - 8.dp.toPx())
     }
-    drawPath(path, color, style = Stroke(2.1.dp.toPx(), cap = StrokeCap.Round))
+    drawPath(
+        path,
+        color,
+        style = Stroke(2.1.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
+    )
 }
 
 @Composable
@@ -698,10 +747,16 @@ fun GuidanceMessage(state: CameraUiState) {
     }
     Box(
         modifier = Modifier
-            .background(Color.Black.copy(alpha = .31f), RoundedCornerShape(17.dp))
-            .padding(horizontal = 15.dp, vertical = 9.dp),
+            .background(Color.Black.copy(alpha = .24f), RoundedCornerShape(18.dp))
+            .padding(horizontal = 16.dp, vertical = 10.dp),
     ) {
-        Text(text, color = color, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        Text(
+            text,
+            color = color,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            lineHeight = 18.sp,
+        )
     }
 }
 

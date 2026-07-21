@@ -18,10 +18,13 @@ import androidx.navigation.compose.rememberNavController
 import com.genwow.camera.data.demo.DemoAuthRepository
 import com.genwow.camera.data.demo.DemoCommunityRepository
 import com.genwow.camera.ui.camera.CameraRoute
+import com.genwow.camera.ui.auth.ForgotPasswordScreen
 import com.genwow.camera.ui.auth.LoginRoute
 import com.genwow.camera.ui.auth.RegisterRoute
 import com.genwow.camera.ui.feed.FeedScreen
+import com.genwow.camera.ui.profile.EditProfileScreen
 import com.genwow.camera.ui.profile.ProfileScreen
+import com.genwow.camera.ui.settings.SettingsScreen
 import com.genwow.camera.ui.splash.SplashScreen
 import kotlinx.coroutines.delay
 
@@ -62,6 +65,9 @@ fun GenWowNavHost(
                 onRegister = {
                     navController.navigate(AppDestination.Register.route)
                 },
+                onForgotPassword = {
+                    navController.navigate(AppDestination.ForgotPassword.route)
+                },
             )
         }
         composable(AppDestination.Register.route) {
@@ -70,6 +76,11 @@ fun GenWowNavHost(
                 onRegistrationSucceeded = {
                     navController.openMainDestination(AppDestination.Camera, clearAuth = true)
                 },
+            )
+        }
+        composable(AppDestination.ForgotPassword.route) {
+            ForgotPasswordScreen(
+                onBack = { navController.popBackStack() },
             )
         }
         composable(AppDestination.Camera.route) {
@@ -107,15 +118,18 @@ fun GenWowNavHost(
         composable(AppDestination.Profile.route) {
             if (currentSession == null) {
                 LoginRoute(
-                    repository = authRepository,
-                    onLoginSucceeded = {
-                        navController.openMainDestination(AppDestination.Profile, clearAuth = true)
-                    },
-                    onRegister = {
-                        navController.navigate(AppDestination.Register.route)
-                    },
-                )
-            } else {
+                        repository = authRepository,
+                        onLoginSucceeded = {
+                            navController.openMainDestination(AppDestination.Profile, clearAuth = true)
+                        },
+                        onRegister = {
+                            navController.navigate(AppDestination.Register.route)
+                        },
+                        onForgotPassword = {
+                            navController.navigate(AppDestination.ForgotPassword.route)
+                        },
+                    )
+                } else {
                 MainDestinationScaffold(
                     currentDestination = AppDestination.Profile,
                     onDestinationSelected = { destination ->
@@ -127,10 +141,26 @@ fun GenWowNavHost(
                 ) {
                     ProfileScreen(
                         profile = communityRepository.profile,
-                        onOpenEntryFlow = { navController.navigate(AppDestination.Login.route) },
+                        onEditProfile = { navController.navigate(AppDestination.EditProfile.route) },
+                        onOpenSettings = { navController.navigate(AppDestination.Settings.route) },
                     )
                 }
             }
+        }
+        composable(AppDestination.EditProfile.route) {
+            EditProfileScreen(
+                profile = communityRepository.profile,
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(AppDestination.Settings.route) {
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onLogout = {
+                    authRepository.logout()
+                    navController.openMainDestination(AppDestination.Camera, clearAuth = true)
+                },
+            )
         }
     }
 }
@@ -179,6 +209,8 @@ private fun NavHostController.navigateToProfileOrAuth(authenticated: Boolean) {
     if (authenticated) {
         openMainDestination(AppDestination.Profile)
     } else {
-        openMainDestination(AppDestination.Profile)
+        navigate(AppDestination.Login.route) {
+            launchSingleTop = true
+        }
     }
 }

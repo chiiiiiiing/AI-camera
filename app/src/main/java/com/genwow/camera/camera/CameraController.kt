@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
@@ -26,9 +27,10 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 class CameraController(private val context: Context) {
     private var provider: ProcessCameraProvider? = null
     private var imageCapture: ImageCapture? = null
+    private var boundCamera: Camera? = null
     private var lensFacing = CameraSelector.LENS_FACING_BACK
 
-    suspend fun bind(lifecycleOwner: LifecycleOwner, previewView: PreviewView) {
+    suspend fun bind(lifecycleOwner: LifecycleOwner, previewView: PreviewView): CameraZoomState {
         val cameraProvider = context.awaitCameraProvider()
         val preview = Preview.Builder().build().also {
             it.surfaceProvider = previewView.surfaceProvider
@@ -39,9 +41,11 @@ class CameraController(private val context: Context) {
         val selector = CameraSelector.Builder().requireLensFacing(lensFacing).build()
 
         cameraProvider.unbindAll()
-        cameraProvider.bindToLifecycle(lifecycleOwner, selector, preview, capture)
+        val camera = cameraProvider.bindToLifecycle(lifecycleOwner, selector, preview, capture)
         provider = cameraProvider
         imageCapture = capture
+        boundCamera = camera
+        return camera.currentZoomState()
     }
 
     fun toggleLens(): Boolean {
@@ -99,11 +103,39 @@ class CameraController(private val context: Context) {
         )
     }
 
+    fun setZoomRatio(ratio: Float): CameraZoomState? {
+        val camera = boundCamera ?: return null
+        val zoomState = camera.cameraInfo.zoomState.value ?: return null
+        val clamped = ratio.coerceIn(zoomState.minZoomRatio, zoomState.maxZoomRatio)
+        camera.cameraControl.setZoomRatio(clamped)
+        return CameraZoomState(
+            minZoomRatio = zoomState.minZoomRatio,
+            maxZoomRatio = zoomState.maxZoomRatio,
+            currentZoomRatio = clamped,
+        )
+    }
+
     fun release() {
         provider?.unbindAll()
         provider = null
         imageCapture = null
+        boundCamera = null
     }
+}
+
+data class CameraZoomState(
+    val minZoomRatio: Float,
+    val maxZoomRatio: Float,
+    val currentZoomRatio: Float,
+)
+
+private fun Camera.currentZoomState(): CameraZoomState {
+    val zoomState = cameraInfo.zoomState.value
+    return CameraZoomState(
+        minZoomRatio = zoomState?.minZoomRatio ?: 1f,
+        maxZoomRatio = zoomState?.maxZoomRatio ?: 1f,
+        currentZoomRatio = zoomState?.zoomRatio ?: 1f,
+    )
 }
 
 private suspend fun Context.awaitCameraProvider(): ProcessCameraProvider =

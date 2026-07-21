@@ -5,6 +5,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -28,6 +29,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
@@ -51,24 +54,36 @@ fun ProfileAvatar(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .size(width = 108.dp, height = 92.dp)
-            .border(BorderStroke(1.4.dp, BrandOnSurface.copy(alpha = .45f)), RoundedCornerShape(32.dp)),
+            .border(BorderStroke(1.4.dp, BrandOnSurface.copy(alpha = .24f)), RoundedCornerShape(32.dp)),
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.size(34.dp)) {
-            val stroke = Stroke(1.4.dp.toPx(), cap = StrokeCap.Round)
+        Canvas(Modifier.matchParentSize()) {
+            drawRoundRect(
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.90f),
+                        Color(0xFFFFEAF5),
+                        Color(0xFFE8DEFF),
+                    ),
+                ),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(32.dp.toPx(), 32.dp.toPx()),
+            )
+        }
+        Canvas(Modifier.size(42.dp)) {
+            val stroke = Stroke(1.5.dp.toPx(), cap = StrokeCap.Round)
             drawCircle(
                 BrandOnSurface,
-                radius = 6.dp.toPx(),
-                center = Offset(size.width / 2f, 10.dp.toPx()),
+                radius = 7.dp.toPx(),
+                center = Offset(size.width / 2f, 12.dp.toPx()),
                 style = stroke,
             )
             drawArc(
                 BrandOnSurface,
-                startAngle = 195f,
-                sweepAngle = 150f,
+                startAngle = 198f,
+                sweepAngle = 144f,
                 useCenter = false,
-                topLeft = Offset(5.dp.toPx(), 17.dp.toPx()),
-                size = Size(24.dp.toPx(), 17.dp.toPx()),
+                topLeft = Offset(5.dp.toPx(), 20.dp.toPx()),
+                size = Size(32.dp.toPx(), 19.dp.toPx()),
                 style = stroke,
             )
         }
@@ -118,6 +133,48 @@ fun ProfileGallery(items: List<DemoGalleryItem>, modifier: Modifier = Modifier) 
                 }
             }
         }
+    }
+}
+
+@Composable
+fun EditProfileButton(
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) .97f else 1f,
+        animationSpec = tween(
+            durationMillis = if (pressed) GenWowMotion.PressMillis else GenWowMotion.PressReleaseMillis,
+        ),
+        label = "edit profile press",
+    )
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(999.dp))
+            .border(
+                BorderStroke(1.dp, BrandOnSurface.copy(alpha = 0.14f)),
+                RoundedCornerShape(999.dp),
+            )
+            .background(androidx.compose.ui.graphics.Color.White.copy(alpha = 0.76f))
+            .scale(scale)
+            .semantics { contentDescription = "编辑资料" }
+            .clickable(
+                role = Role.Button,
+                interactionSource = interaction,
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(horizontal = 18.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = "编辑资料",
+            color = BrandOnSurface,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+        )
     }
 }
 
