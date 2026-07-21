@@ -1,0 +1,81 @@
+[versions]
+# — 编译 & 工具链 —
+agp = "8.7.3"
+kotlin = "2.0.21"
+ksp = "2.0.21-1.0.28"
+compose-bom = "2024.12.01"
+compose-compiler = "1.5.15"
+
+# — CameraX —
+camerax = "1.4.1"
+
+# — AI 推理 —
+tflite = "2.16.1"
+
+# — 架构 —
+hilt = "2.53.1"
+hilt-navigation = "1.2.0"
+lifecycle = "2.8.7"
+navigation = "2.8.5"
+
+# — 图片 —
+coil = "2.7.0"
+
+# — 网络 (后续模块用) —
+okhttp = "4.12.0"
+retrofit = "2.11.0"
+
+# — 数据库 (后续模块用) —
+room = "2.6.1"
+
+# — 崩溃监控 —
+firebase-bom = "33.6.0"
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+
+[libraries]
+# — CameraX —
+camerax-core = { module = "androidx.camera:camera-core", version.ref = "camerax" }
+camerax-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camerax" }
+camerax-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
+camerax-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }
+
+# — AI 推理 —
+tflite = { module = "org.tensorflow:tensorflow-lite", version.ref = "tflite" }
+tflite-gpu = { module = "org.tensorflow:tensorflow-lite-gpu", version.ref = "tflite" }
+
+# — DI —
+hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "hilt" }
+hilt-compiler = { module = "com.google.dagger:hilt-android-compiler", version.ref = "hilt" }
+hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", version.ref = "hilt-navigation" }
+
+# — Compose —
+compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
+compose-ui = { module = "androidx.compose.ui:ui" }
+compose-material3 = { module = "androidx.compose.material3:material3" }
+compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
+compose-tooling = { module = "androidx.compose.ui:ui-tooling" }
+compose-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
+
+# — Lifecycle —
+lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
+lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
+
+# — Activity & Fragment —
+activity-compose = { module = "androidx.activity:activity-compose", version = "1.9.3" }
+
+# — 图片 —
+coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil" }
+
+# — 导航 —
+navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "navigation" }
+
+# — 崩溃监控 (按需取消注释) —
+# firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase-bom" }
+# firebase-crashlytics = { module = "com.google.firebase:firebase-crashlytics-ktx" }
+# firebase-analytics = { module = "com.google.firebase:firebase-analytics-ktx" }
