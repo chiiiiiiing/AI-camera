@@ -105,27 +105,46 @@
 - targetSdk 35
 - minSdk 24
 
-## 常用命令
+## 下载与运行
 
-构建 Debug APK：
+### 方式一：克隆后用 Android Studio 运行（推荐）
+
+```bash
+git clone https://github.com/chiiiiiiing/AI-camera.git
+cd AI-camera
+git checkout UI
+```
+
+然后用 Android Studio 打开 `AI-camera` 目录，等待 Gradle 同步完成后，连接手机或启动模拟器，点击 Run 即可。
+
+### 方式二：直接安装 APK
+
+从 GitHub 克隆后在本地构建 Debug APK，发送到手机直接安装：
 
 ```bash
 ./gradlew assembleDebug
+# APK 路径：app/build/outputs/apk/debug/app-debug.apk
 ```
 
-常用校验命令：
+## 构建与校验
 
 ```bash
+# 构建 Debug APK
+./gradlew assembleDebug
+
+# 编译检查
 ./gradlew compileDebugKotlin
+
+# 运行单元测试
 ./gradlew testDebugUnitTest
+
+# 编译 Android 测试
 ./gradlew compileDebugAndroidTestKotlin
+
+# Lint 检查
 ./gradlew lint
-./gradlew assembleDebug
-```
 
-如果本机有可用模拟器，也可以继续执行：
-
-```bash
+# 如果本机有可用模拟器，可执行 UI 测试
 ./gradlew connectedDebugAndroidTest
 ```
 
