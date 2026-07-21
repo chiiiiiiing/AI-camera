@@ -1,0 +1,2318 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>AI 构图辅助相机 AI 引擎零基础自学教材</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 18mm 16mm 18mm 16mm;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      color: #0f172a;
+      font-family: "Hiragino Sans GB", "STHeiti", "PingFang SC", "Songti SC", sans-serif;
+      font-size: 13px;
+      line-height: 1.72;
+      background: #ffffff;
+    }
+    h1, h2, h3 {
+      color: #0f172a;
+      line-height: 1.35;
+      margin: 0 0 10px 0;
+      break-after: avoid;
+    }
+    h1 {
+      font-size: 24px;
+      margin-top: 0;
+      padding-top: 4px;
+      border-bottom: 2px solid #dbeafe;
+      padding-bottom: 8px;
+      break-before: page;
+    }
+    h1:first-child {
+      break-before: avoid;
+      text-align: center;
+      border-bottom: none;
+      font-size: 30px;
+      margin-top: 80px;
+      margin-bottom: 16px;
+    }
+    h1:first-child + p {
+      text-align: center;
+      color: #475569;
+      font-size: 14px;
+      margin-bottom: 40px;
+    }
+    h2 {
+      font-size: 18px;
+      margin-top: 18px;
+      color: #1e293b;
+    }
+    h3 {
+      font-size: 15px;
+      margin-top: 14px;
+      color: #334155;
+    }
+    p {
+      margin: 0 0 9px 0;
+      text-align: justify;
+    }
+    blockquote {
+      margin: 10px 0 14px 0;
+      padding: 10px 12px;
+      border-left: 4px solid #38bdf8;
+      background: #f8fafc;
+      color: #334155;
+      break-inside: avoid;
+    }
+    ul, ol {
+      margin: 0 0 10px 22px;
+      padding: 0;
+    }
+    li {
+      margin: 2px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0 14px 0;
+      font-size: 11px;
+      line-height: 1.45;
+      break-inside: auto;
+    }
+    thead {
+      display: table-header-group;
+    }
+    th {
+      background: #e2e8f0;
+      color: #0f172a;
+      font-weight: 700;
+    }
+    th, td {
+      border: 1px solid #cbd5e1;
+      padding: 6px 7px;
+      vertical-align: top;
+      word-break: break-word;
+    }
+    pre {
+      margin: 9px 0 12px 0;
+      padding: 10px 12px;
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 6px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      font-family: "Menlo", "SF Mono", "Source Code Pro", "DejaVu Sans Mono", monospace;
+      font-size: 10.5px;
+      line-height: 1.45;
+      break-inside: avoid;
+    }
+    code {
+      font-family: "Menlo", "SF Mono", "Source Code Pro", "DejaVu Sans Mono", monospace;
+      font-size: 0.92em;
+    }
+    p code, li code, td code {
+      color: #be123c;
+      background: #fff1f2;
+      padding: 0 3px;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+<h1>AI 构图辅助相机 AI 引擎零基础自学教材</h1>
+<p>基于 /Volumes/桌面/AI-camera 项目的 v9 student、SigLIP2 teacher、template index 与 Android ONNX Runtime Mobile 接入口径</p>
+<p>本教材面向项目 AI 负责人。目标不是让你从第一天就手写完整 App 或重写全部训练框架，而是让你真正理解模型训练、评估、迭代、导出和交付模型包所需的底层知识。</p>
+<p>教材采用三层讲法：第一层讲人话和摄影模板推荐类比；第二层讲机器学习、数据结构、模型格式和 Android runtime 的底层原理；第三层落到本项目真实文件和核心代码，解释关键语法、函数调用、数据字段和验收方法。</p>
+<blockquote>
+<p>范围说明：本教材覆盖 AI 负责人必须掌握的主链路和 v9 首发相关核心代码。全仓库每个辅助脚本逐行解释可以继续扩展成第二册；本册优先保证你能读懂、验收和决策当前商业路线。</p>
+</blockquote>
+<h2>本项目当前事实</h2>
+<table>
+<thead>
+<tr>
+<th>项目事实</th>
+<th>当前值</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>商业路线</td>
+<td>蒸馏已有 teacher 模型，形成自有端侧 embedding student 模型</td>
+</tr>
+<tr>
+<td>teacher</td>
+<td>google/siglip2-base-patch16-224，768 维，用于离线质量上限和蒸馏</td>
+</tr>
+<tr>
+<td>Android 首发候选</td>
+<td>tiny_cnn_v9_wide_topk_siglip2_512</td>
+</tr>
+<tr>
+<td>端侧模型文件</td>
+<td>student_model.static_int8.onnx</td>
+</tr>
+<tr>
+<td>runtime</td>
+<td>ONNX Runtime Mobile</td>
+</tr>
+<tr>
+<td>输入</td>
+<td>RGB、float32、NCHW、[1,3,224,224]</td>
+</tr>
+<tr>
+<td>输出</td>
+<td>512 维 L2 normalized embedding</td>
+</tr>
+<tr>
+<td>候选库</td>
+<td>new_batch v9 static int8 ONNX index，728 条，尚未合并为正式 visual-clean</td>
+</tr>
+<tr>
+<td>正式库边界</td>
+<td>visual-clean 104 条正式非人像库，不能被 new_batch 污染</td>
+</tr>
+<tr>
+<td>离线质量</td>
+<td>v9 static int8 ONNX top5 同场景 96.15%，top5 同类型 98.21%</td>
+</tr>
+<tr>
+<td>端侧预算</td>
+<td>p50 &lt;= 80ms，p90 &lt;= 150ms，模型 &lt;= 5MB，500ms-1000ms 抽帧</td>
+</tr>
+</tbody></table>
+<h2>学习地图</h2>
+<ol>
+<li>项目全景：素材、审核、标注、metadata、teacher embedding、student 训练、index、Android runtime。</li>
+<li>零基础计算机知识：文件路径、JSON/JSONL、二进制 float32、命令行、Python 包。</li>
+<li>图片和 tensor：RGB、尺寸、resize、归一化、NCHW、batch。</li>
+<li>embedding：向量、L2 normalize、cosine similarity、dot product、topK、margin。</li>
+<li>模型结构：CNN、Conv2d、BatchNorm、激活函数、stride、pooling、Linear、参数量。</li>
+<li>蒸馏训练：teacher/student、PCA 投影、cosine loss、relation loss、listwise、hard negative。</li>
+<li>索引实现：metadata、embedding 文件、keys、USearch、exact fallback、维度校验。</li>
+<li>评估指标：top1/top3/top5、同场景、同类型、构图、光线、低 margin、近重复。</li>
+<li>导出和量化：checkpoint、TorchScript、ONNX、dynamic int8、static int8、校准、manifest。</li>
+<li>Android 交付：ONNX Runtime Mobile、抽帧、top5 rerank、稳定策略、真机验收。</li>
+<li>负责人日常：看哪些数据，问 Android 队友什么，什么时候 v9 可首发，什么时候必须 v10。</li>
+</ol>
+<h1>第 1 章 项目全景：这个 AI 引擎到底在做什么</h1>
+<p>这个项目不是完整相机 App，也不是图像生成项目。它是一个摄影模板推荐引擎：用户打开相机，对准当前画面，端侧模型把当前画面转换成 embedding，然后用这个 embedding 在模板库里检索相似模板，App 再把命中的模板 metadata 转成构图辅助线和提示。</p>
+<p>你作为 AI 负责人，最重要的是管住三件事：数据是否可信，模型是否真的学到 teacher 的推荐空间，交付给 Android 的模型和 index 是否同版本且可验收。</p>
+<h2>完整链路</h2>
+<pre><code class="language-bash">素材图片
+  -&gt; raw manifest
+  -&gt; SHA / 尺寸 / 比例 / 重复校验
+  -&gt; 人像姿态筛选
+  -&gt; 人工质量审核
+  -&gt; CV preprocessing jobs
+  -&gt; 视觉标注 annotations.jsonl
+  -&gt; template_metadata.jsonl
+  -&gt; SigLIP2 teacher embedding
+  -&gt; 蒸馏数据集 train / val / test
+  -&gt; v5 / v6 / v8 / v9 student 训练对比
+  -&gt; v9 FP32 ONNX 导出
+  -&gt; v9 static int8 ONNX 量化
+  -&gt; v9 static int8 ONNX template embedding
+  -&gt; template index
+  -&gt; Android ONNX Runtime Mobile
+  -&gt; topK 检索
+  -&gt; top5 + 规则重排
+  -&gt; metadata 生成辅助线/提示
+        
+</code></pre>
+<h2>每个产物的职责</h2>
+<table>
+<thead>
+<tr>
+<th>产物</th>
+<th>职责</th>
+<th>你要验收什么</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>manifest.jsonl</td>
+<td>原始候选照片清单</td>
+<td>数量、路径、hash、授权、审核状态</td>
+</tr>
+<tr>
+<td>annotations.new_batch.jsonl</td>
+<td>视觉标注结果</td>
+<td>schema 通过，不编造，template_value/aesthetic_score 合理</td>
+</tr>
+<tr>
+<td>template_metadata.*.jsonl</td>
+<td>端侧模板说明书</td>
+<td>photo_type、scene、composition、lighting、embedding 字段齐全</td>
+</tr>
+<tr>
+<td>teacher embedding</td>
+<td>SigLIP2 生成的高质量目标空间</td>
+<td>768 维、L2 ready、teacher index 质量作为上限</td>
+</tr>
+<tr>
+<td>checkpoint.best.pt</td>
+<td>训练后最优 student 权重</td>
+<td>best epoch、val/test cosine、参数配置</td>
+</tr>
+<tr>
+<td>student_model.static_int8.onnx</td>
+<td>Android 首发端侧模型</td>
+<td>大小、sha256、输入输出、int8 质量回归</td>
+</tr>
+<tr>
+<td>template_index/</td>
+<td>模板检索库</td>
+<td>count、dimension、keys/metadata/embeddings 顺序一致</td>
+</tr>
+<tr>
+<td>quality_report</td>
+<td>离线检索质量报告</td>
+<td>top5 同场景、同类型、问题样本、低 margin</td>
+</tr>
+</tbody></table>
+<h2>负责人边界</h2>
+<ul>
+<li>你必须理解模型和 index 的版本关系。v9 static int8 ONNX 是 512 维，不能配 256 维 visual-clean index。</li>
+<li>你必须理解推荐逻辑。首版 App 要 top5 + 规则重排，不应直接把 ANN top1 当最终模板。</li>
+<li>你必须看得懂评估。v9 static int8 ONNX top5 同场景 96.15% 可以进入 App 接入和灰度，但缺真机数据时不能宣布完整商用默认模型。</li>
+<li>你不必亲自写完整 CameraX 链路，但必须能验收 Android 队友的预处理、抽帧、ONNX 输出和稳定策略。</li>
+</ul>
+<h2>本章自测</h2>
+<ol>
+<li>v9 模型输出的是辅助线坐标吗？如果不是，输出什么？</li>
+<li>为什么模型和 template index 必须同版本发布？</li>
+<li>visual-clean 和 new_batch 的产品边界是什么？</li>
+<li>为什么没有 Android 真机 p50/p90 数据时，不能说 v9 已经是完整商用默认模型？</li>
+</ol>
+<h1>第 2 章 零基础计算机知识：文件、JSONL、二进制和命令行</h1>
+<h2>路径和目录</h2>
+<p>路径是文件在电脑里的地址。本项目根目录是 /Volumes/桌面/AI-camera。你看到的 tools/preprocessed/student_models/... 是相对路径，意思是从项目根目录往下找。</p>
+<p>AI 负责人必须会看路径，因为一次错误的路径就可能让训练脚本读到旧数据、让 Android 拿到错模型、让 index 维度混乱。</p>
+<table>
+<thead>
+<tr>
+<th>目录</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>tools/build_template_db/</td>
+<td>构建数据、embedding、index、训练和导出的工具脚本</td>
+</tr>
+<tr>
+<td>tools/raw_photos/</td>
+<td>原始候选和人工审核 manifest</td>
+</tr>
+<tr>
+<td>tools/preprocessed/</td>
+<td>CV 预处理、annotation、embedding、template index 和模型产物</td>
+</tr>
+<tr>
+<td>AI引擎设计/</td>
+<td>当前决策、路线和进度</td>
+</tr>
+<tr>
+<td>App技术设计/</td>
+<td>给 Android 队友的接入协议和验收标准</td>
+</tr>
+</tbody></table>
+<h2>JSON 和 JSONL</h2>
+<p>JSON 是一种结构化文本。它像 Python 的 dict/list，但保存在文本文件里。JSONL 是 JSON Lines，一行一个 JSON object。项目里的 manifest、metadata、annotation 基本都是 JSONL。</p>
+<pre><code class="language-python">{&quot;template_id&quot;:&quot;new_batch_00027&quot;,&quot;photo_type&quot;:&quot;portrait&quot;,&quot;scene_category&quot;:&quot;closeup_portrait&quot;}
+{&quot;template_id&quot;:&quot;new_batch_00028&quot;,&quot;photo_type&quot;:&quot;portrait&quot;,&quot;scene_category&quot;:&quot;closeup_portrait&quot;}
+        
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>代码/语法</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>{...}</td>
+<td>一对花括号表示一个对象。对象里是字段名和值。</td>
+</tr>
+<tr>
+<td>&quot;template_id&quot;</td>
+<td>字段名必须是字符串，所以用双引号。</td>
+</tr>
+<tr>
+<td>:</td>
+<td>冒号左边是字段名，右边是字段值。</td>
+</tr>
+<tr>
+<td>,</td>
+<td>逗号分隔多个字段。</td>
+</tr>
+<tr>
+<td>一行一个对象</td>
+<td>JSONL 的关键规则。读取时可以一行一行解析，适合大规模数据。</td>
+</tr>
+</tbody></table>
+<h2>二进制 float32</h2>
+<p>embedding 是很多小数。如果写成 JSON，会很大、读取慢、精度和格式也容易乱。本项目把 embedding 写成二进制 float32 文件。例如 v9 index 有 728 条模板，每条 512 维，每个 float32 占 4 字节，所以 embeddings 文件大小是 728 * 512 * 4 = 1,490,944 bytes。</p>
+<pre><code class="language-python">with embeddings_path.open(&quot;wb&quot;) as handle:
+    for vector in vectors:
+        handle.write(struct.pack(f&quot;&lt;{dimension}f&quot;, *vector.values))
+        
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>代码/语法</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>open(&quot;wb&quot;)</td>
+<td>w 表示写入，b 表示 binary 二进制。</td>
+</tr>
+<tr>
+<td>for vector in vectors:</td>
+<td>逐条模板写入。vector.values 是这条模板的 embedding 数字列表。</td>
+</tr>
+<tr>
+<td>f&quot;&lt;{dimension}f&quot;</td>
+<td>struct 格式字符串。&lt; 表示小端字节序，dimension 表示写多少个，f 表示 float32。</td>
+</tr>
+<tr>
+<td>*vector.values</td>
+<td>Python 解包语法，把列表里的 512 个数展开成 512 个参数。</td>
+</tr>
+<tr>
+<td>handle.write(...)</td>
+<td>把打包后的二进制字节写入 templates.embeddings.f32。</td>
+</tr>
+</tbody></table>
+<h2>命令行阅读方法</h2>
+<pre><code class="language-bash">cd /Volumes/桌面/AI-camera
+python3 tools/build_template_db/validate_template_index.py \
+  tools/preprocessed/template_index.new_batch.student-tiny-cnn-v9-static-int8-onnx-512
+        
+</code></pre>
+<p>命令行不是黑魔法。第一行进入项目目录。第二行用 Python 运行一个脚本。反斜杠表示命令太长，换行继续写。最后一个参数是要校验的 index 目录。</p>
+<h2>本章自测</h2>
+<ol>
+<li>JSONL 和 JSON 的区别是什么？</li>
+<li>为什么 embedding 更适合写成 float32 二进制，而不是直接写在 JSON 里？</li>
+<li>728 条、512 维、float32 的 embeddings 文件理论大小是多少？</li>
+<li>路径 tools/preprocessed/... 是绝对路径还是相对路径？</li>
+</ol>
+<h1>第 3 章 Python 语法速成：读懂项目脚本的最低必备</h1>
+<p>你不需要先成为 Python 专家，但必须能读懂项目脚本里最常见的语法：import、函数、类型注解、Path、dict/list、for 循环、异常、with、dataclass。</p>
+<h2>import 和 from import</h2>
+<pre><code class="language-python">import json
+import struct
+from pathlib import Path
+from dataclasses import dataclass
+        
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>代码/语法</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>import json</td>
+<td>导入 Python 标准库 json，用来读写 JSON/JSONL。</td>
+</tr>
+<tr>
+<td>import struct</td>
+<td>导入 struct，用来把 float 列表打包成二进制。</td>
+</tr>
+<tr>
+<td>from pathlib import Path</td>
+<td>从 pathlib 模块导入 Path 类，用对象方式处理文件路径。</td>
+</tr>
+<tr>
+<td>from dataclasses import dataclass</td>
+<td>导入 dataclass，用来快速定义只存数据的小类。</td>
+</tr>
+</tbody></table>
+<h2>函数定义和类型注解</h2>
+<pre><code class="language-python">def load_jsonl(path: Path) -&gt; list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    with path.open(&quot;r&quot;, encoding=&quot;utf-8&quot;) as handle:
+        for line_number, line in enumerate(handle, 1):
+            if not line.strip():
+                continue
+            value = json.loads(line)
+            rows.append(value)
+    return rows
+        
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>代码/语法</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>def load_jsonl(...):</td>
+<td>def 定义函数。load_jsonl 是函数名。</td>
+</tr>
+<tr>
+<td>path: Path</td>
+<td>类型注解，表示参数 path 预期是 Path 对象。运行时不强制，但帮助读代码和 IDE 检查。</td>
+</tr>
+<tr>
+<td>-&gt; list[dict[str, Any]]</td>
+<td>返回值类型注解：返回一个列表，列表里每个元素是 dict。</td>
+</tr>
+<tr>
+<td>rows = []</td>
+<td>创建空列表，用来存解析出来的每一行。</td>
+</tr>
+<tr>
+<td>with path.open(&quot;r&quot;, encoding=&quot;utf-8&quot;) as handle:</td>
+<td>打开文件。with 能保证文件用完自动关闭。r 表示读取。</td>
+</tr>
+<tr>
+<td>enumerate(handle, 1)</td>
+<td>遍历文件每一行，同时拿到行号。1 表示行号从 1 开始。</td>
+</tr>
+<tr>
+<td>if not line.strip(): continue</td>
+<td>如果空行就跳过。strip 去掉空白字符。continue 进入下一轮循环。</td>
+</tr>
+<tr>
+<td>json.loads(line)</td>
+<td>把一行 JSON 字符串解析成 Python dict。</td>
+</tr>
+<tr>
+<td>rows.append(value)</td>
+<td>把解析结果加入列表末尾。</td>
+</tr>
+<tr>
+<td>return rows</td>
+<td>返回所有解析结果。</td>
+</tr>
+</tbody></table>
+<h2>dataclass</h2>
+<pre><code class="language-python">@dataclass(frozen=True)
+class TemplateVector:
+    key: int
+    record: dict[str, Any]
+    values: list[float]
+        
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>代码/语法</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>@dataclass(frozen=True)</td>
+<td>装饰器。让 Python 自动生成初始化函数等。frozen=True 表示创建后不允许修改，降低意外改数据的风险。</td>
+</tr>
+<tr>
+<td>class TemplateVector:</td>
+<td>定义一个类。这里它只是一个结构化容器。</td>
+</tr>
+<tr>
+<td>key: int</td>
+<td>模板在 index 里的数字 key。</td>
+</tr>
+<tr>
+<td>record: dict[str, Any]</td>
+<td>对应的 metadata 记录。</td>
+</tr>
+<tr>
+<td>values: list[float]</td>
+<td>这条模板的 embedding 数字列表。</td>
+</tr>
+</tbody></table>
+<h2>异常处理</h2>
+<pre><code class="language-python">try:
+    vectors = load_ready_vectors(args.metadata, args.dimension)
+except (OSError, ValueError, KeyError) as exc:
+    print(f&quot;error: {exc}&quot;, file=sys.stderr)
+    return 1
+        
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>代码/语法</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>try:</td>
+<td>尝试执行可能失败的代码。</td>
+</tr>
+<tr>
+<td>except (... ) as exc:</td>
+<td>如果发生指定类型错误，就进入 except。exc 是错误对象。</td>
+</tr>
+<tr>
+<td>OSError</td>
+<td>文件读写错误，例如文件不存在、权限问题。</td>
+</tr>
+<tr>
+<td>ValueError</td>
+<td>值不合法，例如维度不对、JSON 格式不对。</td>
+</tr>
+<tr>
+<td>KeyError</td>
+<td>dict 里缺少必需字段。</td>
+</tr>
+<tr>
+<td>file=sys.stderr</td>
+<td>把错误打印到标准错误流，便于命令行区分正常输出和错误。</td>
+</tr>
+<tr>
+<td>return 1</td>
+<td>命令返回码 1 表示失败。返回 0 才表示成功。</td>
+</tr>
+</tbody></table>
+<h2>本章自测</h2>
+<ol>
+<li>Path 对象解决的是什么问题？</li>
+<li>with open 和普通 open 相比有什么好处？</li>
+<li>类型注解会不会在运行时自动保证数据正确？</li>
+<li>return 1 在命令行脚本里通常表示成功还是失败？</li>
+</ol>
+<h1>第 4 章 图片、像素、tensor 和预处理</h1>
+<h2>图片在模型眼里是什么</h2>
+<p>人看到照片，会说这是人像、风景、食物。模型看到的是数字。RGB 图片可以理解为三张二维表：R 通道、G 通道、B 通道。每个像素每个通道通常是 0 到 255。</p>
+<p>v9 端侧模型要求输入是 [batch, 3, 224, 224] 的 float32 tensor。batch 是一次输入几张图，3 是 RGB 三个通道，224x224 是统一尺寸。</p>
+<h2>为什么必须做预处理</h2>
+<ul>
+<li>相机原图尺寸不固定，模型要求固定 224x224。</li>
+<li>Android 相机帧可能是 YUV，需要转 RGB。</li>
+<li>照片可能带 EXIF 方向，需要按 rotationDegrees 转正。</li>
+<li>模型训练时用的是 NCHW 和 [-1,1] 归一化，App 推理必须一致。</li>
+</ul>
+<h2>项目里的 ONNX 离线预处理代码</h2>
+<pre><code class="language-python">def load_tensor(record, image_size, base_dir, image_cache_dir):
+    photo_id = str(record.get(&quot;photo_id&quot;))
+    transform = transform_for_split(
+        image_size,
+        train=False,
+        pre_resized=image_cache_dir is not None,
+    )
+    image_path = resolve_path(str(record.get(&quot;source_path&quot;) or &quot;&quot;), base_dir)
+    with Image.open(image_path) as image:
+        image = ImageOps.exif_transpose(image).convert(&quot;RGB&quot;)
+        tensor = transform(image)
+    return tensor.numpy().astype(np.float32)
+        
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>代码/语法</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>photo_id = str(...)</td>
+<td>取照片 ID 并转成字符串，后续用于缓存路径和报错定位。</td>
+</tr>
+<tr>
+<td>transform_for_split(...)</td>
+<td>构造和训练/验证一致的图片变换：resize、转 tensor、归一化等。</td>
+</tr>
+<tr>
+<td>train=False</td>
+<td>推理阶段不做训练增强，保证结果稳定。</td>
+</tr>
+<tr>
+<td>pre_resized=...</td>
+<td>如果使用缓存图片，说明图片已经预先 resize 过，transform 会相应调整。</td>
+</tr>
+<tr>
+<td>resolve_path(...)</td>
+<td>把 metadata 里的相对路径解析成真实文件路径。</td>
+</tr>
+<tr>
+<td>Image.open(image_path)</td>
+<td>用 PIL 打开图片文件。</td>
+</tr>
+<tr>
+<td>ImageOps.exif_transpose(image)</td>
+<td>按图片 EXIF 方向自动转正，避免横竖颠倒。</td>
+</tr>
+<tr>
+<td>convert(&quot;RGB&quot;)</td>
+<td>统一转成 RGB 三通道。</td>
+</tr>
+<tr>
+<td>transform(image)</td>
+<td>执行 resize、转 tensor、归一化。</td>
+</tr>
+<tr>
+<td>tensor.numpy().astype(np.float32)</td>
+<td>把 PyTorch tensor 转成 numpy float32，ONNX Runtime 输入需要这种数组。</td>
+</tr>
+</tbody></table>
+<h2>Android 侧要一模一样</h2>
+<p>Android 侧的伪代码必须完成同样的事情：ImageProxy 按 rotationDegrees 转正，转 RGB，resize 到 224x224，写成 NCHW float32 buffer，再用公式 value = (rgb / 255.0 - 0.5) / 0.5 归一化。</p>
+<pre><code class="language-bash">ImageProxy
+  -&gt; rotationDegrees 转正
+  -&gt; YUV / Bitmap 转 RGB
+  -&gt; resize 224x224
+  -&gt; NCHW float32
+  -&gt; value = (rgb / 255.0 - 0.5) / 0.5
+  -&gt; ONNX Runtime 推理
+        
+</code></pre>
+<h2>常见致命错误</h2>
+<table>
+<thead>
+<tr>
+<th>错误</th>
+<th>后果</th>
+<th>如何验收</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>RGB/BGR 搞反</td>
+<td>颜色语义错，embedding 漂移</td>
+<td>用同一张测试图对比 Python 和 Android 输出 cosine</td>
+</tr>
+<tr>
+<td>NCHW/NHWC 搞反</td>
+<td>模型能跑但结果基本无意义</td>
+<td>检查输入 shape 和 buffer 写入顺序</td>
+</tr>
+<tr>
+<td>忘记转正</td>
+<td>竖图横读，人像/构图判断乱</td>
+<td>测试旋转、前后摄切换</td>
+</tr>
+<tr>
+<td>归一化公式不一致</td>
+<td>embedding 分布偏移</td>
+<td>输出 L2 norm 和离线 cosine 对比</td>
+</tr>
+<tr>
+<td>每帧推理</td>
+<td>卡顿、发热、耗电</td>
+<td>记录实际触发间隔和 preview FPS</td>
+</tr>
+</tbody></table>
+<h2>本章自测</h2>
+<ol>
+<li>v9 的输入 shape 为什么是 [1,3,224,224]？</li>
+<li>NCHW 中的 C 是什么？</li>
+<li>归一化公式把 0、128、255 大约变成什么？</li>
+<li>为什么同一张测试图要对比 Python ONNX 输出和 Android ONNX 输出？</li>
+</ol>
+<h1>第 5 章 embedding、L2 normalize、cosine、topK 和 margin</h1>
+<h2>embedding 的本质</h2>
+<p>embedding 是一组数字，表示图片在一个学习出来的语义空间里的位置。这个项目把当前画面和模板照片都变成 embedding，然后比较谁离谁更近。</p>
+<p>直接分类会把照片压成少数标签，例如 portrait 或 landscape；embedding 则保留了“像不像”的连续关系。两张都是 food_still_life 的照片，可能一个是俯拍居中，一个是侧光留白，它们的 embedding 仍然可以表达差异。</p>
+<h2>L2 normalize</h2>
+<pre><code class="language-python">def l2_normalize(values: np.ndarray) -&gt; np.ndarray:
+    norms = np.linalg.norm(values, axis=1, keepdims=True)
+    norms = np.maximum(norms, 1e-12)
+    return (values / norms).astype(np.float32)
+        
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>代码/语法</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>np.linalg.norm(values, axis=1)</td>
+<td>计算每个 embedding 的长度。axis=1 表示按每一行计算。</td>
+</tr>
+<tr>
+<td>keepdims=True</td>
+<td>保持二维形状，方便后面 values / norms 自动广播。</td>
+</tr>
+<tr>
+<td>np.maximum(norms, 1e-12)</td>
+<td>防止长度为 0 导致除以 0。1e-12 是很小的数。</td>
+</tr>
+<tr>
+<td>values / norms</td>
+<td>把每个向量除以自己的长度，使长度变成 1。</td>
+</tr>
+<tr>
+<td>astype(np.float32)</td>
+<td>转回 float32，和模型/index 文件格式一致。</td>
+</tr>
+</tbody></table>
+<h2>cosine similarity</h2>
+<p>cosine similarity 衡量两个向量方向是否接近。两个 embedding 都 L2 normalize 后，cosine similarity 就等于 dot product，也就是对应维度相乘后求和。</p>
+<pre><code class="language-python">def cosine(a: list[float], b: list[float]) -&gt; float:
+    return sum(left * right for left, right in zip(a, b))
+        
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>代码/语法</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>zip(a, b)</td>
+<td>把两个列表按位置配对，例如第 1 维和第 1 维配对。</td>
+</tr>
+<tr>
+<td>for left, right in ...</td>
+<td>依次取出每一对数。</td>
+</tr>
+<tr>
+<td>left * right</td>
+<td>对应维度相乘。</td>
+</tr>
+<tr>
+<td>sum(...)</td>
+<td>把所有维度的乘积加起来，得到 dot product。</td>
+</tr>
+<tr>
+<td>为什么没有除以长度</td>
+<td>因为前面已经 L2 normalize，长度都是 1。</td>
+</tr>
+</tbody></table>
+<h2>topK 和 margin</h2>
+<p>topK 是取相似度最高的 K 个候选。top1 是第一名，top5 是前五名。margin 是第一名和第二名相似度的差距。margin 很小时，说明模型不确定，App 不应该频繁切换模板。</p>
+<pre><code class="language-bash">当前帧 embedding q
+  -&gt; 与 728 条模板逐个算 cosine
+  -&gt; 排序
+  -&gt; top1 / top3 / top5
+  -&gt; 如果 top1-top2 margin &lt; 0.01，保持当前模板或要求连续稳定领先
+        
+</code></pre>
+<h2>为什么首版必须 top5 + 规则重排</h2>
+<p>v9 static int8 ONNX 的 top1 同场景是 88.87%，top5 同场景是 96.15%。这说明第一名偶尔会错，但正确场景经常在前五里。首版产品要利用 top5 的召回优势，再用 photo_type、scene_category、composition、lighting 和稳定策略做重排。</p>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>含义</th>
+<th>v9 static int8 ONNX</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>top1 同场景</td>
+<td>第一名是否和 query 同 scene_category</td>
+<td>88.87%</td>
+</tr>
+<tr>
+<td>top5 同场景</td>
+<td>前五名里是否至少有同 scene_category</td>
+<td>96.15%</td>
+</tr>
+<tr>
+<td>top5 同类型</td>
+<td>前五名里是否至少有同 photo_type</td>
+<td>98.21%</td>
+</tr>
+<tr>
+<td>低 margin</td>
+<td>top1/top2 差距小于 0.01 的查询数</td>
+<td>270</td>
+</tr>
+</tbody></table>
+<h2>本章自测</h2>
+<ol>
+<li>为什么 L2 normalize 后 cosine 可以用 dot product 计算？</li>
+<li>top5 同场景高于 top1 同场景说明什么？</li>
+<li>margin 小的时候，App 应该立刻切模板吗？为什么？</li>
+<li>为什么 embedding 比直接分类更适合摄影模板推荐？</li>
+</ol>
+<h1>第 6 章 metadata：模板说明书和 App 辅助线来源</h1>
+<p>v9 模型只输出 512 维 embedding，不输出辅助线坐标。App 最终画什么线，主要来自 templates.metadata.jsonl。你可以把 metadata 理解为“每张模板的摄影说明书”。</p>
+<h2>一条模板记录里最重要的字段</h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>template_id / photo_id</td>
+<td>唯一标识，用来追踪模板和问题样本</td>
+</tr>
+<tr>
+<td>photo_type</td>
+<td>大类：portrait、landscape、still_life</td>
+</tr>
+<tr>
+<td>scene_category</td>
+<td>更细场景：closeup_portrait、food_still_life 等</td>
+</tr>
+<tr>
+<td>annotation.composition.type</td>
+<td>构图类型，如 rule_of_thirds、centered_subject</td>
+</tr>
+<tr>
+<td>annotation.composition.subject_position</td>
+<td>主体位置建议</td>
+</tr>
+<tr>
+<td>annotation.composition.horizon_position</td>
+<td>地平线位置建议</td>
+</tr>
+<tr>
+<td>annotation.lighting.*</td>
+<td>光线质量、方向、对比、时间</td>
+</tr>
+<tr>
+<td>annotation.camera.*</td>
+<td>机位、距离、横竖构图</td>
+</tr>
+<tr>
+<td>embedding.dimension</td>
+<td>embedding 维度。v9 static int8 ONNX 必须是 512</td>
+</tr>
+<tr>
+<td>embedding.path</td>
+<td>这条模板 embedding.f32 的路径</td>
+</tr>
+</tbody></table>
+<h2>metadata 到 App 辅助线</h2>
+<table>
+<thead>
+<tr>
+<th>metadata 字段</th>
+<th>第一版 App 可以怎么用</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>composition.type = rule_of_thirds</td>
+<td>显示三分线和目标交点</td>
+</tr>
+<tr>
+<td>composition.type = centered_subject</td>
+<td>显示中心线/居中参考</td>
+</tr>
+<tr>
+<td>horizon_position = upper_third/lower_third</td>
+<td>显示水平参考线</td>
+</tr>
+<tr>
+<td>leading_lines = true</td>
+<td>提示用户寻找画面延伸线，不强行画几何线段</td>
+</tr>
+<tr>
+<td>negative_space = high</td>
+<td>提示保留留白区域</td>
+</tr>
+<tr>
+<td>visual_summary</td>
+<td>转成用户可读的一句话提示</td>
+</tr>
+</tbody></table>
+<h2>为什么 metadata 要严格校验</h2>
+<p>如果 metadata 顺序和 embedding 顺序不一致，index 找到的是 A 的 embedding，但 App 取到 B 的说明书，最终辅助线会错。如果 embedding.dimension 不对，检索空间不一致，分数没有意义。</p>
+<pre><code class="language-python">if index &lt; len(metadata) and metadata[index].get(&quot;template_id&quot;) != template_id:
+    errors.append(
+        f&quot;item {index}: key template_id {template_id} does not match metadata &quot;
+        f&quot;{metadata[index].get(&#39;template_id&#39;)}&quot;
+    )
+        
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>代码/语法</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>index &lt; len(metadata)</td>
+<td>避免 metadata 数量不足时访问越界。</td>
+</tr>
+<tr>
+<td>metadata[index].get(&quot;template_id&quot;)</td>
+<td>取同一位置 metadata 的 template_id。get 缺字段时返回 None，不直接崩。</td>
+</tr>
+<tr>
+<td>!= template_id</td>
+<td>比较 keys.json 里的 template_id 和 metadata 同位置 ID 是否一致。</td>
+</tr>
+<tr>
+<td>errors.append(...)</td>
+<td>发现错位就记录错误。validate 脚本最后会返回失败。</td>
+</tr>
+<tr>
+<td>f&quot;...{template_id}...&quot;</td>
+<td>f-string，把变量值插入错误消息，方便定位。</td>
+</tr>
+</tbody></table>
+<h2>本章自测</h2>
+<ol>
+<li>v9 模型是否直接输出辅助线？</li>
+<li>App 显示三分线主要依据哪个 metadata 字段？</li>
+<li>metadata 顺序和 embeddings 顺序错位会造成什么问题？</li>
+<li>为什么 embedding.dimension 是模型/index 同版本发布的关键字段？</li>
+</ol>
+<h1>第 7 章 teacher、student 和 distillation</h1>
+<h2>teacher 是什么</h2>
+<p>teacher 是大模型老师。本项目 teacher 是 google/siglip2-base-patch16-224。它质量高、语义理解强，但 base 模型太大，不适合作为 Android 首发实时端侧模型。teacher 在这里负责建立高质量 embedding 空间，作为离线质量上限和 student 学习目标。</p>
+<h2>student 是什么</h2>
+<p>student 是小模型学生。v9 student 是 tiny_cnn_v9_wide_topk_siglip2_512，参数量 223,680，输入 224px，输出 512 维。它要学习 teacher 判断照片相似性的方式，但要足够小、足够快，能在 Android ONNX Runtime Mobile 上跑。</p>
+<h2>distillation 是什么</h2>
+<p>蒸馏不是让 student 重新从零认识世界，而是让 student 模仿 teacher 的 embedding 和排序关系。摄影类比：老师看一堆照片，说哪些照片彼此相似、哪些是容易混淆的负样本；学生反复练习，学会在手机上给出接近老师的判断。</p>
+<h2>teacher embedding 生成代码</h2>
+<pre><code class="language-python">def normalize(values: list[float]) -&gt; list[float]:
+    magnitude = math.sqrt(sum(value * value for value in values))
+    if magnitude == 0.0:
+        raise ValueError(&quot;embedding magnitude is zero&quot;)
+    return [value / magnitude for value in values]
+        
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>代码/语法</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>values: list[float]</td>
+<td>输入是一组浮点数，也就是原始 embedding。</td>
+</tr>
+<tr>
+<td>sum(value * value for value in values)</td>
+<td>把每个维度平方后求和。</td>
+</tr>
+<tr>
+<td>math.sqrt(...)</td>
+<td>开平方，得到向量长度。</td>
+</tr>
+<tr>
+<td>if magnitude == 0.0</td>
+<td>防止全零 embedding。全零向量没有方向，不能算相似度。</td>
+</tr>
+<tr>
+<td>raise ValueError(...)</td>
+<td>主动报错，不允许静默写入坏 embedding。</td>
+</tr>
+<tr>
+<td>[value / magnitude for value in values]</td>
+<td>列表推导式，把每个维度除以长度，得到 L2 normalized embedding。</td>
+</tr>
+</tbody></table>
+<h2>为什么 teacher 是 768 维，student 是 512 维</h2>
+<p>SigLIP2 teacher 输出 768 维。本项目为了端侧体积和速度，把 student 输出设成 512 维。训练时会把 teacher 目标投影到 student 维度，让 student 学习一个更小的近似空间。维度改变后必须重建 index，不能把 768 维 teacher index 和 512 维 student 模型混用。</p>
+<h2>v9 为什么当前最好</h2>
+<table>
+<thead>
+<tr>
+<th>版本</th>
+<th>top5 同场景</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>SigLIP2 teacher</td>
+<td>97.53%</td>
+<td>离线上限</td>
+</tr>
+<tr>
+<td>student v5</td>
+<td>94.37%</td>
+<td>低于 95% 门槛，被 v9 替代</td>
+</tr>
+<tr>
+<td>student v6</td>
+<td>93.96%</td>
+<td>test cosine 接近，但真实检索较低</td>
+</tr>
+<tr>
+<td>student v8</td>
+<td>94.23%</td>
+<td>低 margin 改善，但召回未提升</td>
+</tr>
+<tr>
+<td>student v9</td>
+<td>96.57%</td>
+<td>当前最佳 FP32 student</td>
+</tr>
+<tr>
+<td>student v9 static int8 ONNX</td>
+<td>96.15%</td>
+<td>Android 首发 runtime 候选</td>
+</tr>
+</tbody></table>
+<h2>本章自测</h2>
+<ol>
+<li>teacher 在本项目里是 Android 端侧模型吗？</li>
+<li>student 为什么不能直接用 768 维 teacher index？</li>
+<li>蒸馏要学生学习老师的哪两类东西：单张 embedding 还是排序关系？</li>
+<li>为什么 v6 test cosine 接近 v9，但仍然不是最佳首发候选？</li>
+</ol>
+<h1>第 8 章 v9 student 模型结构逐句讲解</h1>
+<p>本章对应 tools/build_template_db/student_embedding_model.py。你要先读懂模型由哪些层组成，再理解为什么它适合端侧：小 CNN、depthwise separable block、stride 降采样、全局池化、Linear 输出、L2 normalize。</p>
+<h2>配置对象</h2>
+<pre><code class="language-python">@dataclass(frozen=True)
+class StudentModelConfig:
+    architecture: str = &quot;tiny_cnn_v1&quot;
+    output_dim: int = 256
+    image_size: int = 160
+    width_mult: float = 0.75
+    dropout: float = 0.1
+        
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>代码/语法</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>@dataclass(frozen=True)</td>
+<td>自动生成初始化函数，并禁止后续修改配置，减少实验记录被改乱。</td>
+</tr>
+<tr>
+<td>class StudentModelConfig:</td>
+<td>定义模型配置类。</td>
+</tr>
+<tr>
+<td>architecture: str = &quot;tiny_cnn_v1&quot;</td>
+<td>模型架构名称。v9 使用 tiny_cnn_v1。</td>
+</tr>
+<tr>
+<td>output_dim: int = 256</td>
+<td>默认输出维度。v9 训练时覆盖为 512。</td>
+</tr>
+<tr>
+<td>image_size: int = 160</td>
+<td>默认输入尺寸。v9 覆盖为 224。</td>
+</tr>
+<tr>
+<td>width_mult: float = 0.75</td>
+<td>宽度倍率。越大通道数越多，模型容量和计算量越高。v9 是 1.5。</td>
+</tr>
+<tr>
+<td>dropout: float = 0.1</td>
+<td>训练时随机丢弃部分特征，降低过拟合。</td>
+</tr>
+</tbody></table>
+<h2>通道数缩放</h2>
+<pre><code class="language-python">def scaled(value: int, width_mult: float) -&gt; int:
+    return max(8, int(round(value * width_mult / 8.0) * 8))
+        
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>代码/语法</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>value * width_mult</td>
+<td>按宽度倍率放大或缩小通道数。</td>
+</tr>
+<tr>
+<td>/ 8.0</td>
+<td>准备把通道数对齐到 8 的倍数。移动端计算通常喜欢这种对齐。</td>
+</tr>
+<tr>
+<td>round(...)</td>
+<td>四舍五入到最近整数。</td>
+</tr>
+<tr>
+<td>* 8</td>
+<td>乘回去，得到 8 的倍数。</td>
+</tr>
+<tr>
+<td>int(...)</td>
+<td>转成整数通道数。</td>
+</tr>
+<tr>
+<td>max(8, ...)</td>
+<td>至少保留 8 个通道，避免模型太窄。</td>
+</tr>
+</tbody></table>
+<h2>基础卷积块</h2>
+<pre><code class="language-python">class ConvBnAct(nn.Sequential):
+    def __init__(self, in_channels: int, out_channels: int, stride: int) -&gt; None:
+        super().__init__(
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.Hardswish(inplace=True),
+        )
+        
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>代码/语法</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>class ConvBnAct(nn.Sequential):</td>
+<td>定义一个顺序模块。输入会依次经过 Conv2d、BatchNorm、Hardswish。</td>
+</tr>
+<tr>
+<td>def <strong>init</strong>(...)</td>
+<td>构造函数，创建模块时运行。</td>
+</tr>
+<tr>
+<td>in_channels</td>
+<td>输入通道数。第一层输入 RGB，所以是 3。</td>
+</tr>
+<tr>
+<td>out_channels</td>
+<td>输出通道数。通道越多，模型能表达的视觉特征越多。</td>
+</tr>
+<tr>
+<td>stride</td>
+<td>滑动步长。stride=2 会让特征图宽高减半。</td>
+</tr>
+<tr>
+<td>super().<strong>init</strong>(...)</td>
+<td>调用父类 nn.Sequential 的构造函数，把子层按顺序注册进去。</td>
+</tr>
+<tr>
+<td>nn.Conv2d(...)</td>
+<td>二维卷积层，用小窗口提取局部视觉模式。</td>
+</tr>
+<tr>
+<td>kernel_size=3</td>
+<td>卷积核是 3x3。</td>
+</tr>
+<tr>
+<td>padding=1</td>
+<td>边缘补 1 圈，使 stride=1 时宽高不变。</td>
+</tr>
+<tr>
+<td>bias=False</td>
+<td>卷积不使用 bias，因为后面 BatchNorm 已经有偏置能力。</td>
+</tr>
+<tr>
+<td>nn.BatchNorm2d(out_channels)</td>
+<td>对每个通道做归一化，让训练更稳定。</td>
+</tr>
+<tr>
+<td>nn.Hardswish(inplace=True)</td>
+<td>激活函数，引入非线性。inplace=True 表示尽量原地计算，省内存。</td>
+</tr>
+</tbody></table>
+<h2>DepthwiseSeparableBlock</h2>
+<pre><code class="language-python">self.block = nn.Sequential(
+    nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=stride,
+              padding=1, groups=in_channels, bias=False),
+    nn.BatchNorm2d(in_channels),
+    nn.Hardswish(inplace=True),
+    nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False),
+    nn.BatchNorm2d(out_channels),
+    nn.Hardswish(inplace=True),
+)
+self.use_residual = stride == 1 and in_channels == out_channels
+        
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>代码/语法</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>groups=in_channels</td>
+<td>关键点。每个输入通道单独卷积，这就是 depthwise convolution，计算量小。</td>
+</tr>
+<tr>
+<td>kernel_size=1</td>
+<td>1x1 卷积，用来混合通道信息，也叫 pointwise convolution。</td>
+</tr>
+<tr>
+<td>self.use_residual = ...</td>
+<td>只有输入输出形状一致时才允许残差连接。</td>
+</tr>
+<tr>
+<td>stride == 1</td>
+<td>stride=1 才不会改变宽高。</td>
+</tr>
+<tr>
+<td>in_channels == out_channels</td>
+<td>通道数也必须一致，否则 inputs 和 output 不能相加。</td>
+</tr>
+</tbody></table>
+<h2>forward：真正的数据流</h2>
+<pre><code class="language-python">def forward(self, inputs: torch.Tensor) -&gt; torch.Tensor:
+    output = self.head(self.features(inputs))
+    return F.normalize(output, p=2, dim=1)
+        
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>代码/语法</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>def forward(...)</td>
+<td>PyTorch 模型的前向计算函数。调用 model(images) 时实际执行它。</td>
+</tr>
+<tr>
+<td>inputs: torch.Tensor</td>
+<td>输入是 tensor，v9 期望 [batch,3,224,224]。</td>
+</tr>
+<tr>
+<td>self.features(inputs)</td>
+<td>通过卷积特征提取网络，得到高层视觉特征。</td>
+</tr>
+<tr>
+<td>self.head(...)</td>
+<td>Flatten、Dropout、Linear，把视觉特征压成 output_dim 维。v9 是 512。</td>
+</tr>
+<tr>
+<td>F.normalize(..., p=2, dim=1)</td>
+<td>对每个样本的 512 维向量做 L2 normalize。dim=1 表示沿 embedding 维度归一化。</td>
+</tr>
+</tbody></table>
+<h2>为什么这个模型适合 Android</h2>
+<ul>
+<li>输入只有 224x224，比大图计算少。</li>
+<li>使用 depthwise separable block，减少卷积计算。</li>
+<li>逐步 stride=2 降采样，快速缩小空间尺寸。</li>
+<li>最终输出 512 维 embedding，不做复杂检测头。</li>
+<li>static int8 ONNX 后约 301,677 bytes，小于 5MB 预算。</li>
+</ul>
+<h2>本章自测</h2>
+<ol>
+<li>width_mult 会影响什么？</li>
+<li>groups=in_channels 为什么能减少计算？</li>
+<li>残差连接为什么要求 stride=1 且通道数相同？</li>
+<li>forward 最后一行为什么要 normalize？</li>
+</ol>
+<h1>第 9 章 蒸馏训练损失：cosine、relation、listwise、hard negative</h1>
+<p>本章对应 tools/build_template_db/train_student_embedding.py。训练不是只让 student 的单张 embedding 接近 teacher，还要让 student 学会 teacher 对一批照片的相似关系和排序习惯。</p>
+<h2>cosine_loss：单张图片对齐</h2>
+<pre><code class="language-python">def cosine_loss(prediction: torch.Tensor, target: torch.Tensor) -&gt; torch.Tensor:
+    prediction = F.normalize(prediction, p=2, dim=1)
+    target = F.normalize(target, p=2, dim=1)
+    return 1.0 - F.cosine_similarity(prediction, target, dim=1).mean()
+        
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>代码/语法</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>prediction</td>
+<td>student 对图片输出的 embedding。</td>
+</tr>
+<tr>
+<td>target</td>
+<td>teacher 目标 embedding，已投影到 student 维度。</td>
+</tr>
+<tr>
+<td>F.normalize(...)</td>
+<td>保险起见再次归一化，确保比较的是方向。</td>
+</tr>
+<tr>
+<td>F.cosine_similarity(..., dim=1)</td>
+<td>逐张图片计算 student 和 teacher 的 cosine。</td>
+</tr>
+<tr>
+<td>.mean()</td>
+<td>对 batch 里的所有样本求平均。</td>
+</tr>
+<tr>
+<td>1.0 - cosine</td>
+<td>相似度越高 loss 越低。cosine=1 时 loss=0。</td>
+</tr>
+</tbody></table>
+<h2>relation_loss：一批图片关系对齐</h2>
+<pre><code class="language-python">def relation_loss(prediction: torch.Tensor, target: torch.Tensor) -&gt; torch.Tensor:
+    if prediction.shape[0] &lt; 2:
+        return prediction.new_tensor(0.0)
+    prediction = F.normalize(prediction, p=2, dim=1)
+    target = F.normalize(target, p=2, dim=1)
+    return F.mse_loss(prediction @ prediction.T, target @ target.T)
+        
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>代码/语法</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>prediction.shape[0] &lt; 2</td>
+<td>batch 少于 2 张时，没有样本之间的关系可比较。</td>
+</tr>
+<tr>
+<td>prediction.new_tensor(0.0)</td>
+<td>创建和 prediction 同设备/同 dtype 的 0，避免 CPU/GPU/MPS 设备不一致。</td>
+</tr>
+<tr>
+<td>prediction @ prediction.T</td>
+<td>@ 是矩阵乘法。这里得到 student batch 内两两相似度矩阵。</td>
+</tr>
+<tr>
+<td>target @ target.T</td>
+<td>得到 teacher 目标的两两相似度矩阵。</td>
+</tr>
+<tr>
+<td>F.mse_loss(...)</td>
+<td>让 student 的关系矩阵接近 teacher 的关系矩阵。</td>
+</tr>
+</tbody></table>
+<h2>teacher_topk_listwise_loss：学习老师的 topK 排序</h2>
+<pre><code class="language-python">teacher_scores = reference_teacher.index_select(0, sample_indices) @ reference_teacher.T
+teacher_scores[row_indices, sample_indices] = torch.finfo(teacher_scores.dtype).min
+top_teacher_scores, top_indices = torch.topk(teacher_scores, k=effective_top_k, dim=1)
+student_scores = prediction @ reference_targets.T
+top_student_scores = student_scores.gather(1, top_indices)
+teacher_probs = F.softmax(top_teacher_scores / teacher_temperature, dim=1).detach()
+student_log_probs = F.log_softmax(top_student_scores / student_temperature, dim=1)
+return F.kl_div(student_log_probs, teacher_probs, reduction=&quot;batchmean&quot;)
+        
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>代码/语法</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>reference_teacher</td>
+<td>全训练集的 teacher embedding 银行。</td>
+</tr>
+<tr>
+<td>index_select(0, sample_indices)</td>
+<td>取出当前 batch 样本对应的 teacher embedding。</td>
+</tr>
+<tr>
+<td>@ reference_teacher.T</td>
+<td>计算当前样本与全库样本的 teacher 相似度。</td>
+</tr>
+<tr>
+<td>teacher_scores[row_indices, sample_indices] = min</td>
+<td>把自己和自己的相似度排除，否则 top1 永远是自己。</td>
+</tr>
+<tr>
+<td>torch.topk(...)</td>
+<td>取老师认为最相似的 topK 候选。v9 teacher_top_k=12。</td>
+</tr>
+<tr>
+<td>student_scores = prediction @ reference_targets.T</td>
+<td>计算 student 对全库目标的相似度。</td>
+</tr>
+<tr>
+<td>gather(1, top_indices)</td>
+<td>只取老师 topK 那些位置上的 student 分数。</td>
+</tr>
+<tr>
+<td>softmax(... / temperature)</td>
+<td>把分数变成概率分布。temperature 控制分布尖锐程度。</td>
+</tr>
+<tr>
+<td>.detach()</td>
+<td>老师概率不参与反向传播，只作为目标。</td>
+</tr>
+<tr>
+<td>F.kl_div(...)</td>
+<td>让 student 的 topK 排序分布接近 teacher。</td>
+</tr>
+</tbody></table>
+<h2>hard_negative_margin_loss：处理难负样本</h2>
+<p>hard negative 是看起来很像但不应该排在正样本前面的照片。例如同是静物，食物和生活物件可能构图很像；同是风景，自然和城市也可能相似。hard negative loss 要求正样本分数至少比难负样本高出 margin。</p>
+<pre><code class="language-python">positive_mask = reference_bank.scene_labels == anchor_scene
+positive_mask[anchor_index] = False
+negative_mask = reference_bank.scene_labels != anchor_scene
+if same_photo_type_only:
+    negative_mask = negative_mask &amp; (reference_bank.photo_type_labels == anchor_photo_type)
+positive_indices = torch.nonzero(positive_mask, as_tuple=False).flatten()
+negative_indices = torch.nonzero(negative_mask, as_tuple=False).flatten()
+losses.append(F.relu(margin - positive_scores[:, None] + negative_scores[None, :]).mean())
+        
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>代码/语法</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>positive_mask</td>
+<td>同 scene_category 的样本是正样本候选。</td>
+</tr>
+<tr>
+<td>positive_mask[anchor_index] = False</td>
+<td>把自己排除，不拿自己当正样本。</td>
+</tr>
+<tr>
+<td>negative_mask</td>
+<td>不同 scene_category 的样本是负样本候选。</td>
+</tr>
+<tr>
+<td>same_photo_type_only</td>
+<td>v9 使用同 photo_type 内的 hard negative，更聚焦容易混淆的样本。</td>
+</tr>
+<tr>
+<td>torch.nonzero(...).flatten()</td>
+<td>把 mask 中为 True 的位置转成一维 index 列表。</td>
+</tr>
+<tr>
+<td>positive_scores[:, None]</td>
+<td>给正样本分数增加一个维度，用于和所有负样本两两比较。</td>
+</tr>
+<tr>
+<td>negative_scores[None, :]</td>
+<td>给负样本分数增加一个维度。</td>
+</tr>
+<tr>
+<td>margin - positive + negative</td>
+<td>如果 negative 太高或 positive 不够高，就产生正损失。</td>
+</tr>
+<tr>
+<td>F.relu(...)</td>
+<td>小于 0 的部分变 0，表示已经满足 margin 不再惩罚。</td>
+</tr>
+</tbody></table>
+<h2>v9 的损失权重</h2>
+<table>
+<thead>
+<tr>
+<th>损失项</th>
+<th>权重</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>embedding</td>
+<td>1.0</td>
+<td>单张 student embedding 对齐 teacher 目标</td>
+</tr>
+<tr>
+<td>relation</td>
+<td>0.35</td>
+<td>batch 内相似关系对齐</td>
+</tr>
+<tr>
+<td>listwise</td>
+<td>0.06</td>
+<td>学习 teacher topK 排序</td>
+</tr>
+<tr>
+<td>hard_negative</td>
+<td>0.04</td>
+<td>拉开难负样本</td>
+</tr>
+<tr>
+<td>photo_type</td>
+<td>0.08</td>
+<td>辅助学习大类</td>
+</tr>
+<tr>
+<td>scene</td>
+<td>0.16</td>
+<td>辅助学习细场景</td>
+</tr>
+</tbody></table>
+<h2>本章自测</h2>
+<ol>
+<li>cosine_loss 主要对齐什么？</li>
+<li>relation_loss 为什么需要 batch 至少 2 张？</li>
+<li>listwise loss 学的是单个 embedding 还是 topK 排序分布？</li>
+<li>hard negative 为什么对 v10 继续提升重要？</li>
+</ol>
+<h1>第 10 章 template index：落盘、校验和检索</h1>
+<p>模型只负责把图片变成 embedding。真正推荐模板，需要把所有模板 embedding 做成 index。当前 v9 static int8 ONNX 候选 index 目录是 tools/preprocessed/template_index.new_batch.student-tiny-cnn-v9-static-int8-onnx-512/。</p>
+<h2>index 目录文件</h2>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>templates.embeddings.f32</td>
+<td>728 条 512 维 float32 embedding 二进制矩阵</td>
+</tr>
+<tr>
+<td>templates.keys.json</td>
+<td>数字 key 与 template_id/photo_type/scene_category 的映射</td>
+</tr>
+<tr>
+<td>templates.metadata.jsonl</td>
+<td>App 可用模板元数据</td>
+</tr>
+<tr>
+<td>templates.usearch.idx</td>
+<td>USearch 原型索引</td>
+</tr>
+<tr>
+<td>templates.usearch.json</td>
+<td>USearch manifest，记录 count、dimension、metric</td>
+</tr>
+<tr>
+<td>templates.quality_report.md/json</td>
+<td>质量评估报告</td>
+</tr>
+</tbody></table>
+<h2>构建 index 的核心代码</h2>
+<pre><code class="language-python">def load_ready_vectors(metadata_path: Path, expected_dimension: int = 256) -&gt; list[TemplateVector]:
+    vectors: list[TemplateVector] = []
+    seen_template_ids: set[str] = set()
+    for line_number, record in enumerate(load_jsonl(metadata_path), 1):
+        core_errors = validate_template_metadata.validate_core(record)
+        if core_errors:
+            raise ValueError(f&quot;line {line_number}: {&#39;; &#39;.join(core_errors)}&quot;)
+        template_id = record[&quot;template_id&quot;]
+        if template_id in seen_template_ids:
+            raise ValueError(f&quot;line {line_number}: duplicate template_id: {template_id}&quot;)
+        seen_template_ids.add(template_id)
+        
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>代码/语法</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>expected_dimension: int = 256</td>
+<td>默认维度是旧原型 256。构建 v9 index 时必须传 --dimension 512。</td>
+</tr>
+<tr>
+<td>vectors = []</td>
+<td>准备收集所有 ready embedding。</td>
+</tr>
+<tr>
+<td>seen_template_ids = set()</td>
+<td>用集合记录见过的 template_id，防止重复。</td>
+</tr>
+<tr>
+<td>enumerate(..., 1)</td>
+<td>逐行读取 metadata，并从 1 开始计行号，报错更友好。</td>
+</tr>
+<tr>
+<td>validate_core(record)</td>
+<td>校验 metadata 核心字段。</td>
+</tr>
+<tr>
+<td>if core_errors: raise ValueError</td>
+<td>只要核心字段有错就停止构建，避免坏 index。</td>
+</tr>
+<tr>
+<td>record[&quot;template_id&quot;]</td>
+<td>强制取字段，缺字段会 KeyError，说明 metadata 不合格。</td>
+</tr>
+<tr>
+<td>template_id in seen_template_ids</td>
+<td>检查重复模板 ID。</td>
+</tr>
+<tr>
+<td>seen_template_ids.add(template_id)</td>
+<td>通过检查后加入集合。</td>
+</tr>
+</tbody></table>
+<h2>维度和 embedding ready 校验</h2>
+<pre><code class="language-python">embedding = record[&quot;embedding&quot;]
+if embedding.get(&quot;status&quot;) != &quot;ready&quot;:
+    raise ValueError(f&quot;line {line_number}: embedding for {template_id} is not ready&quot;)
+if embedding.get(&quot;dimension&quot;) != expected_dimension:
+    raise ValueError(
+        f&quot;line {line_number}: expected embedding dimension {expected_dimension}, &quot;
+        f&quot;got {embedding.get(&#39;dimension&#39;)}&quot;
+    )
+        
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>代码/语法</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>embedding.get(&quot;status&quot;) != &quot;ready&quot;</td>
+<td>没有 ready 的 embedding 不能进入 index。</td>
+</tr>
+<tr>
+<td>embedding.get(&quot;dimension&quot;) != expected_dimension</td>
+<td>维度必须严格匹配。v9 static int8 ONNX 是 512。</td>
+</tr>
+<tr>
+<td>raise ValueError(...)</td>
+<td>发现错误立刻失败，不允许自动修。</td>
+</tr>
+<tr>
+<td>为什么严格</td>
+<td>维度不同的向量无法做有效 dot product，混用会让推荐结果没有意义。</td>
+</tr>
+</tbody></table>
+<h2>validate index 的底层检查</h2>
+<pre><code class="language-python">payload = path.read_bytes()
+expected_bytes = count * dimension * 4
+if len(payload) != expected_bytes:
+    raise ValueError(
+        f&quot;{path} expected {expected_bytes} bytes for {count}x{dimension} f32, got {len(payload)}&quot;
+    )
+values = struct.unpack(f&quot;&lt;{count * dimension}f&quot;, payload)
+        
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>代码/语法</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>path.read_bytes()</td>
+<td>一次性读取二进制 embeddings 文件。</td>
+</tr>
+<tr>
+<td>count * dimension * 4</td>
+<td>理论字节数。float32 每个数 4 字节。</td>
+</tr>
+<tr>
+<td>len(payload) != expected_bytes</td>
+<td>文件大小不对，说明 count、dimension 或文件内容有问题。</td>
+</tr>
+<tr>
+<td>struct.unpack(...)</td>
+<td>把二进制字节还原成 Python 浮点数。</td>
+</tr>
+<tr>
+<td>f&quot;&lt;{count * dimension}f&quot;</td>
+<td>小端字节序，读取 count*dimension 个 float32。</td>
+</tr>
+</tbody></table>
+<h2>USearch 和 exact fallback</h2>
+<p>USearch/ANN 是为了快速近邻检索。现在 C++ 端已有 exact dot-product fallback，意思是即使 USearch backend 未生产接入，也可以用逐个比较的方式验证功能。728 条模板很小，exact fallback 在原型阶段足够验证正确性；未来模板库变大后才更依赖 ANN 性能。</p>
+<h2>本章自测</h2>
+<ol>
+<li>为什么构建 v9 index 必须传 dimension=512？</li>
+<li>templates.keys.json 和 templates.metadata.jsonl 顺序为什么必须一致？</li>
+<li>float32 为什么乘 4 字节？</li>
+<li>ANN 和 exact fallback 的区别是什么？</li>
+</ol>
+<h1>第 11 章 质量评估：怎么看 top1、top5、同场景、同类型和问题样本</h1>
+<p>训练指标只是模型学习情况的一部分。这个产品真正关心的是检索质量：当前画面能不能在模板库里找回合适模板。你要会读 quality_report，而不是只看 loss 降没降。</p>
+<h2>核心指标解释</h2>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>零基础解释</th>
+<th>产品含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>top1 同场景</td>
+<td>第一名是否和查询照片 scene_category 一样</td>
+<td>直接用 top1 时的可靠度</td>
+</tr>
+<tr>
+<td>top5 同场景</td>
+<td>前五名里是否至少有一个同场景</td>
+<td>top5 + rerank 的召回基础</td>
+</tr>
+<tr>
+<td>同类型</td>
+<td>photo_type 是否一致</td>
+<td>避免人像推荐风景、食物推荐人像</td>
+</tr>
+<tr>
+<td>构图匹配</td>
+<td>composition 字段是否相近</td>
+<td>辅助线是否适合当前画面</td>
+</tr>
+<tr>
+<td>光线匹配</td>
+<td>lighting 字段是否相近</td>
+<td>提示是否符合光照状态</td>
+</tr>
+<tr>
+<td>低 margin</td>
+<td>top1/top2 分数差很小</td>
+<td>推荐不稳定，需要稳定策略</td>
+</tr>
+</tbody></table>
+<h2>v9 static int8 ONNX 当前质量</h2>
+<table>
+<thead>
+<tr>
+<th>topK</th>
+<th>同 photo_type</th>
+<th>同 scene_category</th>
+<th>构图命中</th>
+<th>光线命中</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>top1</td>
+<td>95.33%</td>
+<td>88.87%</td>
+<td>94.64%</td>
+<td>89.01%</td>
+</tr>
+<tr>
+<td>top3</td>
+<td>97.53%</td>
+<td>94.78%</td>
+<td>98.21%</td>
+<td>94.64%</td>
+</tr>
+<tr>
+<td>top5</td>
+<td>98.21%</td>
+<td>96.15%</td>
+<td>98.90%</td>
+<td>96.57%</td>
+</tr>
+</tbody></table>
+<h2>怎么解释这些数据</h2>
+<ul>
+<li>top1 同场景 88.87% 不够支撑直接取第一名做最终推荐。</li>
+<li>top5 同场景 96.15% 说明正确候选通常在前五里，所以要 top5 + 规则重排。</li>
+<li>top5 同类型 98.21% 较高，但仍有跨 photo_type top1，需要 App 做 photo_type 过滤或加减分。</li>
+<li>低 margin 数 270 说明很多查询第一第二名很接近，需要连续稳定领先才切模板。</li>
+</ul>
+<h2>质量报告里的问题样本</h2>
+<p>问题样本不是失败羞耻表，而是下一轮训练素材和规则重排的方向。比如 plant_still_life 当前 template candidates 只有 5 条，urban_landscape 只有 29 条，这些弱类别需要继续补素材。</p>
+<h2>上线判断</h2>
+<table>
+<thead>
+<tr>
+<th>条件</th>
+<th>v9 当前情况</th>
+<th>判断</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>离线 top5 同场景 &gt;= 95%</td>
+<td>96.15% static int8 ONNX</td>
+<td>满足首发候选门槛</td>
+</tr>
+<tr>
+<td>模型大小 &lt;= 5MB</td>
+<td>301,677 bytes</td>
+<td>满足</td>
+</tr>
+<tr>
+<td>Android 真机 p50/p90</td>
+<td>仓库无真机数据</td>
+<td>必须 App 接入后实测</td>
+</tr>
+<tr>
+<td>连续预览稳定</td>
+<td>仓库无法验证</td>
+<td>必须 10-30 分钟真机跑</td>
+</tr>
+<tr>
+<td>正式库合并</td>
+<td>new_batch 尚未合并 visual-clean</td>
+<td>先灰度，达标后再决定</td>
+</tr>
+</tbody></table>
+<h2>本章自测</h2>
+<ol>
+<li>为什么 v9 top5 同场景达标，但不能只用 top1？</li>
+<li>低 margin 对 App 交互有什么影响？</li>
+<li>问题样本应该用于责怪模型，还是用于指导下一轮数据和训练？</li>
+<li>上线判断为什么同时需要离线质量和真机性能？</li>
+</ol>
+<h1>第 12 章 导出和量化：TorchScript、ONNX、dynamic int8、static int8</h1>
+<h2>从 checkpoint 到端侧包</h2>
+<pre><code class="language-bash">checkpoint.best.pt
+  -&gt; student_model.fp32.torchscript.pt
+  -&gt; student_model.dynamic_int8.torchscript.pt
+  -&gt; student_model.fp32.onnx
+  -&gt; student_model.static_int8.onnx
+  -&gt; android_onnx_runtime_manifest.json
+  -&gt; android_runtime_config.json
+        
+</code></pre>
+<h2>为什么 dynamic int8 TorchScript 不是 Android 商用量化包</h2>
+<p>export_student_model.py 里的 dynamic int8 只量化 Linear 层，卷积仍是 FP32；而 v9 模型的大量计算在卷积里。它适合作为 PyTorch 原型产物，不等于 Android 商用量化包。Android 首发选择 ONNX Runtime Mobile 的 static int8 ONNX，因为它静态校准并量化 Conv、Gemm、MatMul。</p>
+<h2>ONNX 导出代码</h2>
+<pre><code class="language-python">torch.onnx.export(
+    model=model,
+    args=dummy,
+    f=str(onnx_path),
+    input_names=[&quot;image&quot;],
+    output_names=[&quot;embedding&quot;],
+    dynamic_axes={
+        &quot;image&quot;: {0: &quot;batch&quot;},
+        &quot;embedding&quot;: {0: &quot;batch&quot;},
+    },
+    opset_version=17,
+)
+        
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>代码/语法</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>model=model</td>
+<td>要导出的 PyTorch 模型。</td>
+</tr>
+<tr>
+<td>args=dummy</td>
+<td>示例输入 tensor，用来追踪模型计算图。dummy shape 是 [1,3,224,224]。</td>
+</tr>
+<tr>
+<td>f=str(onnx_path)</td>
+<td>输出 ONNX 文件路径。</td>
+</tr>
+<tr>
+<td>input_names=[&quot;image&quot;]</td>
+<td>给输入 tensor 命名，Android 侧 session.run 要用这个名字。</td>
+</tr>
+<tr>
+<td>output_names=[&quot;embedding&quot;]</td>
+<td>给输出 tensor 命名。</td>
+</tr>
+<tr>
+<td>dynamic_axes</td>
+<td>允许 batch 维动态变化，单张或多张都可推理。</td>
+</tr>
+<tr>
+<td>opset_version=17</td>
+<td>ONNX 算子集版本。Android runtime 版本要能支持。</td>
+</tr>
+</tbody></table>
+<h2>static int8 量化代码</h2>
+<pre><code class="language-python">quantize_static(
+    model_input=str(onnx_model),
+    model_output=str(output_model),
+    calibration_data_reader=calibration_reader,
+    quant_format=QuantFormat.QDQ,
+    activation_type=QuantType.QUInt8,
+    weight_type=QuantType.QInt8,
+    per_channel=True,
+    calibrate_method=CalibrationMethod.MinMax,
+    op_types_to_quantize=[&quot;Conv&quot;, &quot;Gemm&quot;, &quot;MatMul&quot;],
+)
+        
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>代码/语法</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>quantize_static</td>
+<td>ONNX Runtime 的静态量化函数。需要真实校准数据。</td>
+</tr>
+<tr>
+<td>model_input</td>
+<td>FP32 ONNX 输入模型。</td>
+</tr>
+<tr>
+<td>model_output</td>
+<td>量化后 int8 ONNX 输出模型。</td>
+</tr>
+<tr>
+<td>calibration_data_reader</td>
+<td>提供真实图片 batch，用来统计激活范围。</td>
+</tr>
+<tr>
+<td>QuantFormat.QDQ</td>
+<td>量化格式，用 Quantize/DeQuantize 节点表达 int8 计算。</td>
+</tr>
+<tr>
+<td>activation_type=QUInt8</td>
+<td>激活值用无符号 int8。</td>
+</tr>
+<tr>
+<td>weight_type=QInt8</td>
+<td>权重用有符号 int8。</td>
+</tr>
+<tr>
+<td>per_channel=True</td>
+<td>按通道量化权重，通常精度更好。</td>
+</tr>
+<tr>
+<td>CalibrationMethod.MinMax</td>
+<td>用校准数据的最小最大值估计量化范围。</td>
+</tr>
+<tr>
+<td>[&quot;Conv&quot;,&quot;Gemm&quot;,&quot;MatMul&quot;]</td>
+<td>量化卷积、全连接/矩阵乘等主要计算算子。</td>
+</tr>
+</tbody></table>
+<h2>量化后必须重新评估</h2>
+<p>量化会改变模型数值。不能只看文件变小。必须用量化模型重新生成 template embedding、重建 index、跑 quality_report。本项目 v9 FP32 top5 同场景 96.57%，static int8 ONNX top5 同场景 96.15%，下降可接受，所以可作为 Android 首发候选。</p>
+<h2>本章自测</h2>
+<ol>
+<li>TorchScript 和 ONNX 都是模型格式，它们的 Android 首发地位一样吗？</li>
+<li>dynamic int8 为什么不等于完整商用量化包？</li>
+<li>static int8 为什么需要 calibration data？</li>
+<li>量化后为什么要重新生成 embedding 和 index？</li>
+</ol>
+<h1>第 13 章 Android 接入：你不写 App，也要会验收</h1>
+<h2>交付文件</h2>
+<table>
+<thead>
+<tr>
+<th>文件/目录</th>
+<th>必须交付原因</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>student_model.static_int8.onnx</td>
+<td>Android 首发端侧 embedding 模型</td>
+</tr>
+<tr>
+<td>android_onnx_runtime_manifest.json</td>
+<td>输入、输出、量化、sha256、验证信息</td>
+</tr>
+<tr>
+<td>android_runtime_config.json</td>
+<td>抽帧、topK、rerank、预算等接入配置</td>
+</tr>
+<tr>
+<td>student_model.fp32.onnx</td>
+<td>排查 int8 精度问题的对照模型</td>
+</tr>
+<tr>
+<td>template_index/</td>
+<td>v9 static int8 ONNX 生成的 728 条 512 维模板 index</td>
+</tr>
+</tbody></table>
+<h2>ONNX Runtime 推理验收</h2>
+<ul>
+<li>ONNX Runtime 能加载 student_model.static_int8.onnx。</li>
+<li>输入 tensor 名字是 image，shape 是 [1,3,224,224]，dtype 是 float32。</li>
+<li>输出 tensor 名字是 embedding，shape 是 [1,512]，dtype 是 float32。</li>
+<li>输出 embedding L2 norm 约等于 1.0。</li>
+<li>同一张测试图多次推理结果稳定。</li>
+<li>Python ONNX 与 Android ONNX 对同一张图输出 cosine 足够接近。</li>
+</ul>
+<h2>为什么不能每帧跑 embedding</h2>
+<p>相机预览通常 30 FPS。若每帧跑一次 embedding，就等于每秒推理 30 次。即使单次推理 80ms，也已经超过一帧 33ms 的预算，会堆积、卡顿、发热、耗电。首版应按 500ms-1000ms 抽帧，或画面明显变化时触发，并且 single-flight：上一次 embedding 没跑完时丢弃新帧。</p>
+<h2>top5 rerank 规则</h2>
+<table>
+<thead>
+<tr>
+<th>规则</th>
+<th>分值</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>photo_type 匹配</td>
+<td>+0.08</td>
+<td>优先保证人像/风景/静物大类不串</td>
+</tr>
+<tr>
+<td>高置信 scene_category 匹配</td>
+<td>+0.06</td>
+<td>场景明确时提升同场景候选</td>
+</tr>
+<tr>
+<td>构图类型匹配</td>
+<td>+0.03</td>
+<td>让辅助线更贴合画面</td>
+</tr>
+<tr>
+<td>光线类型匹配</td>
+<td>+0.02</td>
+<td>让光线提示更合理</td>
+</tr>
+<tr>
+<td>photo_type 明显不匹配</td>
+<td>-0.08</td>
+<td>惩罚跨大类错误</td>
+</tr>
+<tr>
+<td>高置信 scene 不匹配</td>
+<td>-0.04</td>
+<td>降低错场景候选</td>
+</tr>
+</tbody></table>
+<h2>问 Android 队友的问题</h2>
+<ol>
+<li>目标设备型号和芯片是什么？</li>
+<li>ONNX Runtime Android 版本锁定到多少？是否 1.19.x？</li>
+<li>模型和 index 是否从 assets 复制到 app-private files 目录？</li>
+<li>实际 embedding 触发间隔是多少？有没有 single-flight？</li>
+<li>目标设备 p50/p90 是多少？是否满足 p50 &lt;= 80ms、p90 &lt;= 150ms？</li>
+<li>连续预览 10-30 分钟内存、温度、FPS 是否稳定？</li>
+<li>top5 是否真的进入规则重排？低 margin 时是否保持稳定模板？</li>
+</ol>
+<h2>本章自测</h2>
+<ol>
+<li>Android assets 为什么通常要复制到 app-private files 目录？</li>
+<li>single-flight 是什么意思？</li>
+<li>如果 App 只取 top1，会违背哪个产品策略？</li>
+<li>真机 p50/p90 为什么不能用电脑离线测试替代？</li>
+</ol>
+<h1>第 14 章 v9 首发条件和 v10 迭代方向</h1>
+<h2>v9 可以首发候选的条件</h2>
+<ul>
+<li>离线质量达标：static int8 ONNX top5 同场景 96.15%，超过 95% 门槛。</li>
+<li>模型大小达标：301,677 bytes，小于 5MB。</li>
+<li>交付格式明确：ONNX Runtime Mobile static int8 ONNX。</li>
+<li>index 配套：728 条、512 维、由同一 static int8 ONNX 生成。</li>
+<li>App 使用 top5 + 规则重排，且 500ms-1000ms 抽帧。</li>
+</ul>
+<h2>v9 还不能宣称完整商用默认的原因</h2>
+<ul>
+<li>缺 Android App 工程接入验证。</li>
+<li>缺目标设备 p50/p90、内存、发热、连续预览稳定性数据。</li>
+<li>训练集只有 579 条，类别不均衡。</li>
+<li>plant_still_life 和 urban_landscape 覆盖偏少。</li>
+<li>new_batch 尚未合并为正式 visual-clean。</li>
+</ul>
+<h2>什么时候必须继续 v10</h2>
+<table>
+<thead>
+<tr>
+<th>触发条件</th>
+<th>v10 方向</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>真机 p90 &gt; 150ms 或发热严重</td>
+<td>进一步减小模型、降低输入、优化 runtime 或抽帧策略</td>
+</tr>
+<tr>
+<td>top1 跨类型错误影响体验</td>
+<td>加强 photo_type 辅助头、rerank、hard negative</td>
+</tr>
+<tr>
+<td>弱类别召回差</td>
+<td>补 plant、urban、portrait outdoor/couple/group 数据</td>
+</tr>
+<tr>
+<td>低 margin 导致 UI 抖动</td>
+<td>训练上继续 listwise/hard negative，App 上稳定策略</td>
+</tr>
+<tr>
+<td>量化后质量下降过大</td>
+<td>改 calibration 数据、量化策略或模型结构</td>
+</tr>
+<tr>
+<td>模板库扩到 3000+</td>
+<td>重建 teacher/student/index，重新评估 ANN 和 exact 差异</td>
+</tr>
+</tbody></table>
+<h2>数据补充优先级</h2>
+<ol>
+<li>portrait：outdoor、urban、couple、group。</li>
+<li>plant_still_life：当前候选极少，是明显弱类。</li>
+<li>urban_landscape：城市风景需要增加多样性。</li>
+<li>hard negative：同场景但构图/光线不同，或同类型但场景不同的难样本。</li>
+<li>目标：先把可训练 template candidates 提升到 3000+，再冲 5200 完整目标。</li>
+</ol>
+<h2>本章自测</h2>
+<ol>
+<li>v9 能进入 App 接入和灰度，为什么还不能直接说正式商用默认？</li>
+<li>v10 的第一优先数据补充是什么？</li>
+<li>如果 App 反馈推荐频繁跳变，你会同时从模型和 App 哪两侧处理？</li>
+<li>为什么 new_batch 达标后也不能无条件污染 visual-clean？</li>
+</ol>
+<h1>附录 A 固定命令和验收清单</h1>
+<h2>全量验证命令</h2>
+<pre><code class="language-bash">cd /Volumes/桌面/AI-camera/tools/build_template_db
+python3 -m unittest discover -s tests
+
+cd /Volumes/桌面/AI-camera
+python3 tools/build_template_db/check_pipeline.py --root . --require-embeddings
+
+cd /Volumes/桌面/AI-camera/engine
+cmake --build build
+./build/engine_tests
+        
+</code></pre>
+<h2>模型包验收</h2>
+<ul>
+<li>student_model.static_int8.onnx 存在，大小约 301,677 bytes。</li>
+<li>sha256 为 752bfef24b553a27fb0d419e939a6fc2583a22efda1287b01ce1184409f3e5d9。</li>
+<li>android_onnx_runtime_manifest.json verification.status 为 ready。</li>
+<li>输出 shape 为 [batch,512]，int8_output_l2_norm 约 1.0。</li>
+<li>static int8 ONNX quality_report top5 同场景 96.15%。</li>
+</ul>
+<h2>index 验收</h2>
+<ul>
+<li>templates.keys.json count=728、dimension=512。</li>
+<li>templates.embeddings.f32 大小为 1,490,944 bytes。</li>
+<li>templates.metadata.jsonl 行数为 728。</li>
+<li>validate_template_index.py 返回 0。</li>
+<li>USearch manifest metric 为 cos，self_check 为 top1。</li>
+</ul>
+<h2>Android 验收</h2>
+<ul>
+<li>模型和 index 从 assets 复制到 app-private files 目录。</li>
+<li>ONNX Runtime 能加载 static int8 ONNX。</li>
+<li>预处理严格一致：rotation、RGB、224、NCHW、归一化。</li>
+<li>embedding 实际触发间隔 500ms-1000ms 或画面变化触发。</li>
+<li>p50 &lt;= 80ms，p90 &lt;= 150ms。</li>
+<li>连续 10-30 分钟无明显内存增长、过热、卡死。</li>
+<li>top5 进入规则重排，低 margin 稳定策略生效。</li>
+</ul>
+<h1>附录 B 术语表</h1>
+<table>
+<thead>
+<tr>
+<th>术语</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>embedding</td>
+<td>图片在语义空间里的数字坐标，用来算相似度</td>
+</tr>
+<tr>
+<td>teacher</td>
+<td>大模型老师，本项目是 SigLIP2</td>
+</tr>
+<tr>
+<td>student</td>
+<td>端侧小模型，本项目首发候选是 v9</td>
+</tr>
+<tr>
+<td>distillation</td>
+<td>让 student 学 teacher 的 embedding 和排序关系</td>
+</tr>
+<tr>
+<td>L2 normalize</td>
+<td>把向量长度变成 1，方便用 dot product 算 cosine</td>
+</tr>
+<tr>
+<td>cosine similarity</td>
+<td>衡量两个向量方向是否接近</td>
+</tr>
+<tr>
+<td>topK</td>
+<td>取相似度最高的 K 个候选</td>
+</tr>
+<tr>
+<td>margin</td>
+<td>top1 和 top2 分数差，差小表示不确定</td>
+</tr>
+<tr>
+<td>hard negative</td>
+<td>很像但不该排在前面的负样本</td>
+</tr>
+<tr>
+<td>listwise</td>
+<td>学习一组候选的排序分布，而不是只学单点</td>
+</tr>
+<tr>
+<td>ONNX</td>
+<td>跨框架模型交换/部署格式，Android 可用 ONNX Runtime 跑</td>
+</tr>
+<tr>
+<td>static int8</td>
+<td>用校准数据提前确定量化范围的 int8 量化</td>
+</tr>
+<tr>
+<td>dynamic int8</td>
+<td>运行时动态量化，项目中仅 Linear 层，不是 Android 首发商用包</td>
+</tr>
+<tr>
+<td>USearch/ANN</td>
+<td>近邻检索索引，用来快速找相似 embedding</td>
+</tr>
+<tr>
+<td>metadata</td>
+<td>模板说明书，App 用它生成辅助线和提示</td>
+</tr>
+</tbody></table>
+<h1>附录 C 10 天自学安排</h1>
+<table>
+<thead>
+<tr>
+<th>天数</th>
+<th>主题</th>
+<th>读文件</th>
+<th>练习</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Day 1</td>
+<td>项目全景</td>
+<td>AI引擎设计/工作进度.md；技术设计与工作流程.md</td>
+<td>画出素材到 Android runtime 的链路图</td>
+</tr>
+<tr>
+<td>Day 2</td>
+<td>Python/JSONL/路径</td>
+<td>build_template_index.py；validate_template_index.py</td>
+<td>解释一条 metadata 和一个 f32 文件大小</td>
+</tr>
+<tr>
+<td>Day 3</td>
+<td>图片预处理</td>
+<td>generate_onnx_embeddings.py；09-AI接入包说明.md</td>
+<td>写出 RGB/NCHW/normalize 的含义</td>
+</tr>
+<tr>
+<td>Day 4</td>
+<td>embedding/cosine/topK</td>
+<td>evaluate_template_index_quality.py</td>
+<td>手算二维向量 normalize 和 dot product</td>
+</tr>
+<tr>
+<td>Day 5</td>
+<td>student 模型结构</td>
+<td>student_embedding_model.py</td>
+<td>逐句解释 forward 和 DepthwiseSeparableBlock</td>
+</tr>
+<tr>
+<td>Day 6</td>
+<td>蒸馏训练</td>
+<td>train_student_embedding.py</td>
+<td>解释 cosine/relation/listwise/hard negative</td>
+</tr>
+<tr>
+<td>Day 7</td>
+<td>teacher 和数据集</td>
+<td>generate_hf_image_embeddings.py；build_distillation_dataset.py</td>
+<td>说明 teacher 为什么不能直接端侧商用</td>
+</tr>
+<tr>
+<td>Day 8</td>
+<td>导出和量化</td>
+<td>export_student_model.py；quantize_onnx_static.py</td>
+<td>区分 TorchScript dynamic int8 和 ONNX static int8</td>
+</tr>
+<tr>
+<td>Day 9</td>
+<td>Android 接入验收</td>
+<td>09-AI接入包说明.md；android_runtime_config.json</td>
+<td>写一份问 Android 队友的问题清单</td>
+</tr>
+<tr>
+<td>Day 10</td>
+<td>上线和 v10 决策</td>
+<td>quality_report；需要用户完成的任务.md</td>
+<td>根据指标判断 v9 go/no-go 和 v10 数据方向</td>
+</tr>
+</tbody></table>
+
+</body>
+</html>
