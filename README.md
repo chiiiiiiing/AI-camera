@@ -1,106 +1,114 @@
-# AI 构图辅助相机 — 移动端开发核心指引
+# GenWow
 
-> **角色定位**：移动端工程师（Android）。核心工作：**相机实时预览 → 端侧 AI 推理 → 构图辅助线渲染 → 性能与稳定性**。
->
-> **不做的事**：不训练模型（队友负责）、不定 UI 交互规范（队友兼 PM/UI 设计）。
+GenWow is an Android AI composition camera prototype built with Kotlin, Jetpack Compose, and CameraX.
 
----
+The app keeps the camera preview at the center of the experience and uses lightweight overlays, motion cues, and composition progress feedback to guide users toward a recommended framing position before capture.
 
-## 产品核心
+## Project scope
 
-一个 **AI 辅助构图的相机 App**。用户打开相机对准场景，App 实时分析画面内容，自动选择合适的构图策略（三分法、对称、引导线、留白等），通过**生动的辅助线**在取景器上直接引导用户调整手机位置和角度，拍出构图更好的照片。
+This repository snapshot contains the product work completed locally for the GenWow prototype:
 
----
+- Figma-driven visual refresh for splash, auth, camera, feed, and profile flows
+- Compose-based camera shell and interaction components
+- CameraX preview, capture, save-to-gallery, and thumbnail refresh
+- AI guidance overlay architecture for pitch, yaw, roll, translation, and subject outline input
+- Motion system, previews, unit tests, UI tests, and build verification
+- Design audit, implementation plan, and visual validation notes
 
-## 团队分工
+## Stack
 
-| 角色 | 谁 | 做什么 |
-|------|-----|--------|
-| AI 模型训练 | 队友 | 训练端侧模型：场景识别 → 构图策略选择 → 输出辅助线参数 |
-| 产品经理 | 队友 | 定义功能范围、构图策略覆盖哪些场景、交互流程 |
-| UI 设计 | 队友 | 辅助线视觉风格、App 整体界面设计、图标/动效规范 |
-| **移动端工程** | **你** | **把以上所有东西在 Android 上跑通，做成一个能用的 App** |
+- Kotlin
+- Jetpack Compose
+- Material 3 foundation with custom visual tokens
+- CameraX
+- Navigation Compose
+- JUnit4
+- Compose UI Test
 
-## 你的工作边界
+## Current app coverage
 
-**你要做的：**
-- Android 相机链路搭建（预览 / 拍照 / 相册保存）
-- 实时帧采集 + 预处理 + 送入模型推理
-- 解析模型输出 → 渲染辅助线（队友设计什么线你就画什么线）
-- 性能优化（帧率 / 延迟 / 内存 / 发热）
-- 打包、测试、上线
+- Splash screen
+- Login and register flows using local demo auth state
+- Camera screen with real CameraX preview and image capture
+- Composition guidance overlays and animated feedback states
+- Feed and profile demo pages using local sample data
+- Permission and error states
 
-**你不用操心的：**
-- 模型训练、数据集、模型结构选型
-- 构图策略怎么定义（队友从 B 站/抖音的摄影教程里提炼）
-- 辅助线长什么样、颜色、动效细节（队友出设计稿）
-- 产品功能优先级排序
+## AI guidance integration boundary
 
----
+The UI is ready to receive real-time AI guidance frames through the camera route layer.
 
-## 整体管线架构
+Primary model-facing types:
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                     Android 相机                         │
-│                  CameraX + PreviewView                   │
-└───────────────────────┬─────────────────────────────────┘
-                        │ YUV/RAW 帧（30 FPS）
-                        ▼
-┌─────────────────────────────────────────────────────────┐
-│                   帧采集 & 调度                          │
-│   ImageAnalysis.Analyzer | 跳帧 | 只处理最新帧           │
-└───────────────────────┬─────────────────────────────────┘
-                        │ 选取帧（5–15 FPS）
-                        ▼
-┌─────────────────────────────────────────────────────────┐
-│                   图像预处理                             │
-│   YUV→RGB | resize | normalize | 格式转 Tensor           │
-└───────────────────────┬─────────────────────────────────┘
-                        │ Tensor
-                        ▼
-┌─────────────────────────────────────────────────────────┐
-│                 AI 推理（队友的模型）                     │
-│   LiteRT / MediaPipe | GPU Delegate | 后台线程           │
-│                                                         │
-│   输入：图像帧                                          │
-│   输出：场景类型 + 构图策略 + 辅助线参数列表              │
-└───────────────────────┬─────────────────────────────────┘
-                        │ 辅助线参数 JSON/Protobuf
-                        ▼
-┌─────────────────────────────────────────────────────────┐
-│                 辅助线渲染引擎                           │
-│   解析模型输出 → 坐标映射 → Canvas/SurfaceView 绘制      │
-│   绘制：网格线 | 箭头 | 目标点 | 水平仪 | 动态引导线      │
-└───────────────────────┬─────────────────────────────────┘
-                        │
-                        ▼
-┌─────────────────────────────────────────────────────────┐
-│                   PreviewView                            │
-│        用户看到：相机画面 + 辅助线叠加                    │
-└─────────────────────────────────────────────────────────┘
+- `GuidanceSample`
+- `SubjectOutline`
+- `SubjectContour`
+- `NormalizedPoint`
+
+The current project keeps production AI integration isolated. If a real model stream is provided later, it can replace the local demo guidance flow without rewriting the overlay components.
+
+## Build environment
+
+- JDK 17
+- Gradle 8.10.2
+- Android Gradle Plugin 8.8.2
+- `compileSdk 35`
+- `targetSdk 35`
+- `minSdk 24`
+
+## Run locally
+
+```bash
+./gradlew assembleDebug
 ```
 
-**关键点**：模型不是只输出"这是什么场景"，而是直接输出**"画什么辅助线 + 画在哪 + 怎么动"**。你的渲染引擎就是把这些参数变成屏幕上的像素。
+Common verification commands:
 
----
+```bash
+./gradlew compileDebugKotlin
+./gradlew lint
+./gradlew testDebugUnitTest
+./gradlew connectedDebugAndroidTest
+./gradlew assembleDebug
+./gradlew assembleRelease
+```
 
-## 文档索引
+## APK outputs
 
-| 文档 | 说明 | 依赖队友？ |
-|------|------|-----------|
-| [01-相机链路](./01-相机链路.md) | CameraX 预览/拍照/对焦/权限 | ❌ 不依赖 |
-| [02-帧处理管线](./02-帧处理管线.md) | 跳帧调度 / 预处理 / 线程模型 | ❌ 不依赖 |
-| [03-AI模型接入](./03-AI模型接入.md) | LiteRT 加载 / 推理 / 结果解析 | ⚠️ 骨架不依赖，实际接入依赖 |
-| [04-辅助线渲染引擎](./04-辅助线渲染引擎.md) | Canvas Overlay / 坐标映射 / 动画 | ⚠️ 框架不依赖，具体类型依赖 |
-| [05-构图引导交互](./05-构图引导交互.md) | 反馈 / 动画 / UI 控件 | ⚠️ 技术能力不依赖，样式依赖 |
-| [06-性能优化](./06-性能优化.md) | 帧率 / 延迟 / 内存 / 发热 | ❌ 不依赖 |
-| [07-上线工程](./07-上线工程.md) | 工程搭建 / 测试 / 模型下发 | ❌ 不依赖 |
-| [08-MVP方案与迭代](./08-MVP方案与迭代.md) | 版本规划 | ❌ 不依赖 |
-| [附录A-队友协作接口](./附录A-队友协作接口.md) | 模型输入输出约定 / 问题清单 | — |
-| [附录B-技术选型速查](./附录B-技术选型速查.md) | 技术栈一览 | — |
+Debug APK:
 
----
+- `app/build/outputs/apk/debug/app-debug.apk`
 
-> **最后更新**：2026-07-06
-> **核心原则**：你的工作是 **Android 工程实现**。模型和设计由队友负责，你确保它们高效、稳定地运行在手机上。
+Unsigned release APK:
+
+- `app/build/outputs/apk/release/app-release-unsigned.apk`
+
+The release artifact is intentionally unsigned. Production signing must be configured separately and should not be committed into version control.
+
+## Repository hygiene
+
+The project is set up to keep local-only and sensitive files out of Git:
+
+- `local.properties`
+- `.gradle/`
+- `.kotlin/`
+- `build/`
+- `**/build/`
+- `.idea/`
+- `captures/`
+- `docs/screenshots/`
+- `*.jks`
+- `*.keystore`
+
+## Key documents
+
+- [Design audit](docs/design-audit.md)
+- [Implementation plan](docs/implementation-plan.md)
+- [Figma visual validation](docs/figma/visual-validation.md)
+- [GitHub upload checklist](docs/github-upload-checklist.md)
+
+## Notes
+
+- Feed, profile, login, registration, and verification code use clearly isolated local demo data.
+- The app does not include a production backend, production AI model, or release signing material.
+- Screenshots and build artifacts remain local unless you intentionally export them elsewhere.

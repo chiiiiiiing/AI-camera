@@ -1,0 +1,383 @@
+package com.genwow.camera.ui.auth
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.genwow.camera.ui.theme.BrandOnSurface
+import com.genwow.camera.ui.theme.BrandOnSurfaceMuted
+import com.genwow.camera.ui.theme.BrandPurple
+import com.genwow.camera.ui.theme.GenWowMotion
+import com.genwow.camera.ui.theme.SystemBarsAppearance
+
+enum class AuthFieldIcon { PERSON, LOCK, PHONE, SHIELD }
+
+@Composable
+fun LightSystemBars() {
+    SystemBarsAppearance(light = true)
+}
+
+@Composable
+fun AuthField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    contentDescription: String,
+    icon: AuthFieldIcon,
+    modifier: Modifier = Modifier,
+    error: String? = null,
+    password: Boolean = false,
+    passwordVisible: Boolean = false,
+    onTogglePasswordVisibility: (() -> Unit)? = null,
+    keyboardType: KeyboardType = KeyboardType.Text,
+    imeAction: ImeAction = ImeAction.Next,
+    trailingContent: (@Composable () -> Unit)? = null,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val lineColor by animateColorAsState(
+        targetValue = when {
+            error != null -> Color(0xFFC76464)
+            focused -> BrandPurple
+            else -> BrandOnSurface.copy(alpha = 0.82f)
+        },
+        animationSpec = tween(GenWowMotion.FocusMillis),
+        label = "auth field line",
+    )
+    Column(modifier) {
+        Row(
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AuthFieldIconCanvas(icon, Modifier.size(24.dp))
+            Spacer(Modifier.size(10.dp))
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier
+                    .weight(1f)
+                    .onFocusChanged { focused = it.isFocused }
+                    .semantics { this.contentDescription = contentDescription },
+                textStyle = TextStyle(
+                    color = BrandOnSurface,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                ),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = if (password) KeyboardType.Password else keyboardType,
+                    imeAction = imeAction,
+                ),
+                visualTransformation = if (password && !passwordVisible) {
+                    PasswordVisualTransformation()
+                } else {
+                    VisualTransformation.None
+                },
+                decorationBox = { innerTextField ->
+                    Box(contentAlignment = Alignment.CenterStart) {
+                        if (value.isEmpty()) {
+                            Text(placeholder, color = BrandOnSurfaceMuted, fontSize = 14.sp)
+                        }
+                        innerTextField()
+                    }
+                },
+            )
+            if (password && onTogglePasswordVisibility != null) {
+                Text(
+                    text = if (passwordVisible) "隐藏" else "显示",
+                    color = BrandPurple.copy(alpha = 0.78f),
+                    fontSize = 11.sp,
+                    modifier = Modifier
+                        .semantics { this.contentDescription = "切换密码可见性" }
+                        .clickable(onClick = onTogglePasswordVisibility)
+                        .padding(horizontal = 6.dp, vertical = 10.dp),
+                )
+            } else {
+                trailingContent?.invoke()
+            }
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(lineColor))
+        AnimatedVisibility(error != null) {
+            Text(
+                text = error.orEmpty(),
+                color = Color(0xFFC76464),
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+    }
+}
+
+@Composable
+fun BrandPrimaryButton(
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed && enabled) 0.98f else 1f,
+        animationSpec = tween(GenWowMotion.PressMillis),
+        label = "auth button press",
+    )
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .scale(scale)
+            .background(
+                BrandPurple.copy(alpha = if (enabled) 1f else 0.68f),
+                RoundedCornerShape(8.dp),
+            )
+            .semantics {
+                contentDescription = label
+                role = Role.Button
+                if (!enabled) disabled()
+            }
+            .clickable(
+                enabled = enabled,
+                role = Role.Button,
+                interactionSource = interaction,
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+fun VerificationButton(
+    secondsRemaining: Int,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val label = if (secondsRemaining > 0) "${secondsRemaining}s" else "获取验证码"
+    Box(
+        modifier = Modifier
+            .background(Color.White.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+            .semantics {
+                role = Role.Button
+                contentDescription = label
+                if (!enabled) disabled()
+            }
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 7.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, color = BrandPurple, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+fun AgreementText(prefix: String) {
+    Text(
+        text = "$prefix《用户服务协议》",
+        color = BrandOnSurfaceMuted,
+        fontSize = 11.sp,
+    )
+}
+
+@Composable
+fun ThirdPartyLoginRow() {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f).height(1.dp).background(Color.White.copy(alpha = 0.42f)))
+            Text(
+                "第三方账号登录",
+                color = BrandOnSurfaceMuted,
+                fontSize = 13.sp,
+                modifier = Modifier.padding(horizontal = 10.dp),
+            )
+            Box(Modifier.weight(1f).height(1.dp).background(Color.White.copy(alpha = 0.42f)))
+        }
+        Spacer(Modifier.height(22.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(46.dp)) {
+            ThirdPartyIconButton(ThirdPartyProvider.WECHAT)
+            ThirdPartyIconButton(ThirdPartyProvider.QQ)
+        }
+    }
+}
+
+private enum class ThirdPartyProvider(val description: String) {
+    WECHAT("微信登录（未接入）"),
+    QQ("QQ 登录（未接入）"),
+}
+
+@Composable
+private fun ThirdPartyIconButton(provider: ThirdPartyProvider) {
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .semantics { contentDescription = provider.description },
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.size(30.dp)) {
+            val color = BrandPurple
+            val cutout = Color.White.copy(alpha = 0.82f)
+            when (provider) {
+                ThirdPartyProvider.WECHAT -> {
+                    drawOval(
+                        color = color,
+                        topLeft = Offset(size.width * 0.02f, size.height * 0.08f),
+                        size = androidx.compose.ui.geometry.Size(size.width * 0.68f, size.height * 0.58f),
+                    )
+                    val leftTail = Path().apply {
+                        moveTo(size.width * 0.18f, size.height * 0.58f)
+                        lineTo(size.width * 0.12f, size.height * 0.78f)
+                        lineTo(size.width * 0.34f, size.height * 0.64f)
+                        close()
+                    }
+                    drawPath(leftTail, color)
+                    drawCircle(cutout, radius = size.width * 0.035f, center = Offset(size.width * 0.25f, size.height * 0.34f))
+                    drawCircle(cutout, radius = size.width * 0.035f, center = Offset(size.width * 0.47f, size.height * 0.34f))
+                    drawOval(
+                        color = color,
+                        topLeft = Offset(size.width * 0.37f, size.height * 0.38f),
+                        size = androidx.compose.ui.geometry.Size(size.width * 0.61f, size.height * 0.52f),
+                    )
+                    val rightTail = Path().apply {
+                        moveTo(size.width * 0.78f, size.height * 0.82f)
+                        lineTo(size.width * 0.9f, size.height * 0.98f)
+                        lineTo(size.width * 0.62f, size.height * 0.86f)
+                        close()
+                    }
+                    drawPath(rightTail, color)
+                    drawCircle(cutout, radius = size.width * 0.03f, center = Offset(size.width * 0.58f, size.height * 0.62f))
+                    drawCircle(cutout, radius = size.width * 0.03f, center = Offset(size.width * 0.77f, size.height * 0.62f))
+                }
+
+                ThirdPartyProvider.QQ -> {
+                    drawOval(
+                        color = color,
+                        topLeft = Offset(size.width * 0.25f, size.height * 0.04f),
+                        size = androidx.compose.ui.geometry.Size(size.width * 0.5f, size.height * 0.46f),
+                    )
+                    drawOval(
+                        color = color,
+                        topLeft = Offset(size.width * 0.2f, size.height * 0.32f),
+                        size = androidx.compose.ui.geometry.Size(size.width * 0.6f, size.height * 0.55f),
+                    )
+                    drawOval(
+                        color = color,
+                        topLeft = Offset(size.width * 0.04f, size.height * 0.38f),
+                        size = androidx.compose.ui.geometry.Size(size.width * 0.32f, size.height * 0.42f),
+                    )
+                    drawOval(
+                        color = color,
+                        topLeft = Offset(size.width * 0.64f, size.height * 0.38f),
+                        size = androidx.compose.ui.geometry.Size(size.width * 0.32f, size.height * 0.42f),
+                    )
+                    drawOval(
+                        color = color,
+                        topLeft = Offset(size.width * 0.11f, size.height * 0.78f),
+                        size = androidx.compose.ui.geometry.Size(size.width * 0.38f, size.height * 0.18f),
+                    )
+                    drawOval(
+                        color = color,
+                        topLeft = Offset(size.width * 0.51f, size.height * 0.78f),
+                        size = androidx.compose.ui.geometry.Size(size.width * 0.38f, size.height * 0.18f),
+                    )
+                    drawCircle(cutout, radius = size.width * 0.035f, center = Offset(size.width * 0.4f, size.height * 0.22f))
+                    drawCircle(cutout, radius = size.width * 0.035f, center = Offset(size.width * 0.6f, size.height * 0.22f))
+                    val beak = Path().apply {
+                        moveTo(size.width * 0.43f, size.height * 0.31f)
+                        lineTo(size.width * 0.57f, size.height * 0.31f)
+                        lineTo(size.width * 0.5f, size.height * 0.39f)
+                        close()
+                    }
+                    drawPath(beak, cutout)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AuthFieldIconCanvas(icon: AuthFieldIcon, modifier: Modifier) {
+    Canvas(modifier) {
+        val color = Color.Black.copy(alpha = 0.9f)
+        val stroke = Stroke(width = 1.7.dp.toPx(), cap = StrokeCap.Round)
+        when (icon) {
+            AuthFieldIcon.PERSON -> {
+                drawCircle(color, radius = size.minDimension * 0.13f, center = Offset(size.width / 2, size.height * 0.3f), style = stroke)
+                drawArc(color, 200f, 140f, false, topLeft = Offset(size.width * 0.23f, size.height * 0.47f), size = androidx.compose.ui.geometry.Size(size.width * 0.54f, size.height * 0.43f), style = stroke)
+                drawLine(color, Offset(size.width * 0.25f, size.height * 0.82f), Offset(size.width * 0.75f, size.height * 0.82f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+            }
+            AuthFieldIcon.LOCK -> {
+                drawRoundRect(color, topLeft = Offset(size.width * 0.22f, size.height * 0.42f), size = androidx.compose.ui.geometry.Size(size.width * 0.56f, size.height * 0.45f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()), style = stroke)
+                drawArc(color, 180f, 180f, false, topLeft = Offset(size.width * 0.32f, size.height * 0.12f), size = androidx.compose.ui.geometry.Size(size.width * 0.36f, size.height * 0.5f), style = stroke)
+            }
+            AuthFieldIcon.PHONE -> {
+                val path = Path().apply {
+                    moveTo(size.width * 0.32f, size.height * 0.14f)
+                    cubicTo(size.width * 0.16f, size.height * 0.3f, size.width * 0.36f, size.height * 0.72f, size.width * 0.7f, size.height * 0.86f)
+                }
+                drawPath(path, color, style = stroke)
+                drawLine(color, Offset(size.width * 0.3f, size.height * 0.16f), Offset(size.width * 0.42f, size.height * 0.32f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(size.width * 0.62f, size.height * 0.69f), Offset(size.width * 0.75f, size.height * 0.82f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+            }
+            AuthFieldIcon.SHIELD -> {
+                val path = Path().apply {
+                    moveTo(size.width * 0.5f, size.height * 0.08f)
+                    lineTo(size.width * 0.82f, size.height * 0.22f)
+                    lineTo(size.width * 0.78f, size.height * 0.65f)
+                    lineTo(size.width * 0.5f, size.height * 0.9f)
+                    lineTo(size.width * 0.22f, size.height * 0.65f)
+                    lineTo(size.width * 0.18f, size.height * 0.22f)
+                    close()
+                }
+                drawPath(path, color, style = stroke)
+                drawLine(color, Offset(size.width * 0.36f, size.height * 0.48f), Offset(size.width * 0.47f, size.height * 0.6f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(size.width * 0.47f, size.height * 0.6f), Offset(size.width * 0.68f, size.height * 0.38f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+            }
+        }
+    }
+}
