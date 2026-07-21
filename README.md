@@ -1,6 +1,6 @@
 # AI 构图辅助相机
 
-> 当前仓库主要包含 AI 模板库、端侧 embedding 模型训练/导出工具、C++ engine 原型，以及给 Android App 队友的接入文档。仓库内没有 Android Gradle/App 工程。
+> 当前仓库同时包含 Android/Compose 相机原型、AI 模板库、端侧 embedding 模型训练/导出工具、C++ engine 原型与接入文档。
 
 ---
 
@@ -15,7 +15,7 @@
 | 角色 | 谁 | 做什么 |
 |------|-----|--------|
 | AI 模型训练 | 本仓库 | 蒸馏 v9 端侧 embedding 模型，构建模板索引 |
-| Android App | App 队友 | 接入相机预览、ONNX Runtime Mobile、top5 重排和辅助线渲染 |
+| Android App | App 队友 | 维护 CameraX/Compose 原型，接入 ONNX Runtime Mobile、top5 重排和辅助线渲染 |
 | 产品/UI | 产品与设计 | 定义辅助线样式、交互、视觉反馈 |
 
 ## 工作边界
@@ -26,8 +26,8 @@
 - 生成 728 条新批次模板 metadata、portable index、USearch index、quality report
 - 提供 Android 接入说明和 runtime 配置
 
-**Android App 队友要做的：**
-- Android 相机链路搭建（预览 / 拍照 / 相册保存）
+**Android App 下一步：**
+- 在现有 CameraX/Compose 原型上完成真机验证
 - 实时帧采集 + 500ms-1000ms 抽帧 + ONNX Runtime 推理
 - embedding top5 检索 + 规则重排
 - 模板 metadata → 辅助线渲染
@@ -35,7 +35,7 @@
 - 打包、测试、上线
 
 **当前阻塞：**
-- 仓库内没有 Android App 工程，无法直接接相机预览链路。
+- 真实 AI 输出尚未接入 Android 原型。
 - 缺目标 Android 真机 p50/p90、内存、发热和连续预览稳定性数据。
 
 ---
@@ -106,5 +106,23 @@
 
 ---
 
-> **最后更新**：2026-07-19
+## Android 原型
+
+仓库根目录已包含 Kotlin、Jetpack Compose 和 CameraX 工程，实现相机预览、拍照、构图引导、登录注册、本地社区页和个人主页。AI 引导展示层与相机业务逻辑已分离，可继续接入真实模型输出。
+
+主要环境：JDK 17、Gradle 8.10.2、Android Gradle Plugin 8.8.2、compileSdk/targetSdk 35、minSdk 24。
+
+```bash
+# 构建 Debug APK
+JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradlew assembleDebug
+
+# 运行单元测试
+JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradlew testDebugUnitTest
+```
+
+详细设计与验收资料见 [`docs/`](./docs/)。
+
+---
+
+> **最后更新**：2026-07-21
 > **核心原则**：AI 侧交付 embedding 模型与模板索引；App 侧接入相机、runtime、top5 重排和渲染，并回传真机指标。

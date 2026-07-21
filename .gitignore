@@ -70,3 +70,15 @@ $RECYCLE.BIN/
 
 # 个人开发环境文档 (含 IP/用户名等隐私信息)
 Mac远程连接Win本开发方案.md
+
+# Android / Gradle
+.gradle/
+.gradle-home/
+.kotlin/
+build/
+**/build/
+local.properties
+captures/
+docs/screenshots/
+*.jks
+*.keystore
