@@ -1,53 +1,53 @@
 # GenWow
 
-GenWow is an Android AI composition camera prototype built with Kotlin, Jetpack Compose, and CameraX.
+GenWow 是一款 Android AI 构图相机原型，基于 Kotlin、Jetpack Compose 和 CameraX 构建。
 
-The app keeps the camera preview at the center of the experience and uses lightweight overlays, motion cues, and composition progress feedback to guide users toward a recommended framing position before capture.
+应用以相机预览为核心体验，通过轻量级叠加层、动感提示和构图进度反馈，在拍摄前引导用户到达推荐的取景位置。
 
-## Project scope
+## 项目范围
 
-This repository snapshot contains the product work completed locally for the GenWow prototype:
+本仓库包含 GenWow 原型的本地产品工作：
 
-- Figma-driven visual refresh for splash, auth, camera, feed, and profile flows
-- Compose-based camera shell and interaction components
-- CameraX preview, capture, save-to-gallery, and thumbnail refresh
-- AI guidance overlay architecture for pitch, yaw, roll, translation, and subject outline input
-- Motion system, previews, unit tests, UI tests, and build verification
-- Design audit, implementation plan, and visual validation notes
+- 基于 Figma 的视觉刷新：闪屏、登录、相机、动态和个人资料流程
+- 基于 Compose 的相机外壳和交互组件
+- CameraX 预览、拍摄、保存到相册和缩略图刷新
+- AI 引导叠加层架构：俯仰、偏航、横滚、平移和主体轮廓输入
+- 动效系统、预览、单元测试、UI 测试和构建验证
+- 设计审查、实施计划和视觉验证说明
 
-## Stack
+## 技术栈
 
 - Kotlin
 - Jetpack Compose
-- Material 3 foundation with custom visual tokens
+- Material 3 基础 + 自定义视觉令牌
 - CameraX
 - Navigation Compose
 - JUnit4
 - Compose UI Test
 
-## Current app coverage
+## 当前应用覆盖
 
-- Splash screen
-- Login and register flows using local demo auth state
-- Camera screen with real CameraX preview and image capture
-- Composition guidance overlays and animated feedback states
-- Feed and profile demo pages using local sample data
-- Permission and error states
+- 闪屏
+- 基于本地 Demo 认证状态的登录和注册流程
+- 相机屏幕（含真实 CameraX 预览和图像拍摄）
+- 构图引导叠加层和动画反馈状态
+- 动态和个人资料 Demo 页面（使用本地示例数据）
+- 权限和错误状态
 
-## AI guidance integration boundary
+## AI 引导集成边界
 
-The UI is ready to receive real-time AI guidance frames through the camera route layer.
+UI 已准备好通过相机路由层接收实时 AI 引导帧。
 
-Primary model-facing types:
+主要模型面向类型：
 
 - `GuidanceSample`
 - `SubjectOutline`
 - `SubjectContour`
 - `NormalizedPoint`
 
-The current project keeps production AI integration isolated. If a real model stream is provided later, it can replace the local demo guidance flow without rewriting the overlay components.
+项目保持生产级 AI 集成的隔离性。后续提供真实模型流时，可替换本地 Demo 引导流程，无需重写叠加层组件。
 
-## Build environment
+## 构建环境
 
 - JDK 17
 - Gradle 8.10.2
@@ -56,13 +56,13 @@ The current project keeps production AI integration isolated. If a real model st
 - `targetSdk 35`
 - `minSdk 24`
 
-## Run locally
+## 本地运行
 
 ```bash
 ./gradlew assembleDebug
 ```
 
-Common verification commands:
+常用验证命令：
 
 ```bash
 ./gradlew compileDebugKotlin
@@ -73,21 +73,21 @@ Common verification commands:
 ./gradlew assembleRelease
 ```
 
-## APK outputs
+## APK 输出
 
-Debug APK:
+Debug APK：
 
 - `app/build/outputs/apk/debug/app-debug.apk`
 
-Unsigned release APK:
+未签名 Release APK：
 
 - `app/build/outputs/apk/release/app-release-unsigned.apk`
 
-The release artifact is intentionally unsigned. Production signing must be configured separately and should not be committed into version control.
+Release 构建产物故意不签名。生产签名需单独配置，不应提交到版本控制。
 
-## Repository hygiene
+## 仓库规范
 
-The project is set up to keep local-only and sensitive files out of Git:
+项目已将本地专属和敏感文件排除在 Git 外：
 
 - `local.properties`
 - `.gradle/`
@@ -100,15 +100,15 @@ The project is set up to keep local-only and sensitive files out of Git:
 - `*.jks`
 - `*.keystore`
 
-## Key documents
+## 关键文档
 
-- [Design audit](docs/design-audit.md)
-- [Implementation plan](docs/implementation-plan.md)
-- [Figma visual validation](docs/figma/visual-validation.md)
-- [GitHub upload checklist](docs/github-upload-checklist.md)
+- [设计审查](docs/design-audit.md)
+- [实施计划](docs/implementation-plan.md)
+- [Figma 视觉验证](docs/figma/visual-validation.md)
+- [GitHub 上传清单](docs/github-upload-checklist.md)
 
-## Notes
+## 备注
 
-- Feed, profile, login, registration, and verification code use clearly isolated local demo data.
-- The app does not include a production backend, production AI model, or release signing material.
-- Screenshots and build artifacts remain local unless you intentionally export them elsewhere.
+- 动态、个人资料、登录、注册和验证码使用明确隔离的本地 Demo 数据
+- 应用不包含生产后端、生产 AI 模型或发布签名材料
+- 截图和构建产物保留在本地，除非有意导出到其他地方
