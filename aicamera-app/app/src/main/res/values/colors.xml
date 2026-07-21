@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 主色调：深色背景 + 青白色辅助线 -->
+    <color name="primary">#FF1A1A2E</color>
+    <color name="primary_variant">#FF16213E</color>
+    <color name="secondary">#FF0F3460</color>
+
+    <!-- 辅助线颜色 -->
+    <color name="guide_line_primary">#FF00C8FF</color>
+    <color name="guide_line_accent">#FFFF6B35</color>
+    <color name="guide_line_white">#80FFFFFF</color>
+
+    <!-- 水平仪 -->
+    <color name="horizon_green">#FF00E676</color>
+    <color name="horizon_yellow">#FFFFEA00</color>
+    <color name="horizon_red">#FFFF1744</color>
+
+    <!-- UI 控件 -->
+    <color name="shutter_ring">#FFFFFFFF</color>
+    <color name="top_bar_bg">#80000000</color>
+    <color name="bottom_bar_bg">#80000000</color>
+
+    <!-- 通用 -->
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="transparent">#00000000</color>
+</resources>
