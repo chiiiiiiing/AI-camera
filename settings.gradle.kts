@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "GenWow"
 include(":app")
+project(":app").projectDir = file("frontend/app")

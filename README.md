@@ -184,7 +184,7 @@ git checkout UI
 
 ```bash
 JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradlew assembleDebug
-# APK 路径：app/build/outputs/apk/debug/app-debug.apk
+# APK 路径：frontend/app/build/outputs/apk/debug/app-debug.apk
 ```
 
 ## 构建与校验
@@ -213,11 +213,11 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradl
 
 Debug APK：
 
-- `app/build/outputs/apk/debug/app-debug.apk`
+- `frontend/app/build/outputs/apk/debug/app-debug.apk`
 
 未签名 Release APK：
 
-- `app/build/outputs/apk/release/app-release-unsigned.apk`
+- `frontend/app/build/outputs/apk/release/app-release-unsigned.apk`
 
 说明：
 
@@ -236,14 +236,13 @@ Debug APK：
 
 ## 重要文档
 
-- [设计审查](docs/design-audit.md)
+- [设计审查](docs/ui-design/design-audit.md)
 - [实施清单](docs/implementation-plan.md)
-- [设计侧待办](docs/design-todo.md)
+- [设计侧待办](docs/ui-design/design-todo.md)
 - [视觉验收记录](docs/figma/visual-validation.md)
-- [UI 交付清单调整计划](docs/ui-design-adjustment-plan.md)
-- [给 UI 设计队友的校正版交付清单](docs/ui-design-handoff-adjusted.md)
-- [GitHub 上传清单](docs/github-upload-checklist.md)
-- [截图补拍清单](docs/screenshots/补拍清单.txt)
+- [UI 交付清单调整计划](docs/ui-design/ui-design-adjustment-plan.md)
+- [给 UI 设计队友的校正版交付清单](docs/ui-design/ui-design-handoff-adjusted.md)
+- [GitHub 上传清单](docs/ui-design/github-upload-checklist.md)
 
 ## 当前边界说明
 

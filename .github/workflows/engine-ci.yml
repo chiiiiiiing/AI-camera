@@ -2,9 +2,9 @@ name: Engine CI
 
 on:
   push:
-    paths: ['engine/**', '.github/workflows/engine-ci.yml']
+    paths: ['ai/engine/**', '.github/workflows/engine-ci.yml']
   pull_request:
-    paths: ['engine/**', '.github/workflows/engine-ci.yml']
+    paths: ['ai/engine/**', '.github/workflows/engine-ci.yml']
 
 jobs:
   build-and-test:
@@ -16,10 +16,10 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
 
       - name: Configure
-        run: cd engine && cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+        run: cd ai/engine && cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
 
       - name: Build
-        run: cd engine && cmake --build build -j$(nproc)
+        run: cd ai/engine && cmake --build build -j$(nproc)
 
       - name: Test
-        run: cd engine/build && ./engine_tests
+        run: cd ai/engine/build && ./engine_tests
