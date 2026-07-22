@@ -1,130 +1,264 @@
-# AI 构图辅助相机
+# 帧好 GenWow Android 原型
 
-> 当前仓库同时包含 Android/Compose 相机原型、AI 模板库、端侧 embedding 模型训练/导出工具、C++ engine 原型与接入文档。
+帧好 GenWow 是一个基于 Kotlin、Jetpack Compose 和 CameraX 的 Android AI 构图相机原型。
 
----
+产品核心不是“加滤镜”，而是帮助没有摄影经验的用户在真实取景过程中快速理解：
 
-## 产品核心
+- 手机应该往哪里平移
+- 应该如何俯仰或偏航调整
+- 是否需要做纸面内旋转
+- 人像模式下人物应该站在哪里、摆成什么姿态
 
-一个 **AI 辅助构图的相机 App**。用户打开相机对准场景，App 实时分析画面内容，自动选择合适的构图策略（三分法、对称、引导线、留白等），通过**生动的辅助线**在取景器上直接引导用户调整手机位置和角度，拍出构图更好的照片。
+当前工程已经实现真实相机预览、拍照、构图引导、登录注册、本地社区页和个人主页，并把 AI 引导展示层与相机业务逻辑分离，方便后续接入真实模型输出。
 
----
+## 用户指南（MVP 版）
 
-## 团队分工
+### 下载安装
 
-| 角色 | 谁 | 做什么 |
-|------|-----|--------|
-| AI 模型训练 | 本仓库 | 蒸馏 v9 端侧 embedding 模型，构建模板索引 |
-| Android App | App 队友 | 维护 CameraX/Compose 原型，接入 ONNX Runtime Mobile、top5 重排和辅助线渲染 |
-| 产品/UI | 产品与设计 | 定义辅助线样式、交互、视觉反馈 |
+**方式一：直接安装 APK（推荐，无需开发环境）**
 
-## 工作边界
+1. 在仓库 [Releases](https://github.com/chiiiiiiing/AI-camera/releases) 页面下载最新的 `app-debug.apk`
+2. 将 APK 传输到手机（微信文件传输、AirDrop、USB 拷贝等方式均可）
+3. 在手机上打开 APK 文件，按提示允许「安装未知来源应用」即可完成安装
 
-**AI 仓库已负责：**
-- 训练和评估 v9 student embedding 模型
-- 导出 FP32 ONNX 和 static int8 ONNX
-- 生成 728 条新批次模板 metadata、portable index、USearch index、quality report
-- 提供 Android 接入说明和 runtime 配置
+> 如果 Releases 暂未发布 APK，可按下方「下载与运行 → 方式二」自行构建。
 
-**Android App 下一步：**
-- 在现有 CameraX/Compose 原型上完成真机验证
-- 实时帧采集 + 500ms-1000ms 抽帧 + ONNX Runtime 推理
-- embedding top5 检索 + 规则重排
-- 模板 metadata → 辅助线渲染
-- 性能优化（帧率 / 延迟 / 内存 / 发热）
-- 打包、测试、上线
+**方式二：自行构建**
 
-**当前阻塞：**
-- 真实 AI 输出尚未接入 Android 原型。
-- 缺目标 Android 真机 p50/p90、内存、发热和连续预览稳定性数据。
+参考下方「下载与运行」章节，克隆仓库后在本地用 Android Studio 或命令行构建安装。
 
----
+### 快速上手
 
-## 整体管线架构
+1. **启动 App** — 安装后打开，先显示品牌启动页（约 2 秒）
+2. **相机取景** — 自动进入相机页，对准拍摄对象
+3. **构图引导** — 画面中出现引导线/准心/人物轮廓，按提示调整手机位置
+4. **拍照** — 对准后点击快门按钮，照片自动保存到系统相册
+5. **浏览功能**：
+   - 底部切换到「推荐」页浏览示例社区内容
+   - 底部切换到「个人」页查看和编辑个人资料
 
+### 核心功能一览
+
+| 功能 | 说明 |
+|------|------|
+| 真实相机预览 | 基于 CameraX，支持前后摄切换 |
+| 变焦 | 滑动变焦条，支持 0.8x / 1x / 2x |
+| 构图引导 | 实时提示移动、俯仰、旋转方向 |
+| 人像模式 | 两步引导：先对齐画面，再显示人物站位 |
+| 登录注册 | 本地演示版，无需真实手机号 |
+| 个人主页 | 编辑资料、设置（辅助线/网格/音效等） |
+
+### 注意事项
+
+- 当前为 MVP 原型，使用本地演示数据，不会上传账号和照片
+- 构图引导为模拟展示层，不依赖真实 AI 模型推理
+- 建议在 Android 10+ 设备上运行以获得最佳体验
+
+## 2026-07-21 最新补充
+
+这一轮按 App 队友的交付清单，已经把原型里缺失但必须可运行的 UI 项补齐：
+
+- 登录页加入品牌 Logo 头图与密码显隐眼睛图标
+- 新增忘记密码页，本地演示可闭环，不接入真实短信/邮件
+- 个人主页右上角设置按钮进入真实设置页
+- 个人主页补上编辑资料入口，并新增本地可运行的编辑资料页
+- 设置页支持辅助线、网格、原图保存、拍照音效等分组设置
+- 社区卡片补上评论信息，并增加统一空状态
+- 补齐 Android launcher / adaptive icon 基线资源
+- 相机页补上真实可切换的 compact 变焦条
+- 相机引导图示、顶部/底部 icon、提示条和完成态又做了一轮视觉收口
+
+## 当前产品流
+
+截至 2026-07-21，本地原型的主流程如下：
+
+1. 启动 App 后先显示带 Logo 的初始页
+2. 初始页停留约 2 秒后自动进入相机页
+3. 用户可以直接使用相机、切换模式、查看推荐页
+4. 当用户点击“个人主页”时：
+   - 若未登录，进入登录/注册流程
+   - 若已登录，直接进入个人主页
+
+这套流转更符合“相机为主入口”的产品定位，而不是把登录作为冷启动的第一阻碍。
+
+## 已实现页面
+
+- 启动页
+- 登录页
+- 注册页
+- 忘记密码页
+- 相机主页
+- 推荐信息流
+- 个人主页
+- 编辑资料页
+- 设置页
+- 权限页 / 错误页
+
+## 相机能力
+
+### 真实相机
+
+- 基于 CameraX 进行真实预览
+- 支持拍照
+- 拍摄后写入系统相册
+- 左下角最近照片缩略图会刷新
+- 支持前后摄切换
+- 支持紧凑型变焦档位切换（当前提供 0.8x / 1x / 2x 的安全预设）
+
+### 构图引导
+
+当前引导层已经拆成明确的视觉语义：
+
+- `MOVE_*`
+  - 表示整体平移
+  - 使用“准心 + 目标圈/太阳 + 连线”表达
+
+- `PITCH_* / YAW_*`
+  - 表示绕轴俯仰 / 偏航调整
+  - 使用“渐隐轴线 + 透视椭圆弧 + 路径箭头”表达
+
+- `ROLL_*`
+  - 表示纸面内旋转
+  - 使用“手机轮廓 + 外圈旋转弧箭头”表达
+
+- `SUBJECT_*`
+  - 表示人像站位与姿态引导
+  - 使用 AI 输出的人物轮廓点集重建目标轮廓
+
+### 人像模式两阶段引导
+
+人像模式不是一上来就压一个人物轮廓，而是分两步：
+
+1. 先用“太阳 + 准心”做整体画面对齐
+2. 第一阶段对齐后，再展示人物目标轮廓
+
+当前实现中，人物目标轮廓一旦出现，会锁定为静态目标，不会跟着后续轻微抖动来回漂移。等用户再次对准后，再切换到完成状态颜色。
+
+## AI 接入边界
+
+当前工程已经为真实 AI 输出预留了结构化边界，重点类型包括：
+
+- `GuidanceSample`
+- `GuidanceCue`
+- `GuidanceAnchors`
+- `SubjectOutline`
+- `SubjectContour`
+- `NormalizedPoint`
+
+这意味着后续如果 AI 团队提供真实帧级输出流，只需要替换相机路由层的数据输入，不需要重写 Overlay 组件。
+
+## 主要技术栈
+
+- Kotlin
+- Jetpack Compose
+- Material 3 基础能力
+- CameraX
+- Navigation Compose
+- JUnit4
+- Compose UI Test
+
+## 本地构建环境
+
+- JDK 17
+- Gradle 8.10.2
+- Android Gradle Plugin 8.8.2
+- compileSdk 35
+- targetSdk 35
+- minSdk 24
+
+## 下载与运行
+
+### 方式一：克隆后用 Android Studio 运行（推荐）
+
+```bash
+git clone https://github.com/chiiiiiiing/AI-camera.git
+cd AI-camera
+git checkout UI
 ```
-┌─────────────────────────────────────────────────────────┐
-│                     Android 相机                         │
-│                  CameraX + PreviewView                   │
-└───────────────────────┬─────────────────────────────────┘
-                        │ YUV/RAW 帧（30 FPS）
-                        ▼
-┌─────────────────────────────────────────────────────────┐
-│                   帧采集 & 调度                          │
-│   ImageAnalysis.Analyzer | 跳帧 | 只处理最新帧           │
-└───────────────────────┬─────────────────────────────────┘
-                        │ 500ms-1000ms 抽帧
-                        ▼
-┌─────────────────────────────────────────────────────────┐
-│                   图像预处理                             │
-│   YUV→RGB | resize | normalize | 格式转 Tensor           │
-└───────────────────────┬─────────────────────────────────┘
-                        │ Tensor
-                        ▼
-┌─────────────────────────────────────────────────────────┐
-│                 AI 推理（v9 static int8 ONNX）            │
-│   ONNX Runtime Mobile | 后台线程                          │
-│                                                         │
-│   输入：图像帧                                          │
-│   输出：512 维 embedding                                  │
-└───────────────────────┬─────────────────────────────────┘
-                        │ top5 模板 + 规则重排
-                        ▼
-┌─────────────────────────────────────────────────────────┐
-│                 辅助线渲染引擎                           │
-│   模板 metadata → 坐标映射 → Canvas/SurfaceView 绘制      │
-│   绘制：网格线 | 箭头 | 目标点 | 水平仪 | 动态引导线      │
-└───────────────────────┬─────────────────────────────────┘
-                        │
-                        ▼
-┌─────────────────────────────────────────────────────────┐
-│                   PreviewView                            │
-│        用户看到：相机画面 + 辅助线叠加                    │
-└─────────────────────────────────────────────────────────┘
+
+然后用 Android Studio 打开 `AI-camera` 目录，等待 Gradle 同步完成后，连接手机或启动模拟器，点击 Run 即可。
+
+### 方式二：直接安装 APK
+
+从 GitHub 克隆后在本地构建 Debug APK，发送到手机直接安装：
+
+```bash
+JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradlew assembleDebug
+# APK 路径：app/build/outputs/apk/debug/app-debug.apk
 ```
 
-**关键点**：当前 v9 模型只输出 embedding，不直接输出辅助线坐标。App 必须用 embedding 检索模板库，取 top5 + 规则重排，再从模板 metadata 生成辅助线。
-
----
-
-## 文档索引
-
-| 文档 | 说明 | 依赖队友？ |
-|------|------|-----------|
-| [01-相机链路](./App技术设计/01-相机链路.md) | CameraX 预览/拍照/对焦/权限 | 不依赖 |
-| [02-帧处理管线](./App技术设计/02-帧处理管线.md) | 抽帧调度 / 预处理 / 线程模型 | 不依赖 |
-| [03-AI模型接入](./App技术设计/03-AI模型接入.md) | ONNX Runtime Mobile / embedding 推理 / top5 检索 | 依赖模型包 |
-| [09-AI接入包说明](./App技术设计/09-AI接入包说明.md) | 给 Android 队友的完整交接文档 | 当前必读 |
-| [04-辅助线渲染引擎](./App技术设计/04-辅助线渲染引擎.md) | Canvas Overlay / 坐标映射 / 动画 | 框架不依赖，具体类型依赖 |
-| [05-构图引导交互](./App技术设计/05-构图引导交互.md) | 反馈 / 动画 / UI 控件 | 技术能力不依赖，样式依赖 |
-| [06-性能优化](./App技术设计/06-性能优化.md) | p50/p90 / 内存 / 发热 | 不依赖 |
-| [07-上线工程](./App技术设计/07-上线工程.md) | 工程搭建 / 测试 / 模型下发 | 不依赖 |
-| [08-MVP方案与迭代](./App技术设计/08-MVP方案与迭代.md) | 版本规划 | 不依赖 |
-| [附录A-队友协作接口](./App技术设计/附录A-队友协作接口.md) | 模型输入输出约定 / 问题清单 | - |
-| [附录B-技术选型速查](./App技术设计/附录B-技术选型速查.md) | 技术栈一览 | - |
-| [AI 工作进度](./AI引擎设计/工作进度.md) | 模型、索引、质量、阻塞 | 当前必读 |
-
----
-
-## Android 原型
-
-仓库根目录已包含 Kotlin、Jetpack Compose 和 CameraX 工程，实现相机预览、拍照、构图引导、登录注册、本地社区页和个人主页。AI 引导展示层与相机业务逻辑已分离，可继续接入真实模型输出。
-
-主要环境：JDK 17、Gradle 8.10.2、Android Gradle Plugin 8.8.2、compileSdk/targetSdk 35、minSdk 24。
+## 构建与校验
 
 ```bash
 # 构建 Debug APK
 JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradlew assembleDebug
 
+# 编译检查
+JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradlew compileDebugKotlin
+
 # 运行单元测试
 JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradlew testDebugUnitTest
+
+# 编译 Android 测试
+JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradlew compileDebugAndroidTestKotlin
+
+# Lint 检查
+JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradlew lintDebug
+
+# 如果本机有可用模拟器，可执行 UI 测试
+JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradlew connectedDebugAndroidTest
 ```
 
-详细设计与验收资料见 [`docs/`](./docs/)。
+## APK 输出
 
-`aicamera-app/` 保留了另一套独立的 Android 实现，包含 CameraX、帧管线、构图状态机和辅助线渲染。它与根目录 GenWow 原型的包名和 Gradle 工程相互独立，可用于对照和逐步迁移能力。
+Debug APK：
 
----
+- `app/build/outputs/apk/debug/app-debug.apk`
 
-> **最后更新**：2026-07-21
-> **核心原则**：AI 侧交付 embedding 模型与模板索引；App 侧接入相机、runtime、top5 重排和渲染，并回传真机指标。
+未签名 Release APK：
+
+- `app/build/outputs/apk/release/app-release-unsigned.apk`
+
+说明：
+
+- Debug APK 可直接用于本地安装和演示
+- Release APK 当前保持未签名状态
+- 正式发布前仍需要安全配置生产签名
+
+## 隐私与安全说明
+
+本地原型当前遵循以下边界：
+
+- 登录与注册仅使用本地演示数据
+- 不会把输入账号和密码上传到远端
+- 不会生成或提交 keystore、密码或生产签名
+- 不会把截图、构建缓存、`local.properties` 等本地文件纳入版本控制
+
+## 重要文档
+
+- [设计审查](docs/design-audit.md)
+- [实施清单](docs/implementation-plan.md)
+- [设计侧待办](docs/design-todo.md)
+- [视觉验收记录](docs/figma/visual-validation.md)
+- [UI 交付清单调整计划](docs/ui-design-adjustment-plan.md)
+- [给 UI 设计队友的校正版交付清单](docs/ui-design-handoff-adjusted.md)
+- [GitHub 上传清单](docs/github-upload-checklist.md)
+- [截图补拍清单](docs/screenshots/补拍清单.txt)
+
+## 当前边界说明
+
+这个仓库当前交付的是可运行的 Android 产品原型，不包含：
+
+- 生产后端
+- 生产级短信验证码能力
+- 真实线上账号系统
+- 生产级 AI 推理服务
+- 正式签名发布配置
+
+如果后续继续接入真实 AI、账号系统或后端接口，建议优先复用当前已经建立好的：
+
+- 导航流
+- 相机壳层
+- Overlay 语义映射层
+- 轮廓数据结构
+- 本地测试与构建流程

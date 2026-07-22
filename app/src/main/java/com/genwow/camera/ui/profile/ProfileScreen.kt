@@ -69,10 +69,6 @@ fun ProfileScreen(
 
     Column(modifier.fillMaxSize().background(ProfileBackground).statusBarsPadding()) {
         Box(Modifier.fillMaxSize()) {
-            ProfileSettingsButton(
-                modifier = Modifier.align(Alignment.TopEnd).padding(top = 12.dp, end = 18.dp),
-                onClick = onOpenSettings,
-            )
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -127,6 +123,10 @@ fun ProfileScreen(
                 )
                 Spacer(Modifier.height(28.dp))
             }
+            ProfileSettingsButton(
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 12.dp, end = 18.dp),
+                onClick = onOpenSettings,
+            )
         }
     }
 }

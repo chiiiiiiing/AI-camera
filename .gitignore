@@ -1,83 +1,11 @@
-# 编译产物
-engine/build/
-*.o
-*.so
-*.dylib
-*.a
-
-# IDE
-.idea/
-.vscode/
-*.iml
-.cursor/
-
-# Python
-tools/.venv/
-__pycache__/
-*.pyc
-.env
-
-# 模型文件 (Git LFS 或独立管理)
-tools/build_template_db/models/
-engine/models/*.tflite
-engine/models/*.gguf
-engine/models/*.idx
-engine/models/*.pt
-engine/models/*.onnx
-*.task
-
-# 图片素材
-图片素材/
-
-# 模板库照片
-tools/raw_photos/
-tools/curated_photos/
-tools/preprocessed/
-tools/annotated/
-
-# macOS
-.DS_Store
-.AppleDouble
-.LSOverride
-._*
-
-# Windows (SMB 共享会产生的文件)
-Thumbs.db
-Thumbs.db:encryptable
-ehthumbs.db
-desktop.ini
-$RECYCLE.BIN/
-
-# Windows 锁文件 (网络断开时残留)
-~$*.doc*
-~$*.xls*
-~$*.ppt*
-*.tmp
-*.temp
-
-# SMB 挂载残留
-.DocumentRevisions-V100*
-.Spotlight-V100*
-.TemporaryItems
-.fseventsd
-
-# 本地编译临时目录 (不在项目内)
-/tmp/ai-camera-build/
-/tmp/engine-build/
-
-# Claude
-.claude/
-
-# 个人开发环境文档 (含 IP/用户名等隐私信息)
-Mac远程连接Win本开发方案.md
-
-# Android / Gradle
 .gradle/
 .gradle-home/
 .kotlin/
 build/
 **/build/
 local.properties
+*.iml
+.idea/
 captures/
 docs/screenshots/
 *.jks
