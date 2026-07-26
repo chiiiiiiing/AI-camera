@@ -86,6 +86,9 @@ dependencies {
     // 若未来改回 LiteRT 需 AI 侧重新导出模型。
     implementation(libs.onnxruntime)
 
+    // ── ML Kit 人脸主体检测（离线 bundled 模型，构图几何引导用） ──
+    implementation(libs.mlkit.face.detection)
+
     // ── Compose UI ──
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)

@@ -88,7 +88,7 @@ cd aicamera-app
 - ✅ MVVM + Hilt DI（ViewModel 全部真注入）+ Compose UI 全部串联
 - ✅ 设置系统 DataStore 持久化，8 项开关全部生效（含 Pro 模式面板）
 - ✅ 单元测试起步（索引切片 + 引导状态机滞回）
-- 🔶 GuidanceCue 移动/旋转指令：待接 ML Kit 主体检测 + IMU（模型本身不给坐标）
+- ✅ **GuidanceCue 实时引导已上线**（IMU 水平角 → ROLL 指令；ML Kit 人脸主体框 → MOVE/SUBJECT 指令 + 构图进度，EMA 平滑；水平仪/主体框为真实数据）
 - ❌ 真机性能验收（p50/p90 延迟、10-30 分钟稳定性）
 
 > 2026-07-26 大整改详情见根目录《审查报告-2026-07-26.md》《11-整改记录.md》。

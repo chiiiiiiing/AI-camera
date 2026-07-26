@@ -12,6 +12,9 @@ camerax = "1.4.1"
 # — AI 推理 —
 onnxruntime = "1.19.2"
 
+# — ML Kit 端侧视觉（人脸主体检测，bundled 离线模型） —
+mlkit-face = "16.1.7"
+
 # — 设置持久化 —
 datastore = "1.1.1"
 
@@ -50,6 +53,9 @@ camerax-view = { module = "androidx.camera:camera-view", version.ref = "camerax"
 
 # — AI 推理 (ONNX Runtime Mobile；TFLite 依赖已移除，v9 确定走 ONNX) —
 onnxruntime = { module = "com.microsoft.onnxruntime:onnxruntime-android", version.ref = "onnxruntime" }
+
+# — ML Kit 人脸检测（bundled 离线模型，无需 GMS） —
+mlkit-face-detection = { module = "com.google.mlkit:face-detection", version.ref = "mlkit-face" }
 
 # — 设置持久化 —
 datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
