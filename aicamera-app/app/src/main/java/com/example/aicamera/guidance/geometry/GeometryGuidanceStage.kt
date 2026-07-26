@@ -100,6 +100,11 @@ class GeometryGuidanceStage @Inject constructor(
             targetCy = targetCy,
             horizonAngleDeg = smoothAngle
         )
+        // ★ 指令-进度对齐：SUBJECT_ALIGNED 时提升到 ALIGNED 阈值之上，
+        //   GuidanceStateMachine 才能进入 ALIGNED 相位（触发达标震动/绿闪）
+        val boostedProgress = geometryProgress?.let {
+            GuidanceGeometry.progressWithAlignedBoost(cue, it)
+        }
 
         // ── 5. 重建辅助线：真实水平角 + 真实主体框 ──
         val newLines = output.guideLines.map { line ->
@@ -144,8 +149,8 @@ class GeometryGuidanceStage @Inject constructor(
         return output.copy(
             guideLines = newLines,
             guidanceCue = cue,
-            // 有几何信号用几何进度；两者都缺（无脸无传感器）回退模板分
-            compositionProgress = geometryProgress ?: output.compositionProgress
+            // 有几何信号用几何进度（含对齐提升）；两者都缺回退模板分
+            compositionProgress = boostedProgress ?: output.compositionProgress
         )
     }
 

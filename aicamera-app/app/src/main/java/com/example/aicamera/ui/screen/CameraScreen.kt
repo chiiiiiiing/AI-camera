@@ -34,6 +34,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -43,8 +45,10 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.aicamera.camera.CameraConfig
 import com.example.aicamera.camera.CameraGestureDispatcher
+import com.example.aicamera.guidance.AlignmentFlashOverlay
 import com.example.aicamera.guidance.ComposeGuidanceOverlay
 import com.example.aicamera.guidance.GuidanceMessage
+import com.example.aicamera.guidance.GuidancePhase
 import com.example.aicamera.overlay.CompositionOverlayView
 import com.example.aicamera.overlay.model.GuideLineType
 import com.example.aicamera.overlay.model.RenderInput
@@ -127,6 +131,22 @@ fun CameraScreen(
     val shutterSound = remember { MediaActionSound() }
     DisposableEffect(Unit) {
         onDispose { shutterSound.release() }
+    }
+
+    // ── 构图达标反馈：进入 ALIGNED 相位瞬间 → 震动 + 绿边闪烁 ──
+    // 判定复用 GuidanceStateMachine 滞回（连续 3 帧稳定达标才进 ALIGNED），
+    // 只在此刻触发一次；退出 ALIGNED 后重新武装，不会连续轰炸。
+    val haptic = LocalHapticFeedback.current
+    var showAlignFlash by remember { mutableStateOf(false) }
+    var prevGuidancePhase by remember { mutableStateOf(GuidancePhase.NEUTRAL) }
+    LaunchedEffect(guidanceState.phase) {
+        val entered = guidanceState.phase == GuidancePhase.ALIGNED &&
+                prevGuidancePhase != GuidancePhase.ALIGNED
+        if (entered) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            showAlignFlash = true
+        }
+        prevGuidancePhase = guidanceState.phase
     }
 
     // ★ P1-9 修复：AI 推理结果 → 动态辅助线 overlay（修复数据流断裂，
@@ -249,6 +269,14 @@ fun CameraScreen(
                 showTargetFrame = settings.showTargetZone,
                 modifier = Modifier.fillMaxSize()
             )
+
+            // ── 第 2.6 层：达标绿闪（进入 ALIGNED 相位瞬间闪一次） ──
+            if (showAlignFlash) {
+                AlignmentFlashOverlay(
+                    onFinished = { showAlignFlash = false },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         } else {
             // 无权限提示
             Box(

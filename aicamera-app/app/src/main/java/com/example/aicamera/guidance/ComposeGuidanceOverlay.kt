@@ -471,6 +471,46 @@ internal fun guideMotionScale(phase: GuidancePhase): Float = when (phase) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// 达标绿闪反馈
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * 构图达标瞬间的全屏绿边闪烁。
+ *
+ * 触发时机：GuidancePhase 跃迁进入 ALIGNED（连续 3 帧稳定达标），
+ * 与震动反馈同步。动画：绿色边框从透明 → 0.55 → 0，约 550ms。
+ * 只闪一次，不循环（持续达标状态由 drawAlignedMark 和绿色文案表达）。
+ */
+@Composable
+fun AlignmentFlashOverlay(
+    onFinished: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val alpha = remember { Animatable(0f) }
+
+    LaunchedEffect(Unit) {
+        alpha.snapTo(0f)
+        alpha.animateTo(0.55f, animationSpec = tween(160, easing = LinearEasing))
+        alpha.animateTo(0f, animationSpec = tween(390, easing = LinearEasing))
+        onFinished()
+    }
+
+    if (alpha.value > 0.001f) {
+        Canvas(modifier = modifier.fillMaxSize()) {
+            val stroke = 5.dp.toPx()
+            val inset = stroke / 2f
+            drawRoundRect(
+                color = GuideAligned.copy(alpha = alpha.value),
+                topLeft = Offset(inset, inset),
+                size = Size(size.width - stroke, size.height - stroke),
+                cornerRadius = CornerRadius(14.dp.toPx()),
+                style = Stroke(stroke)
+            )
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // 提示文案
 // ═══════════════════════════════════════════════════════════════
 

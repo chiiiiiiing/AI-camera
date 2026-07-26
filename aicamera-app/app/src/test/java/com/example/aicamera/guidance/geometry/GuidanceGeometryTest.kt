@@ -187,6 +187,45 @@ class GuidanceGeometryTest {
         assertTrue(p > 0.85f)
     }
 
+    // ── 对齐进度提升（达标反馈前置条件） ───────────────────────
+
+    @Test
+    fun `SUBJECT_ALIGNED boosts progress above aligned threshold`() {
+        // 主体刚进容差圈时原始进度仅 ~0.73，提升后必须 ≥ 0.92（状态机阈值）
+        val boosted = GuidanceGeometry.progressWithAlignedBoost(
+            GuidanceCue.SUBJECT_ALIGNED, 0.73f
+        )
+        assertTrue(boosted >= 0.92f)
+        assertEquals(GuidanceGeometry.ALIGNED_PROGRESS_FLOOR, boosted, 1e-4f)
+    }
+
+    @Test
+    fun `SUBJECT_ALIGNED keeps already-high progress`() {
+        val boosted = GuidanceGeometry.progressWithAlignedBoost(
+            GuidanceCue.SUBJECT_ALIGNED, 0.99f
+        )
+        assertEquals(0.99f, boosted, 1e-4f)
+    }
+
+    @Test
+    fun `other cues are not boosted`() {
+        assertEquals(
+            0.73f,
+            GuidanceGeometry.progressWithAlignedBoost(GuidanceCue.MOVE_LEFT, 0.73f),
+            1e-4f
+        )
+        assertEquals(
+            0.5f,
+            GuidanceGeometry.progressWithAlignedBoost(GuidanceCue.NONE, 0.5f),
+            1e-4f
+        )
+        assertEquals(
+            0.4f,
+            GuidanceGeometry.progressWithAlignedBoost(GuidanceCue.ROLL_CLOCKWISE, 0.4f),
+            1e-4f
+        )
+    }
+
     // ── EMA 平滑器 ────────────────────────────────────────────
 
     @Test

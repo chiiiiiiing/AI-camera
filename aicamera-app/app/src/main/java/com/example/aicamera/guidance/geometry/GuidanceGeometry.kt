@@ -116,6 +116,25 @@ object GuidanceGeometry {
         return if (weight > 0f) (score / weight).coerceIn(0f, 1f) else null
     }
 
+    /** 主体对齐时的进度下限（保证 GuidanceStateMachine 能达到 ALIGNED 相位） */
+    const val ALIGNED_PROGRESS_FLOOR = 0.95f
+
+    /**
+     * 进度与指令对齐（纯函数，便于单测）。
+     *
+     * 问题背景：SUBJECT_ALIGNED 的容差（0.12）比状态机 ALIGNED 阈值（0.92）
+     * 宽松——主体刚进容差圈时位置分仅 ~0.66，综合进度 ~0.73，
+     * 导致「指令说对齐了、状态机却永远到不了 ALIGNED」。
+     * 修复：指令为 SUBJECT_ALIGNED 时进度提升到 [ALIGNED_PROGRESS_FLOOR] 下限。
+     */
+    fun progressWithAlignedBoost(cue: GuidanceCue, progress: Float): Float {
+        return if (cue == GuidanceCue.SUBJECT_ALIGNED) {
+            maxOf(progress, ALIGNED_PROGRESS_FLOOR)
+        } else {
+            progress
+        }
+    }
+
     /**
      * 从检测框计算归一化中心点。
      */
