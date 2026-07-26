@@ -7,10 +7,10 @@
 | 模块 | 选型 | 版本 | 备注 |
 |------|------|------|------|
 | 语言 | Kotlin | 1.9+ | |
-| 最低 SDK | — | 24 (Android 7.0) | CameraX + ONNX Runtime Mobile 兼容性需真机确认 |
+| 最低 SDK | — | 24 (Android 7.0) | CameraX + LiteRT 兼容 |
 | 目标 SDK | — | 35 | 最新 |
 | 相机 | CameraX | 1.4+ | Google 官方推荐 |
-| AI 推理 | ONNX Runtime Android | 1.19.x 起测 | 当前 v9 static int8 ONNX 首选 |
+| AI 推理 | LiteRT (TFLite) | 2.16+ | GPU Delegate 加速 |
 | 架构 | MVVM | — | ViewModel + StateFlow |
 | DI | Hilt | 2.51+ | |
 | 图片加载 | Coil | 2.7+ | Kotlin 原生 |
@@ -29,8 +29,10 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:1.4.1")
     implementation("androidx.camera:camera-view:1.4.1")
 
-    // ONNX Runtime Mobile / Android
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.19.2")
+    // LiteRT (TFLite)
+    implementation("org.tensorflow:tensorflow-lite:2.16.1")
+    implementation("org.tensorflow:tensorflow-lite-gpu:2.16.1")
+    implementation("org.tensorflow:tensorflow-lite-support:2.16.1")
 
     // Hilt
     implementation("com.google.dagger:hilt-android:2.51.1")
@@ -55,7 +57,8 @@ dependencies {
 
 - [Android CameraX 官方文档](https://developer.android.com/media/camera/camerax)
 - [CameraX 官方示例](https://github.com/android/camera-samples)
-- [ONNX Runtime Android](https://onnxruntime.ai/docs/get-started/with-java.html)
+- [TensorFlow Lite Android 指南](https://www.tensorflow.org/lite/android)
+- [TensorFlow Lite GPU Delegate](https://www.tensorflow.org/lite/performance/gpu)
 - [Firebase Crashlytics](https://firebase.google.com/docs/crashlytics)
 - [Hilt 依赖注入](https://developer.android.com/training/dependency-injection/hilt-android)
 - [Coil 图片加载](https://coil-kt.github.io/coil/)
@@ -63,4 +66,4 @@ dependencies {
 ---
 
 > **上一篇**：[附录A-队友协作接口](./附录A-队友协作接口.md)
-> **返回**：[README](../README.md)
+> **返回**：[README](./README.md)

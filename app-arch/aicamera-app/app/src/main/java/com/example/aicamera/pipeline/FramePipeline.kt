@@ -37,6 +37,14 @@ class FramePipeline(
     @Volatile
     private var inference: IInference = inference
 
+    /**
+     * ★ 几何引导阶段（可选）：推理后对输出注入真实几何信号
+     * （IMU 水平角、人脸主体框 → GuidanceCue/进度）。
+     * 由 PipelineViewModel 装配。
+     */
+    @Volatile
+    private var geometryStage: com.example.aicamera.guidance.geometry.GeometryGuidanceStage? = null
+
     /** 管线状态变化回调（调试 / 性能面板用） */
     private var onStateChanged: ((PipelineState) -> Unit)? = null
 
@@ -59,34 +67,44 @@ class FramePipeline(
         scheduler.schedule(
             imageProxy = imageProxy,
             onProcess = { proxy ->
-                // Phase 1: 预处理
+                // Phase 1: 预处理（转正 + 前摄镜像 + resize 到模型尺寸）
                 val preprocessStart = SystemClock.elapsedRealtime()
-                val preprocessed = preprocessor.process(proxy, rotation)
+                val preprocessed = preprocessor.process(proxy, rotation, isFrontCamera)
                 val preprocessMs = SystemClock.elapsedRealtime() - preprocessStart
 
-                // Phase 2: 推理
-                val inferenceStart = SystemClock.elapsedRealtime()
-                val modelOutput = inference.predict(preprocessed.buffer, preprocessed)
-                val inferenceMs = SystemClock.elapsedRealtime() - inferenceStart
+                try {
+                    // Phase 2: 推理
+                    val inferenceStart = SystemClock.elapsedRealtime()
+                    var modelOutput = inference.predict(preprocessed.buffer, preprocessed)
 
-                // Phase 3: 结果解析（假推理直接返回，真实模型需要额外解析步骤）
-                val parseStart = SystemClock.elapsedRealtime()
-                // TODO: 等队友模型到位后，此处插入 parseOutput(modelOutput)
-                val parseMs = SystemClock.elapsedRealtime() - parseStart
+                    // Phase 2.5: 几何引导（真实水平角/主体框 → GuidanceCue + 进度）
+                    geometryStage?.let { stage ->
+                        modelOutput = stage.apply(modelOutput, proxy, isFrontCamera)
+                    }
+                    val inferenceMs = SystemClock.elapsedRealtime() - inferenceStart
 
-                PipelineResult(
-                    frameIndex = 0, // 由 scheduler 填入
-                    rotationDegrees = rotation,
-                    isFrontCamera = isFrontCamera,
-                    modelOutput = modelOutput,
-                    timing = FrameTiming(
-                        frameIndex = 0,
-                        preprocessMs = preprocessMs,
-                        inferenceMs = inferenceMs,
-                        parseMs = parseMs,
-                        totalMs = 0  // 由 FrameScheduler 填入
+                    // Phase 3: 结果解析（假推理直接返回，真实模型需要额外解析步骤）
+                    val parseStart = SystemClock.elapsedRealtime()
+                    // TODO: 等队友模型到位后，此处插入 parseOutput(modelOutput)
+                    val parseMs = SystemClock.elapsedRealtime() - parseStart
+
+                    PipelineResult(
+                        frameIndex = 0, // 由 scheduler 填入
+                        rotationDegrees = rotation,
+                        isFrontCamera = isFrontCamera,
+                        modelOutput = modelOutput,
+                        timing = FrameTiming(
+                            frameIndex = 0,
+                            preprocessMs = preprocessMs,
+                            inferenceMs = inferenceMs,
+                            parseMs = parseMs,
+                            totalMs = 0  // 由 FrameScheduler 填入
+                        )
                     )
-                )
+                } finally {
+                    // ★ 修复：推理抛异常时也必须回收 Bitmap（旧代码异常路径泄漏）
+                    preprocessed.originalBitmap?.recycle()
+                }
             },
             onComplete = { result ->
                 // ★ 使用闭包而非共享字段，避免覆盖风险
@@ -132,6 +150,12 @@ class FramePipeline(
     fun setInference(newInference: IInference) {
         this.inference = newInference
         logInfo("推理器已替换: ${newInference.typeName}")
+    }
+
+    /** 装配几何引导阶段（null 表示关闭） */
+    fun setGeometryStage(stage: com.example.aicamera.guidance.geometry.GeometryGuidanceStage?) {
+        this.geometryStage = stage
+        logInfo("几何引导阶段已${if (stage != null) "装配" else "移除"}")
     }
 }
 

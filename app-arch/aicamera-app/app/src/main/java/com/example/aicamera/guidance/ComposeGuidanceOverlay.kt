@@ -65,7 +65,7 @@ fun ComposeGuidanceOverlay(
 
     val guideAlpha by animateFloatAsState(
         targetValue = when {
-            guidance.phase == GuidancePhase.NEUTRAL -> .32f
+            guidance.phase == GuidancePhase.NEUTRAL -> .70f   // ★ 提高：原来 .32f 太淡
             guidance.phase == GuidancePhase.ALIGNED -> .94f
             else -> 1f
         },
@@ -102,15 +102,16 @@ fun ComposeGuidanceOverlay(
 
     Box(modifier) {
         Canvas(Modifier.fillMaxSize()) {
-            // 基础网格
+            // 基础网格（★ 提高基础可见性，最低 20%）
             if (showGrid) {
-                drawThirdsGrid(alpha = if (subjectMode) .05f * guideAlpha else .12f * guideAlpha)
+                val gridAlpha = if (subjectMode) 0.08f else 0.28f.coerceAtLeast(guideAlpha * 0.35f)
+                drawThirdsGrid(alpha = gridAlpha)
             }
             // 目标参考框
             if (showTargetFrame && !subjectMode) {
                 drawTargetFrame(
                     color = guideColor,
-                    alpha = if (guidance.phase == GuidancePhase.ALIGNED) .88f else .24f * guideAlpha,
+                    alpha = if (guidance.phase == GuidancePhase.ALIGNED) .92f else 0.35f.coerceAtLeast(guideAlpha * 0.40f),
                     aligned = guidance.phase == GuidancePhase.ALIGNED,
                 )
             }
@@ -467,6 +468,46 @@ internal fun guideMotionScale(phase: GuidancePhase): Float = when (phase) {
     GuidancePhase.NEAR -> 0.45f
     GuidancePhase.ALIGNED, GuidancePhase.NEUTRAL -> 0f
     else -> 1f
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 达标绿闪反馈
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * 构图达标瞬间的全屏绿边闪烁。
+ *
+ * 触发时机：GuidancePhase 跃迁进入 ALIGNED（连续 3 帧稳定达标），
+ * 与震动反馈同步。动画：绿色边框从透明 → 0.55 → 0，约 550ms。
+ * 只闪一次，不循环（持续达标状态由 drawAlignedMark 和绿色文案表达）。
+ */
+@Composable
+fun AlignmentFlashOverlay(
+    onFinished: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val alpha = remember { Animatable(0f) }
+
+    LaunchedEffect(Unit) {
+        alpha.snapTo(0f)
+        alpha.animateTo(0.55f, animationSpec = tween(160, easing = LinearEasing))
+        alpha.animateTo(0f, animationSpec = tween(390, easing = LinearEasing))
+        onFinished()
+    }
+
+    if (alpha.value > 0.001f) {
+        Canvas(modifier = modifier.fillMaxSize()) {
+            val stroke = 5.dp.toPx()
+            val inset = stroke / 2f
+            drawRoundRect(
+                color = GuideAligned.copy(alpha = alpha.value),
+                topLeft = Offset(inset, inset),
+                size = Size(size.width - stroke, size.height - stroke),
+                cornerRadius = CornerRadius(14.dp.toPx()),
+                style = Stroke(stroke)
+            )
+        }
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════

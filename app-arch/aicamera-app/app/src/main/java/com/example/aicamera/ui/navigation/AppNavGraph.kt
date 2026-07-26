@@ -1,10 +1,13 @@
 package com.example.aicamera.ui.navigation
 
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.example.aicamera.data.AuthRepository
+import com.example.aicamera.data.SettingsRepository
 import com.example.aicamera.ui.screen.*
 import com.example.aicamera.ui.state.SettingsState
 import com.example.aicamera.ui.theme.AiCameraTheme
@@ -12,6 +15,7 @@ import com.example.aicamera.ui.theme.LoginTheme
 import com.example.aicamera.viewmodel.CameraViewModel
 import com.example.aicamera.viewmodel.PipelineViewModel
 import com.example.aicamera.viewmodel.RenderViewModel
+import kotlinx.coroutines.launch
 
 /**
  * 导航路由表
@@ -23,6 +27,7 @@ object Routes {
     const val MAIN = "main"
     const val SETTINGS = "settings"
     const val GALLERY = "gallery"
+    const val EDIT_PROFILE = "edit_profile"
 }
 
 /**
@@ -44,10 +49,16 @@ fun AppNavGraph(
     navController: NavHostController,
     cameraViewModel: CameraViewModel,
     pipelineViewModel: PipelineViewModel,
-    renderViewModel: RenderViewModel
+    renderViewModel: RenderViewModel,
+    settingsRepository: SettingsRepository
 ) {
-    // ── 设置状态（全局，跨页面保持） ──
-    var settings by remember { mutableStateOf(SettingsState()) }
+    // ── 设置状态（DataStore 持久化，进程重启后保留；修复内存态丢失问题） ──
+    val settings by settingsRepository.settings
+        .collectAsStateWithLifecycle(initialValue = SettingsState())
+    val scope = rememberCoroutineScope()
+    val onSettingsChange: (SettingsState) -> Unit = { s ->
+        scope.launch { settingsRepository.update(s) }
+    }
 
     NavHost(
         navController = navController,
@@ -59,7 +70,7 @@ fun AppNavGraph(
                 SplashScreen(
                     onSplashFinished = {
                         val authRepo = AuthRepository.getInstance(
-                            cameraViewModel.getApplication()
+                            navController.context.applicationContext
                         )
                         if (authRepo.isLoggedIn) {
                             navController.navigate(Routes.MAIN) {
@@ -114,14 +125,14 @@ fun AppNavGraph(
                     cameraViewModel = cameraViewModel,
                     pipelineViewModel = pipelineViewModel,
                     renderViewModel = renderViewModel,
-                    onNavigateToSettings = {
-                        navController.navigate(Routes.SETTINGS)
-                    },
-                    onNavigateToGallery = {
-                        navController.navigate(Routes.GALLERY)
+                    onNavigateToSettings = { navController.navigate(Routes.SETTINGS) },
+                    onNavigateToGallery = { navController.navigate(Routes.GALLERY) },
+                    onNavigateToEditProfile = { navController.navigate(Routes.EDIT_PROFILE) },
+                    onLogout = {
+                        navController.navigate(Routes.LOGIN) { popUpTo(0) { inclusive = true } }
                     },
                     settings = settings,
-                    onSettingsChange = { settings = it }
+                    onSettingsChange = onSettingsChange
                 )
             }
         }
@@ -137,7 +148,16 @@ fun AppNavGraph(
                         }
                     },
                     settings = settings,
-                    onSettingsChange = { settings = it }
+                    onSettingsChange = onSettingsChange
+                )
+            }
+        }
+
+        // ── 编辑资料页 ──
+        composable(Routes.EDIT_PROFILE) {
+            AiCameraTheme {
+                EditProfileScreen(
+                    onBack = { navController.popBackStack() }
                 )
             }
         }

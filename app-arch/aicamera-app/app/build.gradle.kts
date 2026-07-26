@@ -47,12 +47,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     buildFeatures {
         compose = true
+        // BuildConfig.DEBUG 用于 HUD 调试信息门控
+        buildConfig = true
     }
 
     // — 禁止 Compose Compiler 的稳定性检查报错 (Kotlin 2.0+) —
@@ -62,7 +60,19 @@ android {
 
     // — aapt 资源压缩：保留模型文件不被压缩（从 assets 加载时需要） —
     androidResources {
-        noCompress += listOf("tflite")
+        noCompress += listOf("onnx", "f32")
+    }
+
+    // — 单元测试：Android 类（Log 等）返回默认值，便于纯 JVM 测试 —
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
+}
+
+// — Kotlin 2.0 新式编译器配置（替代已废弃的 kotlinOptions 块） —
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 
@@ -73,9 +83,13 @@ dependencies {
     implementation(libs.camerax.lifecycle)
     implementation(libs.camerax.view)
 
-    // ── AI 推理 (LiteRT) ──
-    implementation(libs.tflite)
-    implementation(libs.tflite.gpu)
+    // ── AI 推理 (ONNX Runtime Mobile) ──
+    // 注：TFLite/LiteRT 依赖已移除——v9 确定走 ONNX 路线（docs/09），
+    // 若未来改回 LiteRT 需 AI 侧重新导出模型。
+    implementation(libs.onnxruntime)
+
+    // ── ML Kit 人脸主体检测（离线 bundled 模型，构图几何引导用） ──
+    implementation(libs.mlkit.face.detection)
 
     // ── Compose UI ──
     implementation(platform(libs.compose.bom))
@@ -100,6 +114,9 @@ dependencies {
 
     // ── 图片加载 ──
     implementation(libs.coil.compose)
+
+    // ── 设置持久化 (DataStore) ──
+    implementation(libs.datastore.preferences)
 
     // ── 测试 ──
     testImplementation("junit:junit:4.13.2")

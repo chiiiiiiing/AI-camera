@@ -110,6 +110,38 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            // ── 拍摄 ──
+            SettingsSectionHeader("拍摄")
+
+            SettingsToggle("快门声音", settings.soundEnabled) {
+                onSettingsChange(settings.copy(soundEnabled = it))
+            }
+            SettingsToggle("保存到系统相册", settings.saveOriginal) {
+                onSettingsChange(settings.copy(saveOriginal = it))
+            }
+            SettingsToggle("Pro 模式（EV/ISO/白平衡）", settings.proModeEnabled) {
+                onSettingsChange(settings.copy(proModeEnabled = it))
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ── AI 模型 ──
+            SettingsSectionHeader("AI 模型")
+
+            SettingsInfoRow("推理引擎", "ONNX Runtime v1.19.2")
+            SettingsInfoRow("当前模型", "V9 static int8 (301KB)")
+            SettingsInfoRow("模板数量", "728 条")
+            SettingsInfoRow("推理延迟", "< 150ms (目标)")
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ── 缓存与存储 ──
+            SettingsSectionHeader("缓存与存储")
+
+            SettingsNavRow("清除缓存") { /* TODO: 清除 Glide/Coil + 模型索引缓存 */ }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             // ── 关于 ──
             SettingsSectionHeader("关于")
 

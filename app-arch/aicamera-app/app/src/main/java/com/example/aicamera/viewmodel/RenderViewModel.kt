@@ -11,6 +11,7 @@ import com.example.aicamera.overlay.model.GuideLineType
 import com.example.aicamera.overlay.model.RenderInput
 import com.example.aicamera.pipeline.FakeInferenceOutput
 import com.example.aicamera.pipeline.PipelineResult
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -18,11 +19,17 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 /**
  * 渲染 ViewModel — 连接帧处理管线输出 → 辅助线渲染引擎。
+ *
+ * 注意：FramePreprocessor 已把帧转正（并按前摄做镜像）后再送推理，
+ * 因此所有辅助线坐标都是「显示坐标系」归一化值，
+ * 下发给渲染层时 rotationDegrees 固定为 0（见 P1-7 修复）。
  */
-class RenderViewModel : ViewModel() {
+@HiltViewModel
+class RenderViewModel @Inject constructor() : ViewModel() {
 
     private val _renderInput = MutableStateFlow(RenderInput())
     val renderInput: StateFlow<RenderInput> = _renderInput.asStateFlow()
@@ -91,15 +98,15 @@ class RenderViewModel : ViewModel() {
             is FakeInferenceOutput -> parseFakeOutput(output, result)
             null -> RenderInput(
                 isFrontCamera = result.isFrontCamera,
-                rotationDegrees = result.rotationDegrees
+                rotationDegrees = 0
             )
             else -> {
                 Log.w(CameraConfig.TAG, "[RenderVM] 未知模型输出类型: ${output::class.simpleName}")
-                // ★ 保留 isFrontCamera/rotation，但不输出辅助线（等模型适配）
+                // ★ 保留 isFrontCamera，但不输出辅助线（等模型适配）
                 RenderInput(
                     sceneType = "unknown",
                     isFrontCamera = result.isFrontCamera,
-                    rotationDegrees = result.rotationDegrees
+                    rotationDegrees = 0
                 )
             }
         }
@@ -123,7 +130,8 @@ class RenderViewModel : ViewModel() {
             confidence = output.confidence,
             guideLines = guideLines,
             isFrontCamera = result.isFrontCamera,
-            rotationDegrees = result.rotationDegrees
+            // 帧已在预处理阶段转正 + 镜像，辅助线坐标即显示坐标
+            rotationDegrees = 0
         )
     }
 }

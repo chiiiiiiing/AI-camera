@@ -3,6 +3,7 @@ package com.example.aicamera.ui.screen
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.MediaActionSound
 import android.net.Uri
 import android.provider.MediaStore
 import android.view.ViewGroup
@@ -33,6 +34,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -42,10 +45,14 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.aicamera.camera.CameraConfig
 import com.example.aicamera.camera.CameraGestureDispatcher
+import com.example.aicamera.guidance.AlignmentFlashOverlay
 import com.example.aicamera.guidance.ComposeGuidanceOverlay
 import com.example.aicamera.guidance.GuidanceMessage
+import com.example.aicamera.guidance.GuidancePhase
 import com.example.aicamera.overlay.CompositionOverlayView
+import com.example.aicamera.overlay.model.GuideLineType
 import com.example.aicamera.overlay.model.RenderInput
+import com.example.aicamera.ui.components.ProModePanel
 import com.example.aicamera.ui.state.SettingsState
 import com.example.aicamera.viewmodel.CameraViewModel
 import com.example.aicamera.viewmodel.PipelineViewModel
@@ -56,14 +63,14 @@ import com.example.aicamera.viewmodel.RenderViewModel
  *
  * ViewModel 由外部传入（在 Activity 层创建，跨 Tab 保持）。
  *
- * ## 布局 (三层)
+ * ## 布局（层叠顺序）
  * ```
  * Box
- *   ├── PreviewView           (相机实时画面)
- *   ├── CompositionOverlayView (辅助线叠加)
- *   ├── TopBar                (相册/分享/个人/设置)
- *   ├── BottomBar             (快门+翻转+缩略图+变焦)
- *   └── HUD                   (调试信息)
+ *   ├── PreviewView              (相机实时画面)
+ *   ├── CompositionOverlayView   (AI 动态辅助线：目标区/主体框/水平仪/箭头 + 对焦圈)
+ *   ├── ComposeGuidanceOverlay   (引导层：静态三分线 + 目标框 + 方向指令动画)
+ *   ├── ProModePanel             (可选，Pro 手动控制)
+ *   ├── TopBar / BottomBar / HUD / 引导文案
  * ```
  */
 @Composable
@@ -79,9 +86,9 @@ fun CameraScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val uiState by cameraViewModel.uiState.collectAsStateWithLifecycle()
     val pipelineState by pipelineViewModel.pipelineState.collectAsStateWithLifecycle()
-
-    // ★ RenderInput 不再用 collectAsStateWithLifecycle 全局订阅，改为内部处理
-    var currentRenderInput by remember { mutableStateOf(RenderInput()) }
+    val aiState by pipelineViewModel.aiState.collectAsStateWithLifecycle()
+    val renderStats by renderViewModel.renderStats.collectAsStateWithLifecycle()
+    val guidanceState by renderViewModel.guidanceState.collectAsStateWithLifecycle()
 
     // ── 权限 ──
     var hasCameraPermission by remember {
@@ -114,18 +121,45 @@ fun CameraScreen(
     var cameraInitialized by remember { mutableStateOf(false) }
     var overlayView by remember { mutableStateOf<CompositionOverlayView?>(null) }
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
-    var gestureDispatcher by remember { mutableStateOf<CameraGestureDispatcher?>(null) }
+    val gestureDispatcher = remember { CameraGestureDispatcher(
+        onFocusCircle = { cx, cy -> cameraViewModel.onFocusTapped(cx, cy) },
+        onZoomChanged = { /* zoom 状态由 CameraControls 统一管理 */ },
+        onFocusLocked = { locked -> cameraViewModel.setFocusLocked(locked) }
+    ) }
 
-    // ★ 渲染输入变化 → 仅用于内部状态跟踪，不再送旧 Overlay（避免双重绘制）
-    LaunchedEffect(currentRenderInput) {
-        // 旧 CompositionOverlayView 仅保留对焦圈功能，不再渲染引导线
+    // 快门声（按设置开关）
+    val shutterSound = remember { MediaActionSound() }
+    DisposableEffect(Unit) {
+        onDispose { shutterSound.release() }
     }
 
-    // 订阅 renderInput 源（只用于更新 currentRenderInput）
-    LaunchedEffect(Unit) {
-        renderViewModel.renderInput.collect { input ->
-            currentRenderInput = input
+    // ── 构图达标反馈：进入 ALIGNED 相位瞬间 → 震动 + 绿边闪烁 ──
+    // 判定复用 GuidanceStateMachine 滞回（连续 3 帧稳定达标才进 ALIGNED），
+    // 只在此刻触发一次；退出 ALIGNED 后重新武装，不会连续轰炸。
+    val haptic = LocalHapticFeedback.current
+    var showAlignFlash by remember { mutableStateOf(false) }
+    var prevGuidancePhase by remember { mutableStateOf(GuidancePhase.NEUTRAL) }
+    LaunchedEffect(guidanceState.phase) {
+        val entered = guidanceState.phase == GuidancePhase.ALIGNED &&
+                prevGuidancePhase != GuidancePhase.ALIGNED
+        if (entered) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            showAlignFlash = true
         }
+        prevGuidancePhase = guidanceState.phase
+    }
+
+    // ★ P1-9 修复：AI 推理结果 → 动态辅助线 overlay（修复数据流断裂，
+    //   旧代码收到 RenderInput 后什么也不做，AI 产出只停留在 HUD 文字）
+    LaunchedEffect(settings.showSubjectBox, settings.showTargetZone, settings.showHorizon) {
+        renderViewModel.renderInput.collect { input ->
+            overlayView?.update(input.filteredBy(settings), animate = true)
+        }
+    }
+
+    // 辅助线整体透明度（设置项）
+    LaunchedEffect(settings.overlayAlpha) {
+        overlayView?.alpha = settings.overlayAlpha
     }
 
     // 订阅 focusCircle → Overlay 绘制对焦圆圈
@@ -135,11 +169,14 @@ fun CameraScreen(
         }
     }
 
-    // 订阅拍照结果 → Snackbar 提示
+    // 订阅拍照结果 → 快门声 + 提示
     LaunchedEffect(Unit) {
         cameraViewModel.captureResult.collect { result ->
             when (result) {
                 is com.example.aicamera.camera.CameraCapture.CaptureResult.Success -> {
+                    if (settings.soundEnabled) {
+                        shutterSound.play(MediaActionSound.SHUTTER_CLICK)
+                    }
                     Toast.makeText(context, "照片已保存", Toast.LENGTH_SHORT).show()
                 }
                 is com.example.aicamera.camera.CameraCapture.CaptureResult.Error -> {
@@ -162,6 +199,16 @@ fun CameraScreen(
         if (uiState.isInitialized) {
             cameraViewModel.refreshLatestPhoto()
         }
+    }
+
+    // ★ 手势重挂：Camera 实例每次绑定/重绑都会更换（切前后摄、后台恢复、
+    //   Pro 参数变更），旧代码只在首次 init 时 attach 一次，之后手势全部
+    //   作用在失效的旧 Camera 上。
+    LaunchedEffect(uiState.cameraBindVersion) {
+        val view = previewView ?: return@LaunchedEffect
+        val camera = cameraViewModel.getCamera() ?: return@LaunchedEffect
+        gestureDispatcher.detach(view)
+        gestureDispatcher.attach(view, camera)
     }
 
     // 权限检查
@@ -198,46 +245,38 @@ fun CameraScreen(
                         if (!cameraInitialized) {
                             cameraViewModel.initialize(this, lifecycleOwner) { success ->
                                 cameraInitialized = success
-                                if (success) {
-                                    // ★ 初始化统一手势分发器
-                                    val camera = cameraViewModel.getCamera()
-                                    if (camera != null) {
-                                        val dispatcher = CameraGestureDispatcher(
-                                            onFocusCircle = { cx, cy ->
-                                                cameraViewModel.onFocusTapped(cx, cy)
-                                            },
-                                            onZoomChanged = { ratio ->
-                                                // zoomRatio 由 CameraControls 管理，这里已通过 setZoomRatio 更新
-                                            }
-                                        )
-                                        dispatcher.attach(this, camera)
-                                        gestureDispatcher = dispatcher
-                                    }
-                                }
                             }
                         }
                     }
                 }
             )
 
-            // ── 第 2 层：辅助线叠加 (Android Canvas) ──
+            // ── 第 2 层：AI 动态辅助线叠加 (Android Canvas) ──
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
                 factory = { ctx ->
                     CompositionOverlayView(ctx).also { view ->
+                        view.alpha = settings.overlayAlpha
                         overlayView = view
                     }
                 }
             )
 
             // ── 第 2.5 层：Compose 引导 Overlay (队友设计规范 - 主引导层) ──
-            val guidanceState by renderViewModel.guidanceState.collectAsStateWithLifecycle()
             ComposeGuidanceOverlay(
                 state = guidanceState,
                 showGrid = settings.showGrid,
                 showTargetFrame = settings.showTargetZone,
                 modifier = Modifier.fillMaxSize()
             )
+
+            // ── 第 2.6 层：达标绿闪（进入 ALIGNED 相位瞬间闪一次） ──
+            if (showAlignFlash) {
+                AlignmentFlashOverlay(
+                    onFinished = { showAlignFlash = false },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         } else {
             // 无权限提示
             Box(
@@ -286,7 +325,7 @@ fun CameraScreen(
             CameraBottomBar(
                 modifier = Modifier.align(Alignment.BottomCenter),
                 latestPhotoUri = uiState.latestPhotoUri,
-                onTakePhoto = { cameraViewModel.takePhoto() },
+                onTakePhoto = { cameraViewModel.takePhoto(saveToGallery = settings.saveOriginal) },
                 onToggleCamera = { cameraViewModel.toggleCamera() },
                 onOpenGallery = onNavigateToGallery,
                 zoomRatio = uiState.zoomRatio,
@@ -297,16 +336,51 @@ fun CameraScreen(
             )
         }
 
-        // ── 性能 HUD（左上角调试信息） ──
-        if (uiState.isInitialized) {
+        // ── Pro 模式面板（设置中开启） ──
+        if (uiState.isInitialized && settings.proModeEnabled) {
+            val evIndex by cameraViewModel.evIndex.collectAsStateWithLifecycle()
+            val isoValue by cameraViewModel.isoValue.collectAsStateWithLifecycle()
+            val awbMode by cameraViewModel.awbMode.collectAsStateWithLifecycle()
+            ProModePanel(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 150.dp),
+                isVisible = true,
+                evValue = evIndex,
+                evRange = cameraViewModel.evRange(),
+                onEvChange = { cameraViewModel.setExposureCompensation(it) },
+                isoValue = isoValue ?: 0,
+                onIsoChange = { cameraViewModel.setProIso(if (it == 0) null else it) },
+                awbMode = awbMode ?: android.hardware.camera2.CaptureRequest.CONTROL_AWB_MODE_AUTO,
+                onAwbChange = {
+                    cameraViewModel.setProAwb(
+                        if (it == android.hardware.camera2.CaptureRequest.CONTROL_AWB_MODE_AUTO) null else it
+                    )
+                },
+                zoomRatio = uiState.zoomRatio,
+                zoomRange = 1f to (cameraViewModel.getCamera()?.cameraInfo?.zoomState?.value?.maxZoomRatio
+                    ?: CameraConfig.MAX_ZOOM_RATIO),
+                onZoomChange = { cameraViewModel.setZoom(it) },
+                onDismiss = { /* 由设置页开关控制显隐 */ }
+            )
+        }
+
+        // ── 性能 HUD（左上角调试信息，仅 debug 包显示） ──
+        if (uiState.isInitialized && com.example.aicamera.BuildConfig.DEBUG) {
             Column(
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(top = 52.dp, start = 12.dp)
             ) {
                 Text(
-                    text = "场景: ${renderViewModel.renderStats.collectAsStateWithLifecycle().value.currentScene}",
+                    text = "场景: ${renderStats.currentScene} (${"%.2f".format(renderStats.confidence)})",
                     color = Color.White.copy(alpha = 0.8f),
+                    style = MaterialTheme.typography.labelSmall
+                )
+                Text(
+                    text = "引擎: ${pipelineState.inferenceType} | AI: ${aiState.status}",
+                    color = if (aiState.status == com.example.aicamera.pipeline.AiEngineManager.Status.READY)
+                        Color(0xFF69F0AE) else Color.White.copy(alpha = 0.6f),
                     style = MaterialTheme.typography.labelSmall
                 )
                 Text(
@@ -315,18 +389,17 @@ fun CameraScreen(
                     style = MaterialTheme.typography.labelSmall
                 )
                 Text(
-                    text = "推理: ${pipelineState.avgPipelineMs.toInt()}ms",
+                    text = "推理: ${pipelineState.avgInferenceMs.toInt()}ms | 管线: ${pipelineState.avgPipelineMs.toInt()}ms",
                     color = Color.White.copy(alpha = 0.6f),
                     style = MaterialTheme.typography.labelSmall
                 )
             }
         }
 
-        // ── 引导提示文案（底部居中，Demo 标注） ──
+        // ── 引导提示文案（底部居中） ──
         if (uiState.isInitialized) {
-            val guidanceState by renderViewModel.guidanceState.collectAsStateWithLifecycle()
             Box(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 130.dp)) {
-                GuidanceMessage(state = guidanceState, isDemo = true)
+                GuidanceMessage(state = guidanceState, isDemo = false)
             }
         }
 
@@ -342,10 +415,26 @@ fun CameraScreen(
     // ── 生命周期 ──
     DisposableEffect(Unit) {
         onDispose {
+            previewView?.let { gestureDispatcher.detach(it) }
             pipelineViewModel.pause()
             cameraViewModel.onPause()
         }
     }
+}
+
+/**
+ * 按设置过滤辅助线（设置页的 主体框/目标区/水平仪 开关在这里生效）。
+ */
+private fun RenderInput.filteredBy(s: SettingsState): RenderInput {
+    val filtered = guideLines.filter { line ->
+        when (line.type) {
+            GuideLineType.SUBJECT_BOX -> s.showSubjectBox
+            GuideLineType.TARGET_ZONE -> s.showTargetZone
+            GuideLineType.HORIZON_LEVEL -> s.showHorizon
+            else -> true
+        }
+    }
+    return copy(guideLines = filtered)
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -544,4 +633,3 @@ private fun CameraBottomBar(
         }
     }
 }
-

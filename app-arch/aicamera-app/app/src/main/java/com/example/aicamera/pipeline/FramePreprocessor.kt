@@ -1,6 +1,7 @@
 package com.example.aicamera.pipeline
 
 import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.graphics.Color
 import android.os.SystemClock
 import android.util.Log
@@ -10,30 +11,29 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
- * 帧预处理器 — YUV → RGB → Float Tensor。
+ * 帧预处理器 — YUV → 转正 → (前摄)镜像 → RGB → Float Tensor。
  *
- * ## 处理流程
+ * ## 处理流程（与 v9 接入协议严格对齐，见 docs/09、10）
  * ```
  * ImageProxy (YUV_420_888)
  *     │
- *     ├─ 方案 A: imageProxy.toBitmap()  → RGB Bitmap  → Float ByteBuffer
- *     │   优点: 简单，CameraX 内置
- *     │   缺点: 多一次内存拷贝
- *     │
- *     └─ 方案 B: YUV Plane 直接转 ByteBuffer（优化方向，V1.1 实现）
- *         优点: 少一次 Bitmap 分配
- *         缺点: 需手动处理 YUV 420 的 U/V 子采样
- *
- * MVP 阶段使用方案 A。V1.1 性能优化时切到方案 B。
+ *     ├─ imageProxy.toBitmap()       YUV → RGB Bitmap
+ *     ├─ rotateBitmap(rotation)      按 rotationDegrees 转正（模型要求正向输入）
+ *     ├─ mirrorBitmap()              前摄：镜像到与预览画面一致
+ *     ├─ resize → 224×224
+ *     └─ fillFloatBuffer             RGB [0,1] float32
  * ```
  *
  * ## Buffer 生命周期约定
  * ★ 返回的 PreprocessedFrame.buffer 仅在当前 IInference.predict() 同步调用期间有效。
  *   不允许缓存到异步线程或跨帧持有。未来接入异步推理时需改用 BufferPool。
+ *
+ * ★ originalBitmap（224×224 已转正）由调用方在推理完成后回收（FramePipeline 已用
+ *   try/finally 保证），供 V9 推理器直接做 NCHW 预处理，避免二次解码。
  */
 class FramePreprocessor(
-    /** 模型输入边长（正方形，如 320 表示 320×320） */
-    private var targetSize: Int = 320
+    /** 模型输入边长（正方形，V9 为 224） */
+    private var targetSize: Int = 224
 ) {
     /** 复用 ByteBuffer，避免每帧重新分配 */
     private var reusableBuffer: ByteBuffer = allocateBuffer(targetSize)
@@ -54,27 +54,41 @@ class FramePreprocessor(
      *
      * @param imageProxy CameraX 帧
      * @param rotation 旋转角度（来自 imageProxy.imageInfo.rotationDegrees）
+     * @param isFrontCamera 是否前置摄像头（前置需镜像使模型输入与显示画面一致）
      * @return 预处理后的帧数据（ByteBuffer + 元信息）
      */
-    fun process(imageProxy: ImageProxy, rotation: Int = 0): PreprocessedFrame {
+    fun process(
+        imageProxy: ImageProxy,
+        rotation: Int = 0,
+        isFrontCamera: Boolean = false
+    ): PreprocessedFrame {
         val startTime = SystemClock.elapsedRealtime()
 
         // Step 1: YUV → Bitmap
-        val bitmap = imageProxy.toBitmap()
+        var bitmap = imageProxy.toBitmap()
 
-        // Step 2: Resize → 模型尺寸
+        // Step 2: 按 rotationDegrees 转正（v9 协议：模型期望正向图）
+        if (rotation != 0) {
+            bitmap = rotateBitmap(bitmap, rotation)
+        }
+
+        // Step 3: 前摄镜像（协议：模型输入与显示画面保持一致）
+        if (isFrontCamera) {
+            bitmap = mirrorBitmap(bitmap)
+        }
+
+        // Step 4: Resize → 模型尺寸
         val resized = if (bitmap.width != targetSize || bitmap.height != targetSize) {
             Bitmap.createScaledBitmap(bitmap, targetSize, targetSize, true)
         } else {
             bitmap
         }
 
-        // Step 3: 像素 → Float ByteBuffer
+        // Step 5: 像素 → Float ByteBuffer
         fillFloatBuffer(resized)
 
-        // Step 4: 释放中间 Bitmap
-        if (resized !== bitmap) resized.recycle()
-        bitmap.recycle()
+        // Step 6: 只释放中间 bitmap，保留 resized 供下游推理器使用
+        if (resized !== bitmap) bitmap.recycle()
 
         lastPreprocessMs = SystemClock.elapsedRealtime() - startTime
 
@@ -83,9 +97,11 @@ class FramePreprocessor(
             width = targetSize,
             height = targetSize,
             channels = 3,
-            rotation = rotation,
+            // 帧已转正/镜像，下游无需再做旋转变换
+            rotation = 0,
             originalWidth = imageProxy.width,
-            originalHeight = imageProxy.height
+            originalHeight = imageProxy.height,
+            originalBitmap = resized  // ★ 保留 bitmap 不 recycle，由 FramePipeline 回收
         )
     }
 
@@ -111,18 +127,15 @@ class FramePreprocessor(
         reusableBuffer.rewind()
     }
 
-    // ── 旋转处理 ──────────────────────────────────────────────
+    // ── 旋转/镜像 ─────────────────────────────────────────────
 
     /**
-     * 根据旋转角度旋转 Bitmap。
-     * 等模型输入规格确认后决定二选一：
-     * - 模型要求正方向输入 → 预处理阶段旋转
-     * - 模型支持 rotation 元信息 → 不旋转，模型输出坐标需声明坐标系
+     * 根据旋转角度旋转 Bitmap（回收原图，返回旋转后的图）。
      */
     fun rotateBitmap(bitmap: Bitmap, rotationDegrees: Int): Bitmap {
         if (rotationDegrees == 0) return bitmap
 
-        val matrix = android.graphics.Matrix().apply {
+        val matrix = Matrix().apply {
             postRotate(rotationDegrees.toFloat())
         }
 
@@ -132,6 +145,20 @@ class FramePreprocessor(
 
         if (rotated !== bitmap) bitmap.recycle()
         return rotated
+    }
+
+    /**
+     * 水平镜像 Bitmap（回收原图，返回镜像后的图）。
+     * 前摄 ImageAnalysis 帧不自动镜像，而 PreviewView 显示的是镜像画面，
+     * 模型输入需与显示画面一致（v9 协议 front_camera 条目）。
+     */
+    private fun mirrorBitmap(bitmap: Bitmap): Bitmap {
+        val matrix = Matrix().apply { preScale(-1f, 1f) }
+        val mirrored = Bitmap.createBitmap(
+            bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true
+        )
+        if (mirrored !== bitmap) bitmap.recycle()
+        return mirrored
     }
 
     // ── 配置 ──────────────────────────────────────────────────
@@ -161,9 +188,12 @@ data class PreprocessedFrame(
     val width: Int,
     val height: Int,
     val channels: Int,
+    /** 预处理阶段已转正/镜像，此处恒为 0（下游无需再做坐标旋转） */
     val rotation: Int,
     val originalWidth: Int,
-    val originalHeight: Int
+    val originalHeight: Int,
+    /** 已转正/镜像并 resize 到模型尺寸的 Bitmap（未 recycle），供 V9 直接做 NCHW 预处理 */
+    val originalBitmap: Bitmap? = null
 )
 
 // ── 日志 ──────────────────────────────────────────────────────

@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -27,9 +28,10 @@ import com.example.aicamera.ui.theme.*
 import kotlinx.coroutines.delay
 
 /**
- * 注册页面 — 三步注册流程。
+ * 注册页面 — 三步注册流程，支持邮箱和手机号。
  *
- * Step 1：输入手机号 → 获取验证码（60s 倒计时，模拟验证码 123456）
+ * Step 0：选择注册方式（邮箱 / 手机号）
+ * Step 1：输入邮箱/手机号 → 获取验证码（60s 倒计时，模拟验证码 123456）
  * Step 2：输入验证码 → 点击下一步验证
  * Step 3：设置用户名 + 密码 + 确认密码 → 完成注册
  */
@@ -38,6 +40,9 @@ fun RegisterScreen(
     onRegisterSuccess: () -> Unit,
     onNavigateToLogin: () -> Unit
 ) {
+    // ★ 注册方式：0=手机号, 1=邮箱
+    var regMethod by remember { mutableIntStateOf(0) }
+    val isEmailMode = regMethod == 1
     val context = LocalContext.current
     val authRepo = remember { AuthRepository.getInstance(context) }
 
@@ -91,6 +96,24 @@ fun RegisterScreen(
                 fontWeight = FontWeight.Bold,
                 color = TextDark
             )
+            Spacer(modifier = Modifier.height(12.dp))
+            // ★ 注册方式切换
+            Row(
+                modifier = Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp)).padding(4.dp),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                listOf("📱 手机号" to 0, "📧 邮箱" to 1).forEach { (label, method) ->
+                    Box(
+                        modifier = Modifier.weight(1f).background(
+                            if (method == regMethod) DeepPurple else Color.Transparent, RoundedCornerShape(10.dp)
+                        ).clickable { regMethod = method }.padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(label, fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                            color = if (method == regMethod) Color.White else TextDark.copy(alpha = 0.6f))
+                    }
+                }
+            }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = when (currentStep) {
@@ -306,7 +329,12 @@ fun RegisterScreen(
                                         registerError = "用户名至少 2 个字符"
                                     }
                                     else -> {
-                                        val result = authRepo.register(username, password, phone)
+                                        // ★ 根据注册方式选择对应方法
+                                        val result = if (isEmailMode) {
+                                            authRepo.registerWithEmail(phone, username, password)
+                                        } else {
+                                            authRepo.register(username, password, phone)
+                                        }
                                         when (result) {
                                             is AuthRepository.RegisterResult.Success -> {
                                                 // 注册成功 → 自动登录 → 进入主页

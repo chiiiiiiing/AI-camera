@@ -3,8 +3,9 @@ package com.example.aicamera.data
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
-import java.security.MessageDigest
 import java.security.SecureRandom
+import javax.crypto.SecretKeyFactory
+import javax.crypto.spec.PBEKeySpec
 
 /**
  * 本地认证仓库（MVP 阶段基于 SharedPreferences）。
@@ -13,13 +14,17 @@ import java.security.SecureRandom
  *
  * ## 存储结构
  * - `auth_username` → 用户名
- * - `auth_password_hash` → SHA-256(密码 + salt)
+ * - `auth_password_hash` → PBKDF2(密码, salt, 20k 迭代)
  * - `auth_password_salt` → 随机盐值
  * - `auth_phone` → 注册手机号（用于找回密码）
  * - `auth_session_token` → 登录会话 token
  *
- * ## 模拟验证码
- * MVP 阶段固定验证码为 `123456`，60s 倒计时纯前端模拟。
+ * ## 安全说明（2026-07-26 加固）
+ * - 密码哈希从 SHA-256 单轮升级为 **PBKDF2-HmacSHA256 / 20,000 迭代**（抗暴破）；
+ *   ⚠️ 算法变更使旧哈希失效，老用户需重新注册（MVP 本地账号，可接受）。
+ * - 会话 token 改用 **SecureRandom**（旧版用普通 Random，可预测）。
+ * - 日志不再打印手机号/用户名等 PII。
+ * - ⚠️ 模拟验证码固定为 `123456`（MVP 联调用），**接入真实后端前必须移除**。
  */
 class AuthRepository private constructor(context: Context) {
 
@@ -40,8 +45,15 @@ class AuthRepository private constructor(context: Context) {
     val currentUsername: String?
         get() = if (isLoggedIn) prefs.getString(KEY_USERNAME, null) else null
 
+    /** 当前用户头像 URI（本地路径） */
+    val currentAvatarUri: String?
+        get() = prefs.getString(KEY_AVATAR_URI, null)
+
     val registeredPhone: String?
         get() = prefs.getString(KEY_PHONE, null)
+
+    val registeredEmail: String?
+        get() = prefs.getString(KEY_EMAIL, null)
 
     // ── 注册 ─────────────────────────────────────────────────
 
@@ -77,7 +89,7 @@ class AuthRepository private constructor(context: Context) {
                 .putString(KEY_PHONE, phone)
                 .apply()
 
-            Log.i(TAG, "注册成功: username=$username, phone=$phone")
+            Log.i(TAG, "注册成功")
             return RegisterResult.Success(username)
         } catch (e: Exception) {
             Log.e(TAG, "注册失败", e)
@@ -122,7 +134,7 @@ class AuthRepository private constructor(context: Context) {
             .putString(KEY_SESSION_TOKEN, token)
             .apply()
 
-        Log.i(TAG, "登录成功: username=$savedUsername")
+        Log.i(TAG, "登录成功")
         return LoginResult.Success(savedUsername, token)
     }
 
@@ -141,6 +153,43 @@ class AuthRepository private constructor(context: Context) {
         Log.i(TAG, "所有认证数据已清除")
     }
 
+    // ── 邮箱注册 ─────────────────────────────────────────────
+
+    fun registerWithEmail(email: String, username: String, password: String): RegisterResult {
+        if (email.isBlank()) return RegisterResult.Error("邮箱不能为空")
+        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches())
+            return RegisterResult.Error("邮箱格式不正确")
+        if (username.isBlank() || username.length < 2) return RegisterResult.Error("用户名至少 2 个字符")
+        if (password.length < 6) return RegisterResult.Error("密码至少 6 位")
+        if (hasRegisteredUser && registeredEmail == email) return RegisterResult.Error("该邮箱已注册")
+        try {
+            val salt = generateSalt()
+            prefs.edit()
+                .putString(KEY_EMAIL, email)
+                .putString(KEY_USERNAME, username)
+                .putString(KEY_PASSWORD_HASH, hashPassword(password, salt))
+                .putString(KEY_PASSWORD_SALT, salt)
+                .apply()
+            Log.i(TAG, "邮箱注册成功")
+            return RegisterResult.Success(username)
+        } catch (e: Exception) {
+            return RegisterResult.Error("注册失败")
+        }
+    }
+
+    // ── 个人资料 ─────────────────────────────────────────────
+
+    fun saveAvatarUri(uri: String) {
+        prefs.edit().putString(KEY_AVATAR_URI, uri).apply()
+    }
+
+    fun updateBio(bio: String) {
+        prefs.edit().putString(KEY_BIO, bio).apply()
+    }
+
+    val currentBio: String?
+        get() = prefs.getString(KEY_BIO, null)
+
     // ── 辅助 ─────────────────────────────────────────────────
 
     /** 固定验证码（MVP 阶段） */
@@ -151,23 +200,32 @@ class AuthRepository private constructor(context: Context) {
 
     // ── 内部工具 ─────────────────────────────────────────────
 
+    private val secureRandom = SecureRandom()
+
     private fun generateSalt(): String {
-        val random = SecureRandom()
         val saltBytes = ByteArray(16)
-        random.nextBytes(saltBytes)
+        secureRandom.nextBytes(saltBytes)
         return saltBytes.joinToString("") { "%02x".format(it) }
     }
 
+    /**
+     * PBKDF2-HmacSHA256，20,000 迭代，输出 256bit。
+     * （替代旧的 SHA-256 单轮哈希，抗离线暴破）
+     */
     private fun hashPassword(password: String, salt: String): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        val salted = password + salt
-        val hashBytes = digest.digest(salted.toByteArray(Charsets.UTF_8))
-        return hashBytes.joinToString("") { "%02x".format(it) }
+        val saltBytes = salt.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+        val spec = PBEKeySpec(password.toCharArray(), saltBytes, 20_000, 256)
+        val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+        val hash = factory.generateSecret(spec).encoded
+        spec.clearPassword()
+        return hash.joinToString("") { "%02x".format(it) }
     }
 
+    /** 会话 token：SecureRandom（不可预测） */
     private fun generateToken(): String {
-        val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-        return (1..32).map { chars.random() }.joinToString("")
+        val tokenBytes = ByteArray(24)
+        secureRandom.nextBytes(tokenBytes)
+        return tokenBytes.joinToString("") { "%02x".format(it) }
     }
 
     // ── 结果类型 ─────────────────────────────────────────────
@@ -189,6 +247,9 @@ class AuthRepository private constructor(context: Context) {
         private const val KEY_PASSWORD_HASH = "auth_password_hash"
         private const val KEY_PASSWORD_SALT = "auth_password_salt"
         private const val KEY_PHONE = "auth_phone"
+        private const val KEY_EMAIL = "auth_email"
+        private const val KEY_AVATAR_URI = "auth_avatar_uri"
+        private const val KEY_BIO = "auth_bio"
         private const val KEY_SESSION_TOKEN = "auth_session_token"
         private const val MOCK_VERIFY_CODE = "123456"
 

@@ -11,5 +11,8 @@ data class SettingsState(
     val showSubjectBox: Boolean = true,
     val showTargetZone: Boolean = true,
     val showHorizon: Boolean = true,
-    val overlayAlpha: Float = 1.0f
+    val overlayAlpha: Float = 1.0f,
+    val soundEnabled: Boolean = true,
+    val saveOriginal: Boolean = true,
+    val proModeEnabled: Boolean = false
 )

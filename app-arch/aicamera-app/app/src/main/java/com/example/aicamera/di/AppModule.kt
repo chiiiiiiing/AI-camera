@@ -3,11 +3,9 @@ package com.example.aicamera.di
 import android.content.Context
 import com.example.aicamera.camera.CameraCapture
 import com.example.aicamera.camera.CameraManager
-import com.example.aicamera.pipeline.FakeInferenceAdapter
 import com.example.aicamera.pipeline.FramePipeline
 import com.example.aicamera.pipeline.FramePreprocessor
 import com.example.aicamera.pipeline.FrameScheduler
-import com.example.aicamera.pipeline.IInference
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -17,6 +15,10 @@ import javax.inject.Singleton
 
 /**
  * Hilt DI 模块 — 提供全局单例依赖。
+ *
+ * 注意：AI 推理引擎不在此装配。[AiEngineManager]（@Singleton @Inject）负责
+ * 异步复制资产 → 校验 → 加载模型，PipelineViewModel 在其 READY 后把
+ * V9Inference 热替换进 [FramePipeline]。此处的管线默认用 FakeInference 兜底。
  */
 @Module
 @InstallIn(SingletonComponent::class)
@@ -47,27 +49,22 @@ object AppModule {
     @Provides
     @Singleton
     fun provideFramePreprocessor(): FramePreprocessor {
-        return FramePreprocessor(targetSize = 320)
+        // V9 模型输入为 224×224（见 android_runtime_config.json）
+        return FramePreprocessor(targetSize = 224)
     }
 
-    @Provides
-    @Singleton
-    fun provideInference(): IInference {
-        // MVP 阶段使用假推理，队友给模型后替换
-        return FakeInferenceAdapter()
-    }
-
+    /**
+     * 帧管线（默认 FakeInference 兜底，AI 就绪后由 PipelineViewModel 热替换为 V9）。
+     */
     @Provides
     @Singleton
     fun provideFramePipeline(
         scheduler: FrameScheduler,
-        preprocessor: FramePreprocessor,
-        inference: IInference
+        preprocessor: FramePreprocessor
     ): FramePipeline {
         return FramePipeline(
             scheduler = scheduler,
-            preprocessor = preprocessor,
-            inference = inference
+            preprocessor = preprocessor
         )
     }
 }

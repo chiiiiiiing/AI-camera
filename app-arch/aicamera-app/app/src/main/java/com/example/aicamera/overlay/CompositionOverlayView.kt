@@ -58,11 +58,27 @@ class CompositionOverlayView @JvmOverloads constructor(
         if (animate && currentInput.sceneType != input.sceneType) {
             animController.startTransition {
                 currentInput = input
+                updateAnimationState()
             }
         } else {
             currentInput = input
+            updateAnimationState()
         }
         invalidate()
+    }
+
+    /**
+     * ★ 节电修复：没有可见辅助线时停掉常驻动画（修复空 View 也 60fps
+     *   空转 invalidate 的问题）。对焦圈动画不依赖这两个 animator，
+     *   由 showFocusCircle/onDraw 自驱动，不受影响。
+     */
+    private fun updateAnimationState() {
+        val hasVisibleLines = currentInput.guideLines.any { it.visible }
+        if (hasVisibleLines) {
+            animController.start()
+        } else {
+            animController.stop()
+        }
     }
 
     fun getAnimationController(): AnimationController = animController
@@ -78,7 +94,8 @@ class CompositionOverlayView @JvmOverloads constructor(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         currentDensity = resources.displayMetrics.density
-        animController.start()
+        // ★ 不再无条件启动动画，由 updateAnimationState() 按需启动
+        updateAnimationState()
     }
 
     override fun onDetachedFromWindow() {

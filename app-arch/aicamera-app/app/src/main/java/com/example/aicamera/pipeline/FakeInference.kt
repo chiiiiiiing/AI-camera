@@ -1,7 +1,5 @@
 package com.example.aicamera.pipeline
 
-import android.os.SystemClock
-import android.util.Log
 import com.example.aicamera.camera.CameraConfig
 import com.example.aicamera.guidance.GuidanceCue
 import kotlin.math.abs
@@ -40,45 +38,41 @@ class FakeInference {
      * 由 [FakeInferenceAdapter] 从 FloatBuffer 计算亮度后调用。
      */
     fun predictFromLuminance(luminance: Float, rotation: Int = 0): FakeInferenceOutput {
-        val startTime = SystemClock.elapsedRealtime()
-
-        // 1. 根据亮度选场景
+        // 1. 根据亮度选场景（稳定判断，无随机）
         val scene = when {
             luminance > 180f -> SceneType.BRIGHT
             luminance > 80f -> SceneType.NORMAL
             else -> SceneType.DARK
         }
 
-        // 2. 模拟构图策略
+        // 2. 根据场景选构图策略
         val strategy = when (scene) {
             SceneType.BRIGHT -> CompositionStrategy.RULE_OF_THIRDS
             SceneType.NORMAL -> CompositionStrategy.RULE_OF_THIRDS
             SceneType.DARK -> CompositionStrategy.CENTER
         }
 
-        // 3. 输出辅助线参数
+        // 3. 生成辅助线
         val guideLines = buildGuideLines(scene, strategy)
 
-        // ★ 估计耗时（用于性能面板，不实际 sleep）
         estimatedInferenceMs = (50 + random.nextInt(30)).toLong()
 
-        // ★ 基于亮度模拟构图进度和引导指令
+        // ★ 稳定进度和引导：基于场景类型给出固定值，不随机跳变
         val progress = when (scene) {
-            SceneType.BRIGHT -> 0.78f + random.nextFloat() * 0.15f
-            SceneType.NORMAL -> 0.55f + random.nextFloat() * 0.25f
-            SceneType.DARK -> 0.35f + random.nextFloat() * 0.25f
-        }.coerceIn(0f, 1f)
-
-        val cue = when {
-            progress > 0.88f -> GuidanceCue.NONE
-            random.nextFloat() < 0.6f -> GuidanceCue.MOVE_LEFT
-            else -> GuidanceCue.MOVE_RIGHT
+            SceneType.BRIGHT -> 0.80f
+            SceneType.NORMAL -> 0.65f
+            SceneType.DARK -> 0.45f
         }
+
+        // ★ 关键修复：不再随机生成左右移动指令
+        // GuidanceCue NONE = 告诉 ComposeGuidanceOverlay "当前构图尚可，无需大调整"
+        // Overlay 只会显示静态辅助线（三分线+目标区+水平仪），不会显示闪烁的移动箭头
+        val cue = GuidanceCue.NONE
 
         return FakeInferenceOutput(
             sceneType = scene,
             compositionStrategy = strategy,
-            confidence = 0.7f + random.nextFloat() * 0.25f,
+            confidence = 0.85f,
             luminance = luminance,
             guideLines = guideLines,
             guidanceCue = cue,

@@ -85,7 +85,10 @@ data class TargetZoneParams(
 
 /** 水平仪参数 */
 data class HorizonParams(
-    val angleDegrees: Float  // 正值 = 顺时针偏转
+    /** 水平倾角（度），正值 = 顺时针偏转；★ 不可 clamp 到 [0,1]，角度有正负 */
+    val angleDegrees: Float,
+    /** 水平参考线位置（归一化 y，来自模板 horizon_position；null = 不绘制参考线） */
+    val referenceY: Float? = null
 )
 
 /** 方向箭头参数 */
@@ -160,7 +163,9 @@ object GuideLineParser {
 
     fun parseHorizon(params: Map<String, Any>): HorizonParams {
         return HorizonParams(
-            angleDegrees = params.float("angle_degrees", 0f)
+            // ★ 修复 P1-6：角度不能用归一化 clamp（负角/大角会被钳死）
+            angleDegrees = params.floatUnclamped("angle_degrees", 0f),
+            referenceY = (params["reference_y"] as? Number)?.toFloat()?.coerceIn(0f, 1f)
         )
     }
 
@@ -173,8 +178,14 @@ object GuideLineParser {
         )
     }
 
-    /** ★ 类型安全的数值提取 + 归一化 clamp */
+    /** ★ 类型安全的数值提取 + 归一化 clamp（仅用于坐标/尺寸类参数） */
     private fun Map<String, Any>.float(key: String, default: Float): Float {
         return (this[key] as? Number)?.toFloat()?.coerceIn(0f, 1f) ?: default
+    }
+
+    /** 不 clamp 的数值提取（用于角度等有符号物理量） */
+    private fun Map<String, Any>.floatUnclamped(key: String, default: Float): Float {
+        val v = (this[key] as? Number)?.toFloat() ?: return default
+        return if (v.isFinite()) v else default
     }
 }

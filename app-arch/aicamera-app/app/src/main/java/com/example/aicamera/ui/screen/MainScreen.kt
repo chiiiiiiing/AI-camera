@@ -36,6 +36,8 @@ fun MainScreen(
     renderViewModel: RenderViewModel,
     onNavigateToSettings: () -> Unit,
     onNavigateToGallery: () -> Unit,
+    onNavigateToEditProfile: (() -> Unit)? = null,
+    onLogout: (() -> Unit)? = null,
     settings: SettingsState,
     onSettingsChange: (SettingsState) -> Unit
 ) {
@@ -74,7 +76,9 @@ fun MainScreen(
                 )
                 1 -> CommunityScreen()
                 2 -> ProfileScreen(
-                    onNavigateToSettings = onNavigateToSettings
+                    onNavigateToSettings = onNavigateToSettings,
+                    onNavigateToEditProfile = onNavigateToEditProfile,
+                    onLogout = onLogout
                 )
             }
         }

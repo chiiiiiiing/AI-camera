@@ -36,6 +36,8 @@ class FrameScheduler {
     private val droppedFrames = AtomicLong(0)
     private val processedFrames = AtomicLong(0)
 
+    /** ★ 统计队列锁：推理线程写、主线程读，旧代码无同步存在并发风险 */
+    private val statsLock = Any()
     private val recentPipelineTimes = ArrayDeque<Long>(20)
     private val recentPreprocessTimes = ArrayDeque<Long>(20)
     private val recentInferenceTimes = ArrayDeque<Long>(20)
@@ -64,47 +66,68 @@ class FrameScheduler {
         val frameIdx = processedFrames.incrementAndGet()
         val rotation = imageProxy.imageInfo.rotationDegrees
 
-        inferenceExecutor.execute {
-            val startTime = SystemClock.elapsedRealtime()
+        // ★ 修复竞态：release() 与帧到达并发时 execute() 会抛
+        //   RejectedExecutionException——旧代码此处异常会导致 processing 门闩
+        //   永久卡死 + ImageProxy 泄漏。
+        try {
+            inferenceExecutor.execute {
+                runPipeline(imageProxy, frameIdx, rotation, onProcess, onComplete)
+            }
+        } catch (e: java.util.concurrent.RejectedExecutionException) {
+            logError("推理线程池已关闭，丢弃帧", e)
+            processing.set(false)
+            droppedFrames.incrementAndGet()
+            processedFrames.decrementAndGet()
+            safeClose(imageProxy)
+        }
+    }
 
-            try {
-                val result = onProcess(imageProxy)
-                val totalMs = SystemClock.elapsedRealtime() - startTime
+    private fun runPipeline(
+        imageProxy: ImageProxy,
+        frameIdx: Long,
+        rotation: Int,
+        onProcess: (ImageProxy) -> PipelineResult,
+        onComplete: (PipelineResult) -> Unit
+    ) {
+        val startTime = SystemClock.elapsedRealtime()
 
-                val finalResult = result.copy(
-                    frameIndex = frameIdx,
-                    timing = result.timing.copy(totalMs = totalMs)
-                )
+        try {
+            val result = onProcess(imageProxy)
+            val totalMs = SystemClock.elapsedRealtime() - startTime
 
-                recordTiming(finalResult.timing)
+            val finalResult = result.copy(
+                frameIndex = frameIdx,
+                timing = result.timing.copy(totalMs = totalMs)
+            )
 
-                mainHandler.post {
-                    onComplete(finalResult)
-                }
-            } catch (e: Exception) {
-                logError("管线处理异常", e)
-                val totalMs = SystemClock.elapsedRealtime() - startTime
-                mainHandler.post {
-                    onComplete(
-                        PipelineResult(
+            recordTiming(finalResult.timing)
+
+            mainHandler.post {
+                onComplete(finalResult)
+            }
+        } catch (e: Exception) {
+            logError("管线处理异常", e)
+            val totalMs = SystemClock.elapsedRealtime() - startTime
+            mainHandler.post {
+                onComplete(
+                    PipelineResult(
+                        frameIndex = frameIdx,
+                        rotationDegrees = rotation,
+                        isFrontCamera = false, // ★ 由外部进程时传入，此处仅兜底
+                        modelOutput = null,
+                        timing = FrameTiming(
                             frameIndex = frameIdx,
-                            rotationDegrees = rotation,
-                            isFrontCamera = false, // ★ 由外部进程时传入，此处仅兜底
-                            modelOutput = null,
-                            timing = FrameTiming(
-                                frameIndex = frameIdx,
-                                preprocessMs = 0,
-                                inferenceMs = 0,
-                                parseMs = 0,
-                                totalMs = totalMs
-                            )
+                            preprocessMs = 0,
+                            inferenceMs = 0,
+                            parseMs = 0,
+                            totalMs = totalMs
                         )
                     )
-                }
-            } finally {
-                processing.set(false)
-                safeClose(imageProxy)
+                )
             }
+        } finally {
+            processing.set(false)
+            safeClose(imageProxy)
         }
     }
 
@@ -140,14 +163,23 @@ class FrameScheduler {
         val total = totalFrames.get()
         val dropped = droppedFrames.get()
 
+        // ★ 在锁内取快照，避免与推理线程的 recordTiming 并发
+        val snapshot = synchronized(statsLock) {
+            Triple(
+                recentPreprocessTimes.averageOrZero() to recentInferenceTimes.averageOrZero(),
+                recentPipelineTimes.averageOrZero(),
+                recentPipelineTimes.lastOrNull() ?: 0L
+            )
+        }
+
         return PipelineState(
             totalFrames = total,
             droppedFrames = dropped,
             processedFrames = processed,
-            avgPreprocessMs = recentPreprocessTimes.averageOrZero(),
-            avgInferenceMs = recentInferenceTimes.averageOrZero(),
-            avgPipelineMs = recentPipelineTimes.averageOrZero(),
-            lastPipelineMs = recentPipelineTimes.lastOrNull() ?: 0,
+            avgPreprocessMs = snapshot.first.first,
+            avgInferenceMs = snapshot.first.second,
+            avgPipelineMs = snapshot.second,
+            lastPipelineMs = snapshot.third,
             isProcessing = processing.get(),
             isRunning = isRunning,
             inferenceType = "pipeline",
@@ -160,23 +192,27 @@ class FrameScheduler {
     fun getExecutor(): ExecutorService = inferenceExecutor
 
     private fun recordTiming(timing: FrameTiming) {
-        recentPreprocessTimes.addLast(timing.preprocessMs)
-        if (recentPreprocessTimes.size > 20) recentPreprocessTimes.removeFirst()
+        synchronized(statsLock) {
+            recentPreprocessTimes.addLast(timing.preprocessMs)
+            if (recentPreprocessTimes.size > 20) recentPreprocessTimes.removeFirst()
 
-        recentInferenceTimes.addLast(timing.inferenceMs)
-        if (recentInferenceTimes.size > 20) recentInferenceTimes.removeFirst()
+            recentInferenceTimes.addLast(timing.inferenceMs)
+            if (recentInferenceTimes.size > 20) recentInferenceTimes.removeFirst()
 
-        recentPipelineTimes.addLast(timing.totalMs)
-        if (recentPipelineTimes.size > 20) recentPipelineTimes.removeFirst()
+            recentPipelineTimes.addLast(timing.totalMs)
+            if (recentPipelineTimes.size > 20) recentPipelineTimes.removeFirst()
+        }
     }
 
     private fun resetStats() {
         totalFrames.set(0)
         droppedFrames.set(0)
         processedFrames.set(0)
-        recentPipelineTimes.clear()
-        recentPreprocessTimes.clear()
-        recentInferenceTimes.clear()
+        synchronized(statsLock) {
+            recentPipelineTimes.clear()
+            recentPreprocessTimes.clear()
+            recentInferenceTimes.clear()
+        }
     }
 
     /** ★ 如果线程池已关闭，重建 */
