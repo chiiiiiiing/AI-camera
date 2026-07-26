@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FileProvider 路径映射 -->
+<paths>
+    <!-- 外部存储 Pictures 目录 -->
+    <external-path
+        name="external_pictures"
+        path="Pictures/" />
+
+    <!-- 内部缓存（拍照临时文件） -->
+    <cache-path
+        name="cache"
+        path="." />
+</paths>

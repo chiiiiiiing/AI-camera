@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AI 构图相机</string>
+    <string name="flash_auto">自动闪光</string>
+    <string name="flash_on">强制闪光</string>
+    <string name="flash_off">关闭闪光</string>
+    <string name="flash_torch">手电筒</string>
+    <string name="switch_camera">切换摄像头</string>
+    <string name="take_photo">拍照</string>
+    <string name="permission_camera_title">需要相机权限</string>
+    <string name="permission_camera_message">AI 构图辅助需要访问相机来实时分析画面并提供构图建议。</string>
+    <string name="permission_camera_denied">请在系统设置中开启相机权限</string>
+    <string name="permission_goto_settings">去设置</string>
+    <string name="permission_retry">重试</string>
+    <string name="loading">初始化中…</string>
+    <string name="photo_saved">照片已保存</string>
+    <string name="capture_failed">拍照失败</string>
+</resources>

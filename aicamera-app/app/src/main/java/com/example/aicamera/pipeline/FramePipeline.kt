@@ -1,0 +1,192 @@
+package com.example.aicamera.pipeline
+
+import android.os.SystemClock
+import android.util.Log
+import androidx.camera.core.ImageProxy
+import com.example.aicamera.camera.CameraConfig
+import java.nio.ByteBuffer
+
+/**
+ * 帧处理管线编排器 — 相机链路和 AI 推理之间的桥梁。
+ *
+ * ## 管线数据流
+ * ```
+ * CameraViewModel.frameFlow (ImageProxy)
+ *     │
+ *     ▼
+ * FramePipeline.process(ImageProxy, rotation, isFrontCamera)
+ *     │
+ *     ├─ FrameScheduler.schedule()        ← 跳帧决策 + 线程调度
+ *     │      │
+ *     │      ▼
+ *     ├─ FramePreprocessor.process()      ← YUV → Float Tensor
+ *     │      │
+ *     │      ▼
+ *     ├─ IInference.predict()             ← 推理（真实模型 或 假推理）
+ *     │      │
+ *     │      ▼
+ *     └─ onResult (主线程)                ← PipelineResult → 渲染
+ * ```
+ */
+class FramePipeline(
+    private val scheduler: FrameScheduler = FrameScheduler(),
+    private val preprocessor: FramePreprocessor = FramePreprocessor(),
+    inference: IInference = FakeInferenceAdapter()
+) {
+    /** ★ 可变推理器，支持热替换 */
+    @Volatile
+    private var inference: IInference = inference
+
+    /** 管线状态变化回调（调试 / 性能面板用） */
+    private var onStateChanged: ((PipelineState) -> Unit)? = null
+
+    // ── 公开 API ──────────────────────────────────────────────
+
+    /**
+     * 处理一帧。
+     *
+     * @param imageProxy CameraX 传出的帧
+     * @param rotation 旋转角度
+     * @param isFrontCamera 是否前置摄像头
+     * @param onResult 处理完成后的回调（主线程）
+     */
+    fun process(
+        imageProxy: ImageProxy,
+        rotation: Int,
+        isFrontCamera: Boolean,
+        onResult: (PipelineResult) -> Unit
+    ) {
+        scheduler.schedule(
+            imageProxy = imageProxy,
+            onProcess = { proxy ->
+                // Phase 1: 预处理
+                val preprocessStart = SystemClock.elapsedRealtime()
+                val preprocessed = preprocessor.process(proxy, rotation)
+                val preprocessMs = SystemClock.elapsedRealtime() - preprocessStart
+
+                // Phase 2: 推理
+                val inferenceStart = SystemClock.elapsedRealtime()
+                val modelOutput = inference.predict(preprocessed.buffer, preprocessed)
+                val inferenceMs = SystemClock.elapsedRealtime() - inferenceStart
+
+                // ★ 推理完成后回收 Bitmap（防止内存泄漏）
+                preprocessed.originalBitmap?.recycle()
+
+                // Phase 3: 结果解析（假推理直接返回，真实模型需要额外解析步骤）
+                val parseStart = SystemClock.elapsedRealtime()
+                // TODO: 等队友模型到位后，此处插入 parseOutput(modelOutput)
+                val parseMs = SystemClock.elapsedRealtime() - parseStart
+
+                PipelineResult(
+                    frameIndex = 0, // 由 scheduler 填入
+                    rotationDegrees = rotation,
+                    isFrontCamera = isFrontCamera,
+                    modelOutput = modelOutput,
+                    timing = FrameTiming(
+                        frameIndex = 0,
+                        preprocessMs = preprocessMs,
+                        inferenceMs = inferenceMs,
+                        parseMs = parseMs,
+                        totalMs = 0  // 由 FrameScheduler 填入
+                    )
+                )
+            },
+            onComplete = { result ->
+                // ★ 使用闭包而非共享字段，避免覆盖风险
+                onResult(result)
+                onStateChanged?.invoke(scheduler.getState())
+            }
+        )
+    }
+
+    // ── 生命周期 ──────────────────────────────────────────────
+
+    fun start() {
+        scheduler.start()
+        logInfo("管道已启动")
+    }
+
+    fun stop() {
+        scheduler.stop()
+        logInfo("管道已停止")
+    }
+
+    fun release() {
+        scheduler.release()
+        onStateChanged = null
+        logInfo("管道已释放")
+    }
+
+    // ── 查询 ──────────────────────────────────────────────────
+
+    fun getState(): PipelineState = scheduler.getState().copy(
+        inferenceType = inference.typeName
+    )
+
+    fun setOnStateChanged(block: (PipelineState) -> Unit) {
+        onStateChanged = block
+    }
+
+    /**
+     * ★ 真正可替换的推理器。
+     *
+     * MVP 阶段用 FakeInference，队友模型到位后替换为真实 LiteRT 推理器。
+     */
+    fun setInference(newInference: IInference) {
+        this.inference = newInference
+        logInfo("推理器已替换: ${newInference.typeName}")
+    }
+}
+
+// ── 推理接口 ──────────────────────────────────────────────────
+
+/**
+ * 推理器抽象接口。
+ */
+interface IInference {
+    /** 推理器标识名（调试/状态面板用） */
+    val typeName: String
+
+    /**
+     * 执行推理。
+     *
+     * @param buffer Float32 ByteBuffer（[1, H, W, 3]）
+     * @param frame 预处理的帧（含尺寸等元信息）
+     * @return 推理结果
+     */
+    fun predict(buffer: ByteBuffer, frame: PreprocessedFrame): Any?
+}
+
+/**
+ * ★ 假推理适配器 — 直接从 FloatBuffer 计算亮度，无需 Bitmap 反向转换。
+ */
+class FakeInferenceAdapter : IInference {
+
+    override val typeName: String = "FakeInference"
+
+    private val fake = FakeInference()
+
+    override fun predict(buffer: ByteBuffer, frame: PreprocessedFrame): Any? {
+        // ★ 直接从 FloatBuffer 计算亮度（去除 buffer→Bitmap→亮度 的冗余路径）
+        buffer.rewind()
+        var sum = 0f
+        var count = 0
+
+        while (buffer.remaining() >= 12) {
+            val r = buffer.float
+            val g = buffer.float
+            val b = buffer.float
+            sum += 0.299f * r + 0.587f * g + 0.114f * b
+            count++
+        }
+
+        buffer.rewind()
+        val luminance255 = if (count > 0) sum / count * 255f else 128f
+
+        return fake.predictFromLuminance(luminance255, frame.rotation)
+    }
+}
+
+// ── 日志 ──────────────────────────────────────────────────────
+
+private fun logInfo(msg: String) = Log.i(CameraConfig.TAG, "[Pipeline] $msg")

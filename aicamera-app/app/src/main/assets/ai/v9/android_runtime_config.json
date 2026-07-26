@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "runtime": {
+    "recommended": "onnxruntime-mobile",
+    "model_file": "student_model.static_int8.onnx",
+    "manifest_file": "android_onnx_runtime_manifest.json",
+    "fp32_reference_model_file": "student_model.fp32.onnx"
+  },
+  "model": {
+    "name": "tiny_cnn_v9_wide_topk_siglip2_512",
+    "input_size": 224,
+    "input_tensor": "image",
+    "input_shape": ["batch", 3, 224, 224],
+    "input_dtype": "float32",
+    "output_tensor": "embedding",
+    "output_shape": ["batch", 512],
+    "output_dtype": "float32",
+    "embedding_dimension": 512
+  },
+  "preprocess": {
+    "color_order": "RGB",
+    "resize": "resize frame to 224x224 to match training/evaluation transform",
+    "layout": "NCHW",
+    "normalization": "value = (rgb / 255.0 - 0.5) / 0.5",
+    "rotation": "apply ImageProxy rotationDegrees before resize",
+    "front_camera": "mirror preview overlay coordinates; keep model input consistent with displayed frame"
+  },
+  "postprocess": {
+    "l2_normalize_embedding": true,
+    "search_top_k": 8,
+    "display_top_k": 5,
+    "low_margin_threshold": 0.01,
+    "stable_switch_samples": 2
+  },
+  "ranking": {
+    "base_score": "cosine_similarity",
+    "weights": {
+      "photo_type_match": 0.08,
+      "scene_match_high_confidence": 0.06,
+      "composition_match": 0.03,
+      "lighting_match": 0.02,
+      "photo_type_mismatch": -0.08,
+      "scene_mismatch_high_confidence": -0.04
+    },
+    "notes": "Use top5 plus rule-based reranking. Do not directly trust top1 when top1/top2 margin is below 0.01."
+  },
+  "camera_preview": {
+    "embedding_interval_ms_min": 500,
+    "embedding_interval_ms_max": 1000,
+    "trigger": "time interval or meaningful scene change",
+    "single_flight": true,
+    "drop_frames_while_running": true,
+    "ui_update": "keep previous stable recommendation while new embedding is running"
+  },
+  "index": {
+    "directory": "../../../template_index.new_batch.student-tiny-cnn-v9-static-int8-onnx-512",
+    "metadata_file": "templates.metadata.jsonl",
+    "keys_file": "templates.keys.json",
+    "embeddings_file": "templates.embeddings.f32",
+    "usearch_file": "templates.usearch.idx",
+    "usearch_manifest_file": "templates.usearch.json"
+  },
+  "android_budget": {
+    "model_size_target_bytes": 5242880,
+    "static_int8_model_bytes": 301677,
+    "single_frame_embedding_p50_ms_target": 80,
+    "single_frame_embedding_p90_ms_target": 150,
+    "requires_real_device_validation": true
+  },
+  "offline_quality": {
+    "teacher_top5_same_scene_pct": 97.53,
+    "v5_top5_same_scene_pct": 94.37,
+    "v9_fp32_top5_same_scene_pct": 96.57,
+    "v9_static_int8_onnx_top5_same_scene_pct": 96.15,
+    "v9_static_int8_onnx_top5_same_photo_type_pct": 98.21,
+    "commercial_gate_top5_same_scene_pct": 95.0
+  },
+  "artifacts": {
+    "model_sha256": "752bfef24b553a27fb0d419e939a6fc2583a22efda1287b01ce1184409f3e5d9",
+    "metadata": "../../../template_metadata.new_batch.student-tiny-cnn-v9-static-int8-onnx-512.jsonl",
+    "quality_report": "../../../template_index.new_batch.student-tiny-cnn-v9-static-int8-onnx-512/templates.quality_report.md"
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "android_budget": {
+    "model_size_target_bytes": 5242880,
+    "preview_sampling": "500ms-1000ms or meaningful scene change",
+    "ranking": "top5 plus rule-based reranking",
+    "single_frame_embedding_p50_ms": 80,
+    "single_frame_embedding_p90_ms": 150
+  },
+  "input": {
+    "color": "RGB",
+    "dtype": "float32",
+    "name": "image",
+    "normalization": "value = (rgb_0_to_1 - 0.5) / 0.5",
+    "shape": [
+      "batch",
+      3,
+      224,
+      224
+    ]
+  },
+  "output": {
+    "dtype": "float32",
+    "name": "embedding",
+    "postprocess": "embedding is L2-normalized by the model; normalize again defensively before index search",
+    "shape": [
+      "batch",
+      512
+    ]
+  },
+  "runtime": "onnxruntime-mobile",
+  "schema_version": 1,
+  "source_onnx": "../preprocessed/student_models/tiny_cnn_v9_wide_topk_siglip2_512/export/student_model.fp32.onnx",
+  "static_int8_onnx": {
+    "activation_type": "QUInt8",
+    "bytes": 301677,
+    "calibration_items": 128,
+    "calibration_metadata": "../preprocessed/template_metadata.new_batch.siglip2-teacher.jsonl",
+    "calibration_method": "MinMax",
+    "op_types_quantized": [
+      "Conv",
+      "Gemm",
+      "MatMul"
+    ],
+    "path": "../preprocessed/student_models/tiny_cnn_v9_wide_topk_siglip2_512/export/student_model.static_int8.onnx",
+    "per_channel": true,
+    "quant_format": "QDQ",
+    "sha256": "752bfef24b553a27fb0d419e939a6fc2583a22efda1287b01ce1184409f3e5d9",
+    "weight_type": "QInt8"
+  },
+  "verification": {
+    "fp32_int8_cosine": 0.9914869070053101,
+    "fp32_output_shape": [
+      1,
+      512
+    ],
+    "int8_output_l2_norm": 1.000000238418579,
+    "int8_output_shape": [
+      1,
+      512
+    ],
+    "sample_photo_id": "new_batch_00027",
+    "status": "ready"
+  }
+}
