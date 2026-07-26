@@ -59,37 +59,39 @@ class FramePipeline(
         scheduler.schedule(
             imageProxy = imageProxy,
             onProcess = { proxy ->
-                // Phase 1: 预处理
+                // Phase 1: 预处理（转正 + 前摄镜像 + resize 到模型尺寸）
                 val preprocessStart = SystemClock.elapsedRealtime()
-                val preprocessed = preprocessor.process(proxy, rotation)
+                val preprocessed = preprocessor.process(proxy, rotation, isFrontCamera)
                 val preprocessMs = SystemClock.elapsedRealtime() - preprocessStart
 
-                // Phase 2: 推理
-                val inferenceStart = SystemClock.elapsedRealtime()
-                val modelOutput = inference.predict(preprocessed.buffer, preprocessed)
-                val inferenceMs = SystemClock.elapsedRealtime() - inferenceStart
+                try {
+                    // Phase 2: 推理
+                    val inferenceStart = SystemClock.elapsedRealtime()
+                    val modelOutput = inference.predict(preprocessed.buffer, preprocessed)
+                    val inferenceMs = SystemClock.elapsedRealtime() - inferenceStart
 
-                // ★ 推理完成后回收 Bitmap（防止内存泄漏）
-                preprocessed.originalBitmap?.recycle()
+                    // Phase 3: 结果解析（假推理直接返回，真实模型需要额外解析步骤）
+                    val parseStart = SystemClock.elapsedRealtime()
+                    // TODO: 等队友模型到位后，此处插入 parseOutput(modelOutput)
+                    val parseMs = SystemClock.elapsedRealtime() - parseStart
 
-                // Phase 3: 结果解析（假推理直接返回，真实模型需要额外解析步骤）
-                val parseStart = SystemClock.elapsedRealtime()
-                // TODO: 等队友模型到位后，此处插入 parseOutput(modelOutput)
-                val parseMs = SystemClock.elapsedRealtime() - parseStart
-
-                PipelineResult(
-                    frameIndex = 0, // 由 scheduler 填入
-                    rotationDegrees = rotation,
-                    isFrontCamera = isFrontCamera,
-                    modelOutput = modelOutput,
-                    timing = FrameTiming(
-                        frameIndex = 0,
-                        preprocessMs = preprocessMs,
-                        inferenceMs = inferenceMs,
-                        parseMs = parseMs,
-                        totalMs = 0  // 由 FrameScheduler 填入
+                    PipelineResult(
+                        frameIndex = 0, // 由 scheduler 填入
+                        rotationDegrees = rotation,
+                        isFrontCamera = isFrontCamera,
+                        modelOutput = modelOutput,
+                        timing = FrameTiming(
+                            frameIndex = 0,
+                            preprocessMs = preprocessMs,
+                            inferenceMs = inferenceMs,
+                            parseMs = parseMs,
+                            totalMs = 0  // 由 FrameScheduler 填入
+                        )
                     )
-                )
+                } finally {
+                    // ★ 修复：推理抛异常时也必须回收 Bitmap（旧代码异常路径泄漏）
+                    preprocessed.originalBitmap?.recycle()
+                }
             },
             onComplete = { result ->
                 // ★ 使用闭包而非共享字段，避免覆盖风险

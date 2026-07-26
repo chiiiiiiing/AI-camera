@@ -22,12 +22,16 @@ object CoordinateMapper {
     /**
      * 归一化坐标 → View 像素坐标。
      *
+     * ★ 修复 P1-7：旋转变换改在「归一化空间」完成（旧实现在像素空间旋转，
+     *   90°/270° 时映射到转置坐标系，x 上限错用 viewHeight，竖屏下目标区
+     *   被画到屏幕外）。归一化空间旋转天然无维度交换问题。
+     *
      * @param normX 归一化 X（0.0–1.0）
      * @param normY 归一化 Y（0.0–1.0）
      * @param viewWidth Overlay View 宽度（px）
      * @param viewHeight Overlay View 高度（px）
      * @param isFrontCamera 是否前置摄像头（true 则翻转 X）
-     * @param rotationDegrees 帧旋转角度
+     * @param rotationDegrees 帧旋转角度（帧需顺时针旋转多少度才正向）
      */
     fun mapPoint(
         normX: Float,
@@ -37,14 +41,11 @@ object CoordinateMapper {
         isFrontCamera: Boolean = false,
         rotationDegrees: Int = 0
     ): PointF {
-        val x = if (isFrontCamera) {
-            (1.0f - normX) * viewWidth
-        } else {
-            normX * viewWidth
-        }
-        val y = normY * viewHeight
+        val x = if (isFrontCamera) 1.0f - normX else normX
+        val y = normY
 
-        return applyRotation(PointF(x, y), viewWidth, viewHeight, rotationDegrees)
+        val rotated = applyRotationNormalized(x, y, rotationDegrees)
+        return PointF(rotated.x * viewWidth, rotated.y * viewHeight)
     }
 
     /**
@@ -104,32 +105,25 @@ object CoordinateMapper {
     }
 
     /**
-     * 按旋转角度对坐标做变换。
+     * 在归一化空间按旋转角度变换坐标。
      *
-     * 大多数情况下 rotationDegrees 为 0 或 90。
-     * CameraX 的 imageProxy.rotationDegrees 值域：0 / 90 / 180 / 270。
+     * rotationDegrees 语义与 CameraX 一致：帧需要**顺时针**旋转多少度才正向。
+     * 在归一化空间做旋转没有宽高交换问题，旋转后再乘 View 尺寸即可。
+     *
+     * 验证（90°）：帧左上角 (0,0) 顺时针转 90° 后到正向图右上角 (1,0) →
+     *   公式 (1 - y, x) = (1, 0) ✓
      */
-    private fun applyRotation(
-        point: PointF,
-        viewWidth: Int,
-        viewHeight: Int,
+    private fun applyRotationNormalized(
+        x: Float,
+        y: Float,
         rotationDegrees: Int
     ): PointF {
         return when (rotationDegrees) {
-            0 -> point
-            90 -> {
-                // 旋转 90°：x' = h - y, y' = x
-                PointF(viewHeight - point.y, point.x)
-            }
-            180 -> {
-                // 旋转 180°：x' = w - x, y' = h - y
-                PointF(viewWidth - point.x, viewHeight - point.y)
-            }
-            270 -> {
-                // 旋转 270°：x' = y, y' = w - x
-                PointF(point.y, viewWidth - point.x)
-            }
-            else -> point
+            0 -> PointF(x, y)
+            90 -> PointF(1f - y, x)
+            180 -> PointF(1f - x, 1f - y)
+            270 -> PointF(y, 1f - x)
+            else -> PointF(x, y)
         }
     }
 

@@ -31,10 +31,9 @@ Ai-camera/
 │   ├── 附录A-队友协作接口.md   #   模型输入输出约定/问题清单
 │   └── 附录B-技术选型速查.md   #   技术栈速览
 │
-└── modules/                   # 🧩 独立模块参考实现（原始版本，不直接编译）
-    ├── 01-相机链路/            #   CameraManager / Capture / Controls / Focus / Permission
-    ├── 02-帧处理管线/          #   FrameScheduler / Preprocessor / Pipeline / FakeInference
-    └── 03-辅助线渲染引擎/      #   CompositionOverlayView / GuideLineRenderer / CoordinateMapper
+└── _archive/                  # 🗄️ 历史参考代码（已归档，不再维护）
+    ├── modules/               #   早期独立模块参考实现（已合并进 app）
+    └── teammate-repo/         #   队友仓库旧副本（被 aicamera-app 取代）
 ```
 
 ## 快速开始
@@ -79,13 +78,18 @@ cd aicamera-app
 | 产品/设计（队友） | 功能范围、构图策略、UI 设计稿 |
 | **移动端工程（你）** | **Android 上全部跑通：相机 → 推理 → 渲染 → 上线** |
 
-## 当前状态 (2026-07-09)
+## 当前状态 (2026-07-26，整改后)
 
-- ✅ 项目骨架可编译运行
-- ✅ CameraX 预览 / 拍照 / 切换摄像头
-- ✅ 帧处理管线 (ImageAnalysis → Scheduler → Preprocessor → Pipeline)
-- ✅ 辅助线渲染 (三分线 / 主体框 / 目标区域 / 水平仪 / 箭头 / 引导线)
-- ✅ MVVM + Hilt DI + Compose UI 全部串联
-- 🔶 FakeInference 占位 (按亮度模拟场景识别)
-- ❌ 真实 AI 模型接入 (等待队友交付 .tflite)
-- ❌ 设置页、构图状态机、达标反馈等体验功能
+- ✅ 项目骨架可编译运行（assembleDebug BUILD SUCCESSFUL，14/14 单测通过）
+- ✅ CameraX 预览 / 拍照 / 切换摄像头（照片经 MediaStore 进系统相册）
+- ✅ 帧处理管线 (ImageAnalysis → Scheduler → Preprocessor[转正/镜像/224] → Pipeline)
+- ✅ **V9 ONNX 推理链路已接通**（AiEngineManager 后台装配 → 热替换进管线；失败自动 Fake 兜底）
+- ✅ 辅助线渲染 (三分线 / 主体框 / 目标区 / 水平仪+参考线 / 箭头 / 引导线)
+- ✅ MVVM + Hilt DI（ViewModel 全部真注入）+ Compose UI 全部串联
+- ✅ 设置系统 DataStore 持久化，8 项开关全部生效（含 Pro 模式面板）
+- ✅ 单元测试起步（索引切片 + 引导状态机滞回）
+- 🔶 GuidanceCue 移动/旋转指令：待接 ML Kit 主体检测 + IMU（模型本身不给坐标）
+- ❌ 真机性能验收（p50/p90 延迟、10-30 分钟稳定性）
+
+> 2026-07-26 大整改详情见根目录《审查报告-2026-07-26.md》《11-整改记录.md》。
+> ⚠️ 注意：本机 Android Studio JBR 已损坏，命令行构建请用 `C:\Users\19900\.aicamera-jdk\jdk-21.0.12+8`（见 11-整改记录 第七节）。

@@ -110,6 +110,21 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            // ── 拍摄 ──
+            SettingsSectionHeader("拍摄")
+
+            SettingsToggle("快门声音", settings.soundEnabled) {
+                onSettingsChange(settings.copy(soundEnabled = it))
+            }
+            SettingsToggle("保存到系统相册", settings.saveOriginal) {
+                onSettingsChange(settings.copy(saveOriginal = it))
+            }
+            SettingsToggle("Pro 模式（EV/ISO/白平衡）", settings.proModeEnabled) {
+                onSettingsChange(settings.copy(proModeEnabled = it))
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             // ── AI 模型 ──
             SettingsSectionHeader("AI 模型")
 

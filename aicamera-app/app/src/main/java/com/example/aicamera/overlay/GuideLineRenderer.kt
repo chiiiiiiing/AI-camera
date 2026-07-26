@@ -127,10 +127,11 @@ object GuideLineRenderer {
         pulseAlpha: Float = 1f,
         density: Float = 3.0f
     ) {
-        // ★ 使用 CoordinateMapper 映射矩形
+        // ★ 使用 CoordinateMapper 映射矩形（★ 修复：rotationDegrees 之前漏传，
+        //   与 drawTargetZone 行为不一致——一个旋转一个不旋转）
         val normRect = params.toRectF()
         val rect = CoordinateMapper.mapRect(
-            normRect, viewWidth, viewHeight, isFrontCamera
+            normRect, viewWidth, viewHeight, isFrontCamera, rotationDegrees
         )
         val cornerLen = 12f * density
 
@@ -201,8 +202,24 @@ object GuideLineRenderer {
         viewHeight: Int,
         density: Float = 3.0f
     ) {
-        val cx = viewWidth / 2f
-        val cy = viewHeight * 0.85f
+        val w = viewWidth.toFloat()
+        val h = viewHeight.toFloat()
+
+        // ★ 水平参考线（来自模板 horizon_position，修复 P1-6：该参数曾被静默丢弃）
+        params.referenceY?.let { refY ->
+            dashPaint.color = RenderConfig.HORIZON_BG_COLOR
+            dashPaint.alpha = 160
+            dashPaint.strokeWidth = 1.2f * density
+            dashPaint.pathEffect = DashPathEffect(
+                floatArrayOf(10f * density, 8f * density), 0f
+            )
+            val y = refY * h
+            canvas.drawLine(0f, y, w, y, dashPaint)
+            dashPaint.pathEffect = null
+        }
+
+        val cx = w / 2f
+        val cy = h * 0.85f
         val radius = 36f * density
         val angle = params.angleDegrees
 

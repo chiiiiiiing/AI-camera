@@ -4,13 +4,11 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.aicamera.camera.CameraConfig
+import com.example.aicamera.pipeline.AiEngineManager
 import com.example.aicamera.pipeline.FramePipeline
-import com.example.aicamera.pipeline.FrameScheduler
-import com.example.aicamera.pipeline.FramePreprocessor
-import com.example.aicamera.pipeline.IInference
 import com.example.aicamera.pipeline.PipelineResult
 import com.example.aicamera.pipeline.PipelineState
-import com.example.aicamera.pipeline.FakeInferenceAdapter
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,21 +18,23 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 /**
  * 帧处理管线的 ViewModel。
+ *
+ * ★ 全部依赖经 Hilt 注入（修复历史上绕过 DI 自己 new、导致 V9 装配失效的 P0）。
+ * 管线默认以 FakeInference 启动；订阅 [AiEngineManager.state]，
+ * V9 引擎 READY 后热替换进管线，无需重启。
  */
-class PipelineViewModel : ViewModel() {
+@HiltViewModel
+class PipelineViewModel @Inject constructor(
+    private val pipeline: FramePipeline,
+    aiEngine: AiEngineManager
+) : ViewModel() {
 
-    private val scheduler = FrameScheduler()
-    private val preprocessor = FramePreprocessor(targetSize = 320)
-    private var inference: IInference = FakeInferenceAdapter()
-
-    private val pipeline = FramePipeline(
-        scheduler = scheduler,
-        preprocessor = preprocessor,
-        inference = inference
-    )
+    /** AI 引擎装配状态（HUD/调试面板展示用） */
+    val aiState: StateFlow<AiEngineManager.State> = aiEngine.state
 
     private val _pipelineState = MutableStateFlow(PipelineState())
     val pipelineState: StateFlow<PipelineState> = _pipelineState.asStateFlow()
@@ -46,6 +46,22 @@ class PipelineViewModel : ViewModel() {
 
     /** ★ 防止重复 connect 导致多个 collector */
     private var collectJob: Job? = null
+
+    init {
+        // AI 引擎 READY 后热替换推理器（Fake → V9-ONNX）
+        viewModelScope.launch {
+            aiEngine.state.collect { state ->
+                if (state.status == AiEngineManager.Status.READY) {
+                    val v9 = aiEngine.v9Inference
+                    if (v9 != null && pipeline.getState().inferenceType != v9.typeName) {
+                        pipeline.setInference(v9)
+                        _pipelineState.update { pipeline.getState() }
+                        Log.i(CameraConfig.TAG, "[PipelineVM] V9 推理引擎已接入管线 (${state.templateCount} 条模板)")
+                    }
+                }
+            }
+        }
+    }
 
     fun connect(frameFlow: SharedFlow<CameraViewModel.FrameData>) {
         // ★ 防重入
@@ -73,12 +89,6 @@ class PipelineViewModel : ViewModel() {
         }
     }
 
-    fun setRealInference(realInference: IInference) {
-        inference = realInference
-        pipeline.setInference(realInference)
-        Log.i(CameraConfig.TAG, "[PipelineVM] 已切换为真实推理器")
-    }
-
     fun pause() {
         pipeline.stop()
     }
@@ -92,5 +102,3 @@ class PipelineViewModel : ViewModel() {
         pipeline.release()
     }
 }
-
-private typealias FrameData = CameraViewModel.FrameData

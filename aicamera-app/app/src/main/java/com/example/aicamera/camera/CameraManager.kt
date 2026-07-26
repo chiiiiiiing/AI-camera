@@ -46,6 +46,20 @@ class CameraManager(
     var currentFace: CameraFace = CameraFace.BACK
         private set
 
+    /**
+     * Pro 模式手动参数（ISO / 白平衡）。
+     * 设置后在下一次 [bindUseCases] 时经 Camera2Interop 应用到 capture session。
+     */
+    data class ProOptions(
+        /** ISO 感光度（null = 自动） */
+        val iso: Int? = null,
+        /** 白平衡模式 CaptureRequest.CONTROL_AWB_MODE_*（null = 自动） */
+        val awbMode: Int? = null
+    )
+
+    /** 当前 Pro 参数（为 null 表示全自动） */
+    var proOptions: ProOptions? = null
+
     // ── 内部组件 ──────────────────────────────────────────────
 
     private var cameraProvider: ProcessCameraProvider? = null
@@ -116,13 +130,15 @@ class CameraManager(
         // ★ 确保 executor 可用（release 后也可重复使用）
         ensureAnalysisExecutor()
 
-        // 1. Preview — 实时取景
+        // 1. Preview — 实时取景（应用 Pro 参数）
         preview = Preview.Builder()
+            .also { applyProOptions(it) }
             .build()
             .also { it.setSurfaceProvider(view.surfaceProvider) }
 
-        // 2. ImageCapture — 拍照
+        // 2. ImageCapture — 拍照（应用 Pro 参数，保证成片与预览一致）
         imageCapture = ImageCapture.Builder()
+            .also { applyProOptions(it) }
             .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
             .setFlashMode(ImageCapture.FLASH_MODE_AUTO)
             .build()
@@ -152,6 +168,45 @@ class CameraManager(
             logError("UseCase 绑定失败", e)
             camera = null
             false
+        }
+    }
+
+    // ── 帧分析回调 ────────────────────────────────────────────
+
+    /**
+     * 把 [proOptions] 经 Camera2Interop 写入 UseCase builder。
+     * ISO / 白平衡属于 capture session 级参数，重绑后生效。
+     */
+    @androidx.annotation.OptIn(androidx.camera.camera2.interop.ExperimentalCamera2Interop::class)
+    private fun applyProOptions(builder: Any) {
+        val opts = proOptions ?: return
+        when (builder) {
+            is Preview.Builder -> {
+                val ext = androidx.camera.camera2.interop.Camera2Interop.Extender(builder)
+                opts.iso?.let {
+                    ext.setCaptureRequestOption(
+                        android.hardware.camera2.CaptureRequest.SENSOR_SENSITIVITY, it
+                    )
+                }
+                opts.awbMode?.let {
+                    ext.setCaptureRequestOption(
+                        android.hardware.camera2.CaptureRequest.CONTROL_AWB_MODE, it
+                    )
+                }
+            }
+            is ImageCapture.Builder -> {
+                val ext = androidx.camera.camera2.interop.Camera2Interop.Extender(builder)
+                opts.iso?.let {
+                    ext.setCaptureRequestOption(
+                        android.hardware.camera2.CaptureRequest.SENSOR_SENSITIVITY, it
+                    )
+                }
+                opts.awbMode?.let {
+                    ext.setCaptureRequestOption(
+                        android.hardware.camera2.CaptureRequest.CONTROL_AWB_MODE, it
+                    )
+                }
+            }
         }
     }
 
@@ -285,13 +340,15 @@ class CameraManager(
         logInfo("相机已解绑")
     }
 
-    /** 恢复时重新绑定（从后台回到前台） */
-    fun rebind() {
-        if (lifecycleOwner != null && previewView != null) {
-            bindUseCases()
-            logInfo("相机已重新绑定")
+    /** 恢复时重新绑定（从后台回到前台）。@return 是否绑定成功 */
+    fun rebind(): Boolean {
+        return if (lifecycleOwner != null && previewView != null) {
+            val bound = bindUseCases()
+            if (bound) logInfo("相机已重新绑定") else logError("相机重绑失败")
+            bound
         } else {
             logWarning("rebind: lifecycleOwner 或 previewView 为 null，跳过绑定")
+            false
         }
     }
 

@@ -2,6 +2,8 @@ package com.example.aicamera.camera
 
 import android.content.ContentValues
 import android.content.Context
+import android.content.pm.PackageManager
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -19,20 +21,16 @@ import java.util.Locale
 import java.util.concurrent.Executor
 
 /**
- * 拍照与保存到系统相册。
+ * 拍照与保存。
+ *
+ * ## 保存策略（修复 P1-8：照片不进系统相册的问题）
+ * - Android 10+ 且 saveToGallery=true：经 MediaStore 插入 Pictures/AiCamera，
+ *   系统相册可见，卸载不丢，缩略图/相册页查询可用；
+ * - saveToGallery=false：保存到应用私有目录（不进相册，卸载即删）；
+ * - Android 9-：写公共 Pictures 目录（先检查 WRITE_EXTERNAL_STORAGE 运行时权限），
+ *   写完经 MediaScannerConnection 扫描进相册。
  *
  * 拍照结果通过 [OnCaptureCallback] 回调。
- *
- * 用法：
- * ```
- * val capture = CameraCapture(context)
- * capture.takePhoto(imageCapture, flashMode) { result ->
- *     when (result) {
- *         is CaptureResult.Success -> showThumbnail(result.uri)
- *         is CaptureResult.Error -> showError(result.message)
- *     }
- * }
- * ```
  */
 class CameraCapture(
     private val context: Context,
@@ -59,24 +57,27 @@ class CameraCapture(
     // ── 拍照 ──────────────────────────────────────────────────
 
     /**
-     * 拍一张照片，保存到系统相册。
+     * 拍一张照片。
      *
      * @param imageCapture CameraX 的 ImageCapture UseCase
      * @param flashMode 使用 [CameraConfig.FlashMode] 枚举，内部映射为 CameraX 常量
+     * @param saveToGallery true = 保存到系统相册（Pictures/AiCamera）；
+     *                      false = 仅保存到应用私有目录
      * @param callback 拍照结果回调
      */
     fun takePhoto(
         imageCapture: ImageCapture,
         flashMode: FlashMode = CameraConfig.DEFAULT_FLASH_MODE,
+        saveToGallery: Boolean = true,
         callback: OnCaptureCallback
     ) {
         // 1. 映射闪光灯模式
         imageCapture.flashMode = CameraConfig.flashModeToImageCapture(flashMode)
 
         // 2. 构建输出选项
-        val outputOptions = createOutputOptions()
+        val outputOptions = createOutputOptions(saveToGallery)
         if (outputOptions == null) {
-            callback.onResult(CaptureResult.Error("无法创建输出文件"))
+            callback.onResult(CaptureResult.Error("无法创建输出文件（可能缺少存储权限）"))
             return
         }
 
@@ -110,48 +111,58 @@ class CameraCapture(
         )
     }
 
-    // ── MediaStore 输出构建 ───────────────────────────────────
+    // ── 输出构建 ──────────────────────────────────────────────
 
     /**
-     * 构建 MediaStore 的输出选项。
-     *
-     * Android 10+：通过 MediaStore.Images 插入（无需存储权限）。
-     * Android 9-：保存到 Pictures 目录（需要存储权限）。
+     * 按平台版本和 saveToGallery 选择输出目标。
      */
-    private fun createOutputOptions(): OutputFileOptions? {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            createMediaStoreOutput()
-        } else {
-            createLegacyOutput()
+    private fun createOutputOptions(saveToGallery: Boolean): OutputFileOptions? {
+        return when {
+            // Android 10+ 存相册：经 MediaStore 插入（无需任何存储权限）
+            saveToGallery && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ->
+                createMediaStoreOutput()
+            // Android 9- 存相册：公共目录 + 运行时权限检查 + 媒体扫描
+            saveToGallery -> createLegacyPublicOutput()
+            // 仅应用私有目录
+            else -> createAppPrivateOutput()
         }
     }
 
     /**
-     * Android 10+：通过 MediaStore 写入相册。
-     *
-     * ★ 修复：使用 MediaStore 集合 URI（而非预插入 item URI）传给 CameraX Builder，
-     *   让 CameraX 自己负责插入。同时预插入一条记录以便在失败时清理。
+     * Android 10+：通过 MediaStore 写入系统相册。
+     * CameraX 会在保存成功后返回 content:// URI，系统相册立即可见。
      */
-    private fun createMediaStoreOutput(): OutputFileOptions? {
-        // ★ 最稳妥方案：写真机存储目录，不依赖 MediaStore 插入
-        val picturesDir = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // Android 10+：用 app 专属外部存储，无需权限
-            context.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
-        } else {
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+    private fun createMediaStoreOutput(): OutputFileOptions {
+        val contentValues = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, generateFileName())
+            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+            put(
+                MediaStore.Images.Media.RELATIVE_PATH,
+                Environment.DIRECTORY_PICTURES + File.separator + "AiCamera"
+            )
         }
-        if (picturesDir == null || (!picturesDir.exists() && !picturesDir.mkdirs())) {
-            logError("无法创建图片目录")
+        val collection = MediaStore.Images.Media.getContentUri(
+            MediaStore.VOLUME_EXTERNAL_PRIMARY
+        )
+        return OutputFileOptions.Builder(context.contentResolver, collection, contentValues).build()
+    }
+
+    /**
+     * Android 9 及以下：保存到公共 Pictures/AiCamera 目录。
+     * ★ 先检查 WRITE_EXTERNAL_STORAGE 运行时权限；保存后需媒体扫描才进相册。
+     */
+    private fun createLegacyPublicOutput(): OutputFileOptions? {
+        val granted = ContextCompat.checkSelfPermission(
+            context, android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            logError("缺少 WRITE_EXTERNAL_STORAGE 权限，无法保存到公共相册")
             return null
         }
-        val file = File(picturesDir, generateFileName())
-        return OutputFileOptions.Builder(file).build()
-    }
 
-    /** Android 9 及以下：保存到本地文件 */
-    private fun createLegacyOutput(): OutputFileOptions? {
-        val dir = Environment.getExternalStoragePublicDirectory(
-            Environment.DIRECTORY_PICTURES + File.separator + "AiCamera"
+        val dir = File(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+            "AiCamera"
         )
         if (!dir.exists() && !dir.mkdirs()) {
             logError("无法创建目录: $dir")
@@ -159,7 +170,38 @@ class CameraCapture(
         }
 
         val file = File(dir, generateFileName())
+        scanOnSaved(file)
         return OutputFileOptions.Builder(file).build()
+    }
+
+    /**
+     * 仅应用私有目录（不进系统相册，卸载即删）。
+     */
+    private fun createAppPrivateOutput(): OutputFileOptions? {
+        val dir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+            ?: context.filesDir
+        if (!dir.exists() && !dir.mkdirs()) {
+            logError("无法创建应用私有图片目录")
+            return null
+        }
+        val file = File(dir, generateFileName())
+        return OutputFileOptions.Builder(file).build()
+    }
+
+    /**
+     * 旧平台保存后触发媒体扫描，让照片出现在系统相册。
+     * （在保存成功回调之外预先注册路径，takePicture 成功后由系统广播扫描）
+     */
+    private fun scanOnSaved(file: File) {
+        // 延迟扫描：CameraX 写盘是异步的，这里等 500ms 再扫，确保文件已写完
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            MediaScannerConnection.scanFile(
+                context,
+                arrayOf(file.absolutePath),
+                arrayOf("image/jpeg"),
+                null
+            )
+        }, 500)
     }
 
     // ── 辅助方法 ──────────────────────────────────────────────

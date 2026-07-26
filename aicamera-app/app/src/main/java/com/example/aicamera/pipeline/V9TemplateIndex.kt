@@ -47,6 +47,9 @@ class V9TemplateIndex(
     /** template_id 列表（与 embeddings 索引对应） */
     private val templateIds = mutableListOf<String>()
 
+    /** 每行 metadata 是否解析成功（与文件行号对齐，用于对齐过滤） */
+    private val metadataLineOk = mutableListOf<Boolean>()
+
     // ── 加载索引 ──────────────────────────────────────────────
 
     fun load(): Boolean {
@@ -62,8 +65,19 @@ class V9TemplateIndex(
             loadEmbeddings(embFile)
             loadMetadata(metaFile)
 
-            if (embeddings.size != metadata.size) {
-                Log.w(TAG, "embedding 数量(${embeddings.size}) ≠ metadata 数量(${metadata.size})，将按 embedding 对齐")
+            // ★ 对齐保障：metadata 解析失败的行对应 embedding 一并丢弃，
+            //   防止失败后所有行的 embedding ↔ metadata 错位（静默认错模板）。
+            if (metadataLineOk.size == embeddings.size && metadataLineOk.contains(false)) {
+                val kept = embeddings.filterIndexed { i, _ -> metadataLineOk[i] }
+                embeddings.clear()
+                embeddings.addAll(kept)
+                Log.w(TAG, "丢弃 ${metadataLineOk.count { !it }} 条 metadata 解析失败的模板")
+            }
+            if (embeddings.size != templateIds.size) {
+                val aligned = minOf(embeddings.size, templateIds.size)
+                Log.w(TAG, "embedding(${embeddings.size}) 与 metadata(${templateIds.size}) 数量不一致，截断对齐到 $aligned")
+                while (embeddings.size > aligned) embeddings.removeAt(embeddings.size - 1)
+                while (templateIds.size > aligned) templateIds.removeAt(templateIds.size - 1)
             }
 
             templateCount = embeddings.size
@@ -86,10 +100,7 @@ class V9TemplateIndex(
         floatBuffer.get(temp)
 
         for (i in 0 until count) {
-            val emb = temp.copyOfRange(i * dim, (i + 1 * dim).coerceAtMost(temp.size))
-            if (emb.size == dim) {
-                embeddings.add(emb)
-            }
+            embeddings.add(sliceEmbedding(temp, i, dim))
         }
         Log.d(TAG, "从 ${file.name} 加载 ${embeddings.size} 条 embedding")
     }
@@ -126,8 +137,10 @@ class V9TemplateIndex(
                         visualSummary = visualSummary ?: ""
                     )
                     templateIds.add(templateId)
+                    metadataLineOk.add(true)
                 } catch (e: Exception) {
                     Log.w(TAG, "解析 metadata 行失败: ${e.message}")
+                    metadataLineOk.add(false)
                 }
             }
         }
@@ -219,6 +232,23 @@ class V9TemplateIndex(
 
     companion object {
         private const val TAG = "V9TemplateIndex"
+
+        /**
+         * 从扁平 float 数组中切出第 row 条 embedding（每条 dim 维）。
+         *
+         * 修复历史 bug：原实现 `(i + 1 * dim)` 因运算符优先级变成 `i + dim`，
+         * i=2 时起止倒挂直接抛 IllegalArgumentException，导致索引永远加载失败。
+         * 抽成纯函数以便单元测试覆盖。
+         */
+        fun sliceEmbedding(flat: FloatArray, row: Int, dim: Int): FloatArray {
+            require(row >= 0) { "row 必须 >= 0，当前 $row" }
+            val start = row * dim
+            val end = start + dim
+            require(end <= flat.size) {
+                "第 $row 条 embedding 越界: [$start, $end)，总长度 ${flat.size}"
+            }
+            return flat.copyOfRange(start, end)
+        }
     }
 }
 

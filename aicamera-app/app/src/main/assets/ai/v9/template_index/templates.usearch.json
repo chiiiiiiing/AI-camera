@@ -1,9 +1,0 @@
-{
-  "count": 728,
-  "dimension": 512,
-  "dtype": "f32",
-  "index": "../preprocessed/template_index.new_batch.student-tiny-cnn-v9-static-int8-onnx-512/templates.usearch.idx",
-  "metric": "cos",
-  "schema_version": 1,
-  "self_check": "top1"
-}

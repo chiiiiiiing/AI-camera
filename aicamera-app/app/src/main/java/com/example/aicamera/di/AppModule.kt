@@ -1,18 +1,11 @@
 package com.example.aicamera.di
 
 import android.content.Context
-import android.util.Log
 import com.example.aicamera.camera.CameraCapture
 import com.example.aicamera.camera.CameraManager
-import com.example.aicamera.pipeline.AiModelAssets
-import com.example.aicamera.pipeline.FakeInferenceAdapter
 import com.example.aicamera.pipeline.FramePipeline
 import com.example.aicamera.pipeline.FramePreprocessor
 import com.example.aicamera.pipeline.FrameScheduler
-import com.example.aicamera.pipeline.IInference
-import com.example.aicamera.pipeline.V9EmbeddingRuntime
-import com.example.aicamera.pipeline.V9Inference
-import com.example.aicamera.pipeline.V9TemplateIndex
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -22,6 +15,10 @@ import javax.inject.Singleton
 
 /**
  * Hilt DI 模块 — 提供全局单例依赖。
+ *
+ * 注意：AI 推理引擎不在此装配。[AiEngineManager]（@Singleton @Inject）负责
+ * 异步复制资产 → 校验 → 加载模型，PipelineViewModel 在其 READY 后把
+ * V9Inference 热替换进 [FramePipeline]。此处的管线默认用 FakeInference 兜底。
  */
 @Module
 @InstallIn(SingletonComponent::class)
@@ -52,55 +49,22 @@ object AppModule {
     @Provides
     @Singleton
     fun provideFramePreprocessor(): FramePreprocessor {
-        return FramePreprocessor(targetSize = 320)
+        // V9 模型输入为 224×224（见 android_runtime_config.json）
+        return FramePreprocessor(targetSize = 224)
     }
 
     /**
-     * 推理器提供者 — 自动检测 V9 ONNX 模型。
-     *
-     * 优先级：
-     * 1. V9Inference（ONNX 模型 + 模板索引可用时）
-     * 2. FakeInferenceAdapter（降级）
+     * 帧管线（默认 FakeInference 兜底，AI 就绪后由 PipelineViewModel 热替换为 V9）。
      */
-    @Provides
-    @Singleton
-    fun provideInference(@ApplicationContext context: Context): IInference {
-        val modelPath = AiModelAssets.getModelPath(context)
-        val indexDir = AiModelAssets.getIndexDir(context)
-
-        if (modelPath != null && indexDir != null) {
-            return try {
-                val runtime = V9EmbeddingRuntime(modelPath)
-                val index = V9TemplateIndex(indexDir)
-                if (index.load()) {
-                    Log.i("AppModule", "V9 ONNX 推理器就绪: ${index.templateCount} 条模板")
-                    V9Inference(runtime, index)
-                } else {
-                    Log.w("AppModule", "模板索引加载失败，降级到 FakeInference")
-                    runtime.close()
-                    FakeInferenceAdapter()
-                }
-            } catch (e: Exception) {
-                Log.w("AppModule", "V9 模型加载失败: ${e.message}，降级到 FakeInference")
-                FakeInferenceAdapter()
-            }
-        } else {
-            Log.i("AppModule", "V9 模型文件未就绪 (model=${modelPath != null}, index=${indexDir != null})，使用 FakeInference")
-            return FakeInferenceAdapter()
-        }
-    }
-
     @Provides
     @Singleton
     fun provideFramePipeline(
         scheduler: FrameScheduler,
-        preprocessor: FramePreprocessor,
-        inference: IInference
+        preprocessor: FramePreprocessor
     ): FramePipeline {
         return FramePipeline(
             scheduler = scheduler,
-            preprocessor = preprocessor,
-            inference = inference
+            preprocessor = preprocessor
         )
     }
 }

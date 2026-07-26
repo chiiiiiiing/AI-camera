@@ -10,8 +10,10 @@ compose-compiler = "1.5.15"
 camerax = "1.4.1"
 
 # — AI 推理 —
-tflite = "2.16.1"
 onnxruntime = "1.19.2"
+
+# — 设置持久化 —
+datastore = "1.1.1"
 
 # — 架构 —
 hilt = "2.53.1"
@@ -46,10 +48,11 @@ camerax-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "ca
 camerax-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
 camerax-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }
 
-# — AI 推理 —
-tflite = { module = "org.tensorflow:tensorflow-lite", version.ref = "tflite" }
-tflite-gpu = { module = "org.tensorflow:tensorflow-lite-gpu", version.ref = "tflite" }
+# — AI 推理 (ONNX Runtime Mobile；TFLite 依赖已移除，v9 确定走 ONNX) —
 onnxruntime = { module = "com.microsoft.onnxruntime:onnxruntime-android", version.ref = "onnxruntime" }
+
+# — 设置持久化 —
+datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
 
 # — DI —
 hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "hilt" }

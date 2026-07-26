@@ -32,9 +32,11 @@
         android:required="false" />
 
     <!-- ── 屏幕方向：竖屏为主，允许横屏 ── -->
+    <!-- allowBackup=false：本地凭证（PBKDF2 哈希 + session token）存于
+         SharedPreferences，不允许随 adb/云备份导出（安全加固 2026-07-26） -->
     <application
         android:name=".AiCameraApp"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.AiCamera"

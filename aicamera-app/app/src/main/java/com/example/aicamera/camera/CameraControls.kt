@@ -1,22 +1,20 @@
 package com.example.aicamera.camera
 
 import android.util.Log
-import android.view.ScaleGestureDetector
-import android.view.View
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
-import androidx.core.content.ContextCompat
 import com.example.aicamera.camera.CameraConfig.CameraFace
 import com.example.aicamera.camera.CameraConfig.FlashMode
 
 /**
  * 相机控制：变焦、闪光灯、前后摄像头切换。
  *
- * 不负责对焦（见 [CameraFocus]）、不负责拍照（见 [CameraCapture]）。
+ * 不负责对焦（见 [CameraGestureDispatcher]）、不负责拍照（见 [CameraCapture]）。
  *
- * 注意：手势监听（双指缩放/点击对焦）会互相覆盖 setOnTouchListener，
- * 后续建议统一为 CameraGestureDispatcher 合并处理。
+ * ★ 触摸手势（双指缩放）已统一收归 [CameraGestureDispatcher]，
+ *   此类只保留程序化 API（slider/按钮调用），
+ *   旧 setOnTouchListener 方案已删除（多个 listener 会互相覆盖）。
  */
 class CameraControls(
     private val onCameraFaceChanged: ((CameraFace) -> Unit)? = null,
@@ -31,44 +29,6 @@ class CameraControls(
         private set
 
     // ── 双指变焦 ──────────────────────────────────────────────
-
-    /**
-     * 为 View 启用手势缩放。
-     *
-     * @param touchView 接收缩放手势的 View（通常是 PreviewView）
-     * @param camera 当前 Camera，用于执行 setZoomRatio
-     */
-    fun enablePinchToZoom(touchView: View, camera: Camera) {
-        val detector = ScaleGestureDetector(
-            touchView.context,
-            object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-
-                override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
-                    return true
-                }
-
-                override fun onScale(detector: ScaleGestureDetector): Boolean {
-                    val scaleFactor = detector.scaleFactor
-                    val maxHardware = camera.cameraInfo.zoomState.value?.maxZoomRatio
-                        ?: CameraConfig.MAX_ZOOM_RATIO
-                    val newRatio = (currentZoomRatio * scaleFactor).coerceIn(
-                        CameraConfig.MIN_ZOOM_RATIO,
-                        minOf(CameraConfig.MAX_ZOOM_RATIO, maxHardware)
-                    )
-
-                    if (kotlin.math.abs(newRatio - currentZoomRatio) > 0.01f) {
-                        applyZoomRatio(newRatio, camera)
-                    }
-                    return true
-                }
-            }
-        )
-
-        touchView.setOnTouchListener { _, event ->
-            detector.onTouchEvent(event)
-            true
-        }
-    }
 
     /**
      * 通过滑动条设置变焦。

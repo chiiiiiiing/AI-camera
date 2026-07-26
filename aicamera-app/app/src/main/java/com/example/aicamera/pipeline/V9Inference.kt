@@ -14,17 +14,18 @@ import java.io.Closeable
  * ```
  * FramePipeline.process()
  *   → V9Inference.predict(buffer, frame)
- *     → bitmapToNchw224 (复用已有 Bitmap 或从 buffer 重建)
+ *     → bitmapToNchw224 (复用预处理阶段保留的 224×224 Bitmap)
  *     → V9EmbeddingRuntime.embed()
- *     → V9TemplateIndex.search()
+ *     → V9TemplateIndex.search(topK=8)
  *     → V9TemplateIndex.rerank()
- *     → top1 metadata → FakeInferenceOutput (兼容格式)
+ *     → 稳定切换策略（候选连续领先才换模板）
+ *     → 模板 metadata → FakeInferenceOutput (兼容格式)
  * ```
  *
  * ## 与 FakeInference 的关系
  * - FakeInference: 基于亮度值的简单启发式，不依赖模型
  * - V9Inference: 真实 ONNX 模型 embedding → 模板检索
- * - 通过 IInference 接口热替换，FramePipeline 无需改动
+ * - 通过 IInference 接口热替换（AiEngineManager READY 后由 PipelineViewModel 换入）
  */
 class V9Inference(
     private val runtime: V9EmbeddingRuntime,
@@ -33,78 +34,107 @@ class V9Inference(
 
     override val typeName: String = "V9-ONNX"
 
-    /** 上一帧选中的模板（用于稳定策略） */
-    private var previousTemplateId: String? = null
+    // ── 稳定切换状态 ──────────────────────────────────────────
+    //
+    // 修复历史死锁（P1-4）：旧实现用「当前模板」计数，新模板领先时计数器
+    // 永远被重置为 1，导致模板选定后永不切换。
+    // 正确做法：给「挑战者候选」单独计数，连续 N 次领先才真正换王。
 
-    /** 当前模板连续选中次数 */
-    private var stableCount: Int = 0
+    /** 当前生效的模板 */
+    private var currentTemplateId: String? = null
+
+    /** 挑战者候选模板 */
+    private var candidateTemplateId: String? = null
+
+    /** 候选连续领先次数 */
+    private var candidateLeadCount: Int = 0
 
     /** 低 margin 阈值（top1/top2 margin < 0.01 时不切换） */
     private val lowMarginThreshold: Float = 0.01f
 
-    /** 稳定切换所需连续帧数 */
+    /** 稳定切换所需候选连续领先帧数 */
     private val stableSwitchFrames: Int = 2
 
     // ── IInference 实现 ───────────────────────────────────────
 
     override fun predict(buffer: ByteBuffer, frame: PreprocessedFrame): Any? {
-        // Step 1: 获取 Bitmap — 优先使用 PreprocessedFrame 中保留的，否则从 buffer 重建
+        // Step 1: 获取 Bitmap — 优先使用预处理阶段保留的 224×224 Bitmap，
+        //         否则从 buffer 重建（降级路径）
         val sourceBitmap = frame.originalBitmap
         val embedding = if (sourceBitmap != null) {
-            // 快速路径：直接用保留的 Bitmap 做 NCHW 预处理
             val nchw = V9EmbeddingRuntime.bitmapToNchw224(sourceBitmap)
             runtime.embed(nchw)
         } else {
-            // 降级路径：从 buffer 重建 Bitmap
             val reconstructed = bufferToBitmap(buffer, frame.width, frame.height)
             val nchw = V9EmbeddingRuntime.bitmapToNchw224(reconstructed)
             reconstructed.recycle()
             runtime.embed(nchw)
         }
 
-        // Step 3: 检索 + 重排
+        // Step 2: 检索 + 规则重排
         val candidates = index.search(embedding, topK = 8)
         if (candidates.isEmpty()) return createEmptyResult()
 
         val reranked = index.rerank(candidates)
 
-        // Step 4: 稳定策略 — 低 margin 不切换
-        val top1 = reranked.first()
-        val top2 = reranked.getOrNull(1)
-        val margin = if (top2 != null) top1.rerankScore - top2.rerankScore else 1f
+        // Step 3: 稳定切换策略
+        val selectedHit = selectStable(reranked)
 
-        val selectedHit = if (margin < lowMarginThreshold && previousTemplateId != null) {
-            // margin 太低，保持上一帧模板（如果还在 top5 中）
-            val prevInTop5 = reranked.find { it.templateId == previousTemplateId }
-            if (prevInTop5 != null) {
-                stableCount = if (prevInTop5.templateId == previousTemplateId) stableCount + 1 else 1
-                prevInTop5
-            } else {
-                stableCount = if (top1.templateId == previousTemplateId) stableCount + 1 else 1
-                top1
-            }
-        } else {
-            stableCount = if (top1.templateId == previousTemplateId) stableCount + 1 else 1
-            top1
-        }
-
-        // 需要连续 stableSwitchFrames 次领先才真正切换
-        if (previousTemplateId != null && selectedHit.templateId != previousTemplateId) {
-            if (stableCount < stableSwitchFrames) {
-                // 还未稳定，继续用上一个模板
-                val prevMeta = index.getMetadata(previousTemplateId ?: "")
-                val fallback = prevMeta ?: selectedHit.metadata
-                if (fallback != null) return metaToFakeOutput(fallback, embedding, selectedHit.rerankScore)
-            }
-        }
-
-        previousTemplateId = selectedHit.templateId
-        val meta = selectedHit.metadata
-
+        val meta = selectedHit.metadata ?: index.getMetadata(selectedHit.templateId)
         return if (meta != null) {
             metaToFakeOutput(meta, embedding, selectedHit.rerankScore)
         } else {
             createEmptyResult()
+        }
+    }
+
+    /**
+     * 稳定选择：低 margin 不换、候选连续 [stableSwitchFrames] 次领先才换。
+     */
+    private fun selectStable(reranked: List<SearchHit>): SearchHit {
+        val top1 = reranked.first()
+        val top2 = reranked.getOrNull(1)
+        val margin = if (top2 != null) top1.rerankScore - top2.rerankScore else Float.MAX_VALUE
+        val current = currentTemplateId
+
+        // 首个模板直接生效
+        if (current == null) {
+            currentTemplateId = top1.templateId
+            return top1
+        }
+
+        // 现任仍是 top1 → 清空挑战者
+        if (top1.templateId == current) {
+            candidateTemplateId = null
+            candidateLeadCount = 0
+            return top1
+        }
+
+        // margin 太低 → 不换，但现任若掉出候选列表则允许下一帧重新评估
+        if (margin < lowMarginThreshold) {
+            candidateTemplateId = null
+            candidateLeadCount = 0
+            return reranked.find { it.templateId == current } ?: top1
+        }
+
+        // 挑战者连续领先计数
+        if (candidateTemplateId == top1.templateId) {
+            candidateLeadCount++
+        } else {
+            candidateTemplateId = top1.templateId
+            candidateLeadCount = 1
+        }
+
+        return if (candidateLeadCount >= stableSwitchFrames) {
+            // 换王
+            currentTemplateId = top1.templateId
+            candidateTemplateId = null
+            candidateLeadCount = 0
+            Log.i(CameraConfig.TAG, "[V9] 模板切换 → ${top1.templateId} (score=${"%.3f".format(top1.rerankScore)})")
+            top1
+        } else {
+            // 未稳定，继续用现任
+            reranked.find { it.templateId == current } ?: top1
         }
     }
 
@@ -117,7 +147,7 @@ class V9Inference(
      * - rule_of_thirds → 三分线 + 三分交点目标区
      * - centered_subject → 中心线 + 中心目标区
      * - leading_lines=true → 引导线提示
-     * - horizon_position → 水平参考线
+     * - horizon_position → 水平参考线（reference_y）
      * - negative_space=high → 留白提示
      */
     private fun metaToFakeOutput(
@@ -143,18 +173,21 @@ class V9Inference(
         val targetZone = when (meta.subjectPosition) {
             "center" -> FakeGuideLine("target_zone", true,
                 mapOf("center_x" to 0.5f, "center_y" to 0.5f, "radius" to 0.15f))
-            "none" -> FakeGuideLine("target_zone", true,
-                mapOf("center_x" to 0.333f, "center_y" to 0.333f, "radius" to 0.12f))
             else -> FakeGuideLine("target_zone", true,
                 mapOf("center_x" to 0.333f, "center_y" to 0.333f, "radius" to 0.12f))
         }
         guideLines.add(targetZone)
 
-        // 3. 水平仪
-        guideLines.add(
-            FakeGuideLine("horizon_level", true,
-                mapOf("angle_degrees" to 0f))
-        )
+        // 3. 水平仪 + 水平参考线（reference_y 合并进同一条线，避免重复绘制）
+        val horizonRefY = when (meta.horizonPosition) {
+            "upper_third" -> 0.333f
+            "lower_third" -> 0.667f
+            "middle" -> 0.5f
+            else -> null
+        }
+        val horizonParams = mutableMapOf<String, Any>("angle_degrees" to 0f)
+        if (horizonRefY != null) horizonParams["reference_y"] = horizonRefY
+        guideLines.add(FakeGuideLine("horizon_level", true, horizonParams))
 
         // 4. 主体框（人像模式）
         if (meta.photoType == "portrait") {
@@ -170,22 +203,6 @@ class V9Inference(
                 FakeGuideLine("direction_arrow", true,
                     mapOf("from_x" to 0.3f, "from_y" to 0.6f, "to_x" to 0.5f, "to_y" to 0.35f))
             )
-        }
-
-        // 6. 水平参考线
-        when (meta.horizonPosition) {
-            "upper_third" -> {
-                guideLines.add(FakeGuideLine("horizon_level", true,
-                    mapOf("angle_degrees" to 0f, "reference_y" to 0.333f)))
-            }
-            "lower_third" -> {
-                guideLines.add(FakeGuideLine("horizon_level", true,
-                    mapOf("angle_degrees" to 0f, "reference_y" to 0.667f)))
-            }
-            "middle" -> {
-                guideLines.add(FakeGuideLine("horizon_level", true,
-                    mapOf("angle_degrees" to 0f, "reference_y" to 0.5f)))
-            }
         }
 
         val progress = score.coerceIn(0f, 1f)

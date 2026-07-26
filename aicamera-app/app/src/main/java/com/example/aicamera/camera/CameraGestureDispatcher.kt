@@ -111,6 +111,16 @@ class CameraGestureDispatcher(
         }
     }
 
+    /**
+     * 解绑手势监听（相机重绑/销毁时调用，防止旧 Camera 实例泄漏）。
+     */
+    fun detach(previewView: PreviewView) {
+        previewView.setOnTouchListener(null)
+        gestureDetector = null
+        scaleDetector = null
+        isScaling = false
+    }
+
     // ── 点击对焦 ─────────────────────────────────────────────
 
     private fun performTapToFocus(

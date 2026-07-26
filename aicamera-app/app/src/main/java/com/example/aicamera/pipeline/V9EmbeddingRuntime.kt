@@ -51,7 +51,12 @@ class V9EmbeddingRuntime(
                 // 允许图优化
                 setOptimizationLevel(OrtSession.SessionOptions.OptLevel.BASIC_OPT)
             }
-            session = env.createSession(modelPath, opts)
+            // ★ SessionOptions 实现 AutoCloseable，建完 session 必须关闭防泄漏
+            session = try {
+                env.createSession(modelPath, opts)
+            } finally {
+                opts.close()
+            }
 
             // 从模型读取 tensor 名称
             inputName = session.inputNames.iterator().next()

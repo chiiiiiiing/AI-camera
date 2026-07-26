@@ -11,11 +11,13 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.core.content.ContextCompat
 import androidx.navigation.compose.rememberNavController
+import com.example.aicamera.data.SettingsRepository
 import com.example.aicamera.ui.navigation.AppNavGraph
 import com.example.aicamera.viewmodel.CameraViewModel
 import com.example.aicamera.viewmodel.PipelineViewModel
 import com.example.aicamera.viewmodel.RenderViewModel
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 /**
  * 主 Activity — App 导航入口
@@ -33,17 +35,21 @@ import dagger.hilt.android.AndroidEntryPoint
  *               └── ProfileScreen   (个人主页)
  * ```
  *
- * ViewModel 在 Activity 层创建，通过 NavGraph 注入到各子页面。
+ * ViewModel 在 Activity 层创建（@HiltViewModel 注入），通过 NavGraph 传入各子页面。
  * 相机仅在用户进入 MainScreen 后初始化（PreviewView 首次组合时）。
  */
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    // ── ViewModel（Activity 级 scope，跨 Tab 保持状态） ──
+    // ── ViewModel（Activity 级 scope，跨 Tab 保持状态；Hilt 注入依赖） ──
 
     private val cameraViewModel: CameraViewModel by viewModels()
     private val pipelineViewModel: PipelineViewModel by viewModels()
     private val renderViewModel: RenderViewModel by viewModels()
+
+    /** 设置仓库（DataStore 持久化），注入后传入 NavGraph */
+    @Inject
+    lateinit var settingsRepository: SettingsRepository
 
     // ── 权限 ──
 
@@ -73,7 +79,8 @@ class MainActivity : ComponentActivity() {
                 navController = navController,
                 cameraViewModel = cameraViewModel,
                 pipelineViewModel = pipelineViewModel,
-                renderViewModel = renderViewModel
+                renderViewModel = renderViewModel,
+                settingsRepository = settingsRepository
             )
         }
     }
