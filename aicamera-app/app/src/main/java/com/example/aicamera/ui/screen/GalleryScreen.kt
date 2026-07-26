@@ -211,7 +211,7 @@ data class PhotoItem(
     val dateTaken: Long
 )
 
-/** 从 MediaStore 查询 AICamera_ 前缀的照片（限 50 张，避免全量加载） */
+/** 从 MediaStore 查询 AiCamera_ 前缀的照片（限 50 张，避免全量加载） */
 private fun queryAiCameraPhotos(context: android.content.Context): List<PhotoItem> {
     val photos = mutableListOf<PhotoItem>()
     val projection = arrayOf(
@@ -219,7 +219,9 @@ private fun queryAiCameraPhotos(context: android.content.Context): List<PhotoIte
         MediaStore.Images.Media.DISPLAY_NAME,
         MediaStore.Images.Media.DATE_TAKEN
     )
-    val sortOrder = "${MediaStore.Images.Media.DATE_TAKEN} DESC LIMIT 50"
+    // ★ 复审修复：sortOrder 串里的 "LIMIT 50" 并非受支持的语法
+    //   （多数设备静默忽略），改为查询后在代码中 take(50)
+    val sortOrder = "${MediaStore.Images.Media.DATE_TAKEN} DESC"
 
     context.contentResolver.query(
         MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
@@ -231,7 +233,7 @@ private fun queryAiCameraPhotos(context: android.content.Context): List<PhotoIte
         val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
         val dateCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)
 
-        while (cursor.moveToNext()) {
+        while (cursor.moveToNext() && photos.size < 50) {
             val displayName = cursor.getString(nameCol) ?: continue
             if (!displayName.startsWith("AiCamera_")) continue
 

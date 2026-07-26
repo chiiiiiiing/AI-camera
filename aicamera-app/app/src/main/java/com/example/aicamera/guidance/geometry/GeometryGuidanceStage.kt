@@ -107,13 +107,15 @@ class GeometryGuidanceStage @Inject constructor(
         }
 
         // ── 5. 重建辅助线：真实水平角 + 真实主体框 ──
-        val newLines = output.guideLines.map { line ->
+        // ★ 无水平传感器信号时整条移除（修复复审发现：angle ?: 0f 会显示
+        //   假的「水平绿色」，比没有这条线更误导用户）
+        val newLines = output.guideLines.mapNotNull { line ->
             when (line.type) {
-                "horizon_level" -> line.copy(
-                    params = line.params + mapOf(
-                        "angle_degrees" to (smoothAngle ?: 0f)
-                    )
-                )
+                "horizon_level" -> {
+                    if (smoothAngle != null) {
+                        line.copy(params = line.params + mapOf("angle_degrees" to smoothAngle))
+                    } else null
+                }
                 "subject_box" -> {
                     if (smoothBox != null) {
                         // 真实检测框替换占位框

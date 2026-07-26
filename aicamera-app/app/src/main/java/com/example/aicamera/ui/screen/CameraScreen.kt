@@ -365,8 +365,8 @@ fun CameraScreen(
             )
         }
 
-        // ── 性能 HUD（左上角调试信息） ──
-        if (uiState.isInitialized) {
+        // ── 性能 HUD（左上角调试信息，仅 debug 包显示） ──
+        if (uiState.isInitialized && com.example.aicamera.BuildConfig.DEBUG) {
             Column(
                 modifier = Modifier
                     .align(Alignment.TopStart)

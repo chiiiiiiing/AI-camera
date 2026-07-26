@@ -49,6 +49,8 @@ android {
 
     buildFeatures {
         compose = true
+        // BuildConfig.DEBUG 用于 HUD 调试信息门控
+        buildConfig = true
     }
 
     // — 禁止 Compose Compiler 的稳定性检查报错 (Kotlin 2.0+) —
