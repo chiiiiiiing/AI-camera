@@ -134,7 +134,9 @@ class V9TemplateIndex(
                         cameraAngle = camera?.optString("angle", "eye_level") ?: "eye_level",
                         cameraDistance = camera?.optString("distance", "medium") ?: "medium",
                         cameraOrientation = camera?.optString("orientation", "portrait") ?: "portrait",
-                        visualSummary = visualSummary ?: ""
+                        visualSummary = visualSummary ?: "",
+                        lightingContrast = lighting?.optString("contrast", "medium") ?: "medium",
+                        timeOfDay = lighting?.optString("time_of_day", "unknown") ?: "unknown"
                     )
                     templateIds.add(templateId)
                     metadataLineOk.add(true)
@@ -277,7 +279,11 @@ data class TemplateMeta(
     val cameraAngle: String,
     val cameraDistance: String,
     val cameraOrientation: String,
-    val visualSummary: String
+    val visualSummary: String,
+    /** annotation.lighting.contrast; absent legacy rows default to medium. */
+    val lightingContrast: String = "medium",
+    /** annotation.lighting.time_of_day; absent legacy rows default to unknown. */
+    val timeOfDay: String = "unknown"
 )
 
 /** 场景上下文（用于重排），后续可由独立场景分类器填充 */

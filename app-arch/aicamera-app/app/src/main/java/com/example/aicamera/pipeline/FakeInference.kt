@@ -1,6 +1,7 @@
 package com.example.aicamera.pipeline
 
 import com.example.aicamera.camera.CameraConfig
+import com.example.aicamera.filter.FilterRecommendation
 import com.example.aicamera.guidance.GuidanceCue
 import kotlin.math.abs
 import kotlin.random.Random
@@ -167,7 +168,9 @@ data class FakeInferenceOutput(
     /** ★ 构图引导指令（与队友 GuidanceCue 对齐） */
     val guidanceCue: GuidanceCue = GuidanceCue.NONE,
     /** 构图匹配度 (0.0–1.0)，用于 GuidanceStateMachine */
-    val compositionProgress: Float = 0.5f
+    val compositionProgress: Float = 0.5f,
+    /** 仅真实 V9 输出推荐；FakeInference 保持 null，避免伪装成 AI 推荐。 */
+    val filterRecommendation: FilterRecommendation? = null
 )
 
 data class FakeGuideLine(

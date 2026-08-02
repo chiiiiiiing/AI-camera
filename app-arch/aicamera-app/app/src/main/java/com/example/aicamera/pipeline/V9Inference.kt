@@ -3,6 +3,12 @@ package com.example.aicamera.pipeline
 import android.graphics.Bitmap
 import android.util.Log
 import com.example.aicamera.camera.CameraConfig
+import com.example.aicamera.filter.FilterReason
+import com.example.aicamera.filter.FilterRecommendation
+import com.example.aicamera.filter.FilterRecommendationEngine
+import com.example.aicamera.filter.FilterRecommendationStabilizer
+import com.example.aicamera.filter.FilterRecommendations
+import com.example.aicamera.filter.FrameColorStatsExtractor
 import com.example.aicamera.guidance.GuidanceCue
 import java.nio.ByteBuffer
 import java.io.Closeable
@@ -29,7 +35,10 @@ import java.io.Closeable
  */
 class V9Inference(
     private val runtime: V9EmbeddingRuntime,
-    private val index: V9TemplateIndex
+    private val index: V9TemplateIndex,
+    private val colorStatsExtractor: FrameColorStatsExtractor = FrameColorStatsExtractor(),
+    private val filterEngine: FilterRecommendationEngine = FilterRecommendationEngine(),
+    private val filterStabilizer: FilterRecommendationStabilizer = FilterRecommendationStabilizer()
 ) : IInference, Closeable {
 
     override val typeName: String = "V9-ONNX"
@@ -60,31 +69,50 @@ class V9Inference(
     override fun predict(buffer: ByteBuffer, frame: PreprocessedFrame): Any? {
         // Step 1: 获取 Bitmap — 优先使用预处理阶段保留的 224×224 Bitmap，
         //         否则从 buffer 重建（降级路径）
-        val sourceBitmap = frame.originalBitmap
-        val embedding = if (sourceBitmap != null) {
+        val reconstructed = if (frame.originalBitmap == null) {
+            bufferToBitmap(buffer, frame.width, frame.height)
+        } else null
+        val sourceBitmap = frame.originalBitmap ?: reconstructed!!
+
+        try {
             val nchw = V9EmbeddingRuntime.bitmapToNchw224(sourceBitmap)
-            runtime.embed(nchw)
-        } else {
-            val reconstructed = bufferToBitmap(buffer, frame.width, frame.height)
-            val nchw = V9EmbeddingRuntime.bitmapToNchw224(reconstructed)
-            reconstructed.recycle()
-            runtime.embed(nchw)
-        }
+            val embedding = runtime.embed(nchw)
 
-        // Step 2: 检索 + 规则重排
-        val candidates = index.search(embedding, topK = 8)
-        if (candidates.isEmpty()) return createEmptyResult()
+            // Step 2: 检索 + 规则重排
+            val candidates = index.search(embedding, topK = 8)
+            if (candidates.isEmpty()) {
+                filterStabilizer.reset()
+                return createEmptyResult(FilterRecommendations.original())
+            }
+            val reranked = index.rerank(candidates)
+            if (reranked.isEmpty()) {
+                filterStabilizer.reset()
+                return createEmptyResult(FilterRecommendations.original())
+            }
 
-        val reranked = index.rerank(candidates)
+            // Step 3: 推荐滤镜。失败只降级推荐，不影响现有 V9 构图链路。
+            val filterRecommendation = try {
+                val stats = colorStatsExtractor.extract(sourceBitmap)
+                filterStabilizer.stabilize(filterEngine.recommend(reranked, stats))
+            } catch (e: Exception) {
+                Log.w(CameraConfig.TAG, "[V9] 滤镜推荐失败，回退 original", e)
+                filterStabilizer.reset()
+                FilterRecommendations.original(
+                    reason = FilterReason.FALLBACK,
+                    sourceTemplateId = reranked.firstOrNull()?.templateId
+                )
+            }
 
-        // Step 3: 稳定切换策略
-        val selectedHit = selectStable(reranked)
-
-        val meta = selectedHit.metadata ?: index.getMetadata(selectedHit.templateId)
-        return if (meta != null) {
-            metaToFakeOutput(meta, embedding, selectedHit.rerankScore)
-        } else {
-            createEmptyResult()
+            // Step 4: 现有模板稳定策略继续只负责构图输出。
+            val selectedHit = selectStable(reranked)
+            val meta = selectedHit.metadata ?: index.getMetadata(selectedHit.templateId)
+            return if (meta != null) {
+                metaToFakeOutput(meta, selectedHit.rerankScore, filterRecommendation)
+            } else {
+                createEmptyResult(filterRecommendation)
+            }
+        } finally {
+            reconstructed?.recycle()
         }
     }
 
@@ -152,8 +180,8 @@ class V9Inference(
      */
     private fun metaToFakeOutput(
         meta: TemplateMeta,
-        embedding: FloatArray,
-        score: Float
+        score: Float,
+        filterRecommendation: FilterRecommendation
     ): FakeInferenceOutput {
         val strategy = compositionTypeToStrategy(meta.compositionType)
         val scene = sceneCategoryToSceneType(meta.sceneCategory)
@@ -215,7 +243,7 @@ class V9Inference(
             guideLines = guideLines,
             guidanceCue = GuidanceCue.NONE, // 等 App 侧几何检测后更新
             compositionProgress = progress
-        )
+        ).withV9FilterRecommendation(filterRecommendation)
     }
 
     private fun compositionTypeToStrategy(type: String): CompositionStrategy = when (type) {
@@ -233,7 +261,9 @@ class V9Inference(
         else -> SceneType.NORMAL
     }
 
-    private fun createEmptyResult(): FakeInferenceOutput {
+    private fun createEmptyResult(
+        filterRecommendation: FilterRecommendation
+    ): FakeInferenceOutput {
         return FakeInferenceOutput(
             sceneType = SceneType.NORMAL,
             compositionStrategy = CompositionStrategy.RULE_OF_THIRDS,
@@ -246,7 +276,7 @@ class V9Inference(
             ),
             guidanceCue = GuidanceCue.NONE,
             compositionProgress = 0f
-        )
+        ).withV9FilterRecommendation(filterRecommendation)
     }
 
     // ── 辅助 ──────────────────────────────────────────────────
@@ -256,7 +286,7 @@ class V9Inference(
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val pixels = IntArray(width * height)
         var i = 0
-        while (buffer.remaining() >= 3 && i < pixels.size) {
+        while (buffer.remaining() >= 12 && i < pixels.size) {
             val r = (buffer.float.coerceIn(0f, 1f) * 255).toInt()
             val g = (buffer.float.coerceIn(0f, 1f) * 255).toInt()
             val b = (buffer.float.coerceIn(0f, 1f) * 255).toInt()
@@ -269,7 +299,20 @@ class V9Inference(
     }
 
     override fun close() {
+        resetSession()
         runtime.close()
         Log.i(CameraConfig.TAG, "[V9Inference] 已释放")
     }
+
+    override fun resetSession() {
+        currentTemplateId = null
+        candidateTemplateId = null
+        candidateLeadCount = 0
+        filterStabilizer.reset()
+    }
 }
+
+/** Explicit adapter seam used by the real V9 path; FakeInference never calls it. */
+internal fun FakeInferenceOutput.withV9FilterRecommendation(
+    recommendation: FilterRecommendation
+): FakeInferenceOutput = copy(filterRecommendation = recommendation)
