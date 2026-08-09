@@ -94,6 +94,7 @@ class AiEngineManager @Inject constructor(
 
             // ── Phase 2: 完整性校验 ──
             if (!AiModelAssets.verifyModelIntegrity(modelDir)) {
+                AiModelAssets.invalidateModelFiles(context)
                 fail("模型 sha256 校验失败，文件可能损坏")
                 return@launch
             }
@@ -113,6 +114,7 @@ class AiEngineManager @Inject constructor(
                 val index = V9TemplateIndex(indexDir)
                 if (!index.load()) {
                     runtime.close()
+                    AiModelAssets.invalidateModelFiles(context)
                     fail("模板索引加载失败")
                     return@launch
                 }

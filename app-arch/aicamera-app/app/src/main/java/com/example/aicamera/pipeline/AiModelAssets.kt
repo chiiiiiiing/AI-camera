@@ -204,6 +204,21 @@ object AiModelAssets {
         return if (dir.exists() && File(dir, "templates.embeddings.f32").exists()) dir else null
     }
 
+    /**
+     * Removes only the app-private, reproducible V9 asset cache after a failed validation/load.
+     * The next [ensureModelFiles] call copies a fresh bundled version. This never touches photos,
+     * user settings, or any directory outside filesDir/ai/v9.
+     */
+    fun invalidateModelFiles(context: Context) {
+        val targetDir = File(context.filesDir, ASSET_BASE)
+        if (!targetDir.exists()) return
+        if (targetDir.deleteRecursively()) {
+            Log.w(TAG, "已失效损坏的 AI 资产缓存，下次启动将重新复制")
+        } else {
+            Log.w(TAG, "无法完整删除损坏的 AI 资产缓存: $targetDir")
+        }
+    }
+
     // ── 内部 ──────────────────────────────────────────────────
 
     private fun isUpToDate(targetDir: File): Boolean {
