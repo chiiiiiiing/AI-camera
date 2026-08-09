@@ -44,6 +44,7 @@ class FrameScheduler {
     private val recentPipelineTimes = ArrayDeque<Long>(20)
     private val recentPreprocessTimes = ArrayDeque<Long>(20)
     private val recentInferenceTimes = ArrayDeque<Long>(20)
+    private val recentCompletionTimes = ArrayDeque<Long>(20)
 
     fun schedule(
         imageProxy: ImageProxy,
@@ -106,7 +107,7 @@ class FrameScheduler {
             )
 
             if (!isCurrentSession(frameGeneration)) return
-            recordTiming(finalResult.timing)
+            recordTiming(finalResult.timing, SystemClock.elapsedRealtime())
 
             mainHandler.post {
                 if (isCurrentSession(frameGeneration)) onComplete(finalResult)
@@ -174,10 +175,12 @@ class FrameScheduler {
 
         // ★ 在锁内取快照，避免与推理线程的 recordTiming 并发
         val snapshot = synchronized(statsLock) {
-            Triple(
-                recentPreprocessTimes.averageOrZero() to recentInferenceTimes.averageOrZero(),
-                recentPipelineTimes.averageOrZero(),
-                recentPipelineTimes.lastOrNull() ?: 0L
+            TimingSnapshot(
+                averagePreprocessMs = recentPreprocessTimes.averageOrZero(),
+                averageInferenceMs = recentInferenceTimes.averageOrZero(),
+                averagePipelineMs = recentPipelineTimes.averageOrZero(),
+                lastPipelineMs = recentPipelineTimes.lastOrNull() ?: 0L,
+                effectiveFps = effectiveFpsFromCompletionTimes(recentCompletionTimes)
             )
         }
 
@@ -185,22 +188,22 @@ class FrameScheduler {
             totalFrames = total,
             droppedFrames = dropped,
             processedFrames = processed,
-            avgPreprocessMs = snapshot.first.first,
-            avgInferenceMs = snapshot.first.second,
-            avgPipelineMs = snapshot.second,
-            lastPipelineMs = snapshot.third,
+            avgPreprocessMs = snapshot.averagePreprocessMs,
+            avgInferenceMs = snapshot.averageInferenceMs,
+            avgPipelineMs = snapshot.averagePipelineMs,
+            lastPipelineMs = snapshot.lastPipelineMs,
             isProcessing = processing.get(),
             isRunning = isRunning,
             inferenceType = "pipeline",
             // ★ 新增统计
             dropRate = if (total > 0) dropped.toFloat() / total else 0f,
-            effectiveFps = 0f // 后续由外部计算
+            effectiveFps = snapshot.effectiveFps
         )
     }
 
     fun getExecutor(): ExecutorService = inferenceExecutor
 
-    private fun recordTiming(timing: FrameTiming) {
+    private fun recordTiming(timing: FrameTiming, completionTimeMs: Long) {
         synchronized(statsLock) {
             recentPreprocessTimes.addLast(timing.preprocessMs)
             if (recentPreprocessTimes.size > 20) recentPreprocessTimes.removeFirst()
@@ -210,6 +213,9 @@ class FrameScheduler {
 
             recentPipelineTimes.addLast(timing.totalMs)
             if (recentPipelineTimes.size > 20) recentPipelineTimes.removeFirst()
+
+            recentCompletionTimes.addLast(completionTimeMs)
+            if (recentCompletionTimes.size > 20) recentCompletionTimes.removeFirst()
         }
     }
 
@@ -221,6 +227,7 @@ class FrameScheduler {
             recentPipelineTimes.clear()
             recentPreprocessTimes.clear()
             recentInferenceTimes.clear()
+            recentCompletionTimes.clear()
         }
     }
 
@@ -233,11 +240,30 @@ class FrameScheduler {
 
     private fun isCurrentSession(frameGeneration: Long): Boolean =
         isRunning && sessionGeneration.get() == frameGeneration
+
+    private data class TimingSnapshot(
+        val averagePreprocessMs: Float,
+        val averageInferenceMs: Float,
+        val averagePipelineMs: Float,
+        val lastPipelineMs: Long,
+        val effectiveFps: Float
+    )
 }
 
 private fun ArrayDeque<Long>.averageOrZero(): Float {
     if (isEmpty()) return 0f
     return map { it.toFloat() }.average().toFloat()
+}
+
+/** Pure timestamp-window calculation, usable by JVM tests and the runtime performance HUD. */
+internal fun effectiveFpsFromCompletionTimes(completionTimesMs: Collection<Long>): Float {
+    if (completionTimesMs.size < 2) return 0f
+    val first = completionTimesMs.first()
+    val last = completionTimesMs.last()
+    val elapsedMs = last - first
+    if (elapsedMs <= 0L) return 0f
+    return (((completionTimesMs.size - 1) * 1_000.0) / elapsedMs).toFloat()
+        .takeIf { it.isFinite() && it >= 0f } ?: 0f
 }
 
 private fun logInfo(msg: String) = Log.i(CameraConfig.TAG, "[Scheduler] $msg")
