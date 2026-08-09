@@ -6,6 +6,7 @@ build/
 local.properties
 *.iml
 .idea/
+.DS_Store
 captures/
 docs/screenshots/
 *.jks
