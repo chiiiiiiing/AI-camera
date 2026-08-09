@@ -12,8 +12,8 @@ usage() {
 Usage: benchmark_android_v9_engine.sh [options]
 
 Open the camera preview first, then run this script. It does not install, stop, clear, or modify
-the app. Read PipelineState's avgInferenceMs, avgPipelineMs and effectiveFps from the in-app HUD
-alongside the generated memory and UI-frame files.
+the app. The current debug HUD exposes avgInferenceMs and avgPipelineMs; read effectiveFps and
+dropRate from PipelineState through a debugger or app-side collector alongside the generated files.
 
 Options:
   --package NAME       Application ID (default: com.example.aicamera.debug)
@@ -82,11 +82,15 @@ Package: $PACKAGE_NAME
 PID at start: $PID
 Duration: $DURATION_SECONDS seconds
 
-Collect these values from the app's PipelineState/HUD during the same window:
+Collect these values during the same window:
 - avgInferenceMs
 - avgPipelineMs
 - effectiveFps
 - dropRate
+
+The current debug HUD exposes the first two values. Read effectiveFps and dropRate from
+PipelineState through a debugger or an app-side collector; this script intentionally does not
+change app behavior to expose them.
 
 Targets from android_runtime_config.json:
 - embedding p50 <= 80 ms
