@@ -36,6 +36,9 @@ class FrameScheduler {
     private val droppedFrames = AtomicLong(0)
     private val processedFrames = AtomicLong(0)
 
+    /** Increments across pause/resume so completed old frames cannot update a new camera session. */
+    private val sessionGeneration = AtomicLong(0)
+
     /** ★ 统计队列锁：推理线程写、主线程读，旧代码无同步存在并发风险 */
     private val statsLock = Any()
     private val recentPipelineTimes = ArrayDeque<Long>(20)
@@ -65,13 +68,14 @@ class FrameScheduler {
 
         val frameIdx = processedFrames.incrementAndGet()
         val rotation = imageProxy.imageInfo.rotationDegrees
+        val frameGeneration = sessionGeneration.get()
 
         // ★ 修复竞态：release() 与帧到达并发时 execute() 会抛
         //   RejectedExecutionException——旧代码此处异常会导致 processing 门闩
         //   永久卡死 + ImageProxy 泄漏。
         try {
             inferenceExecutor.execute {
-                runPipeline(imageProxy, frameIdx, rotation, onProcess, onComplete)
+                runPipeline(imageProxy, frameIdx, rotation, frameGeneration, onProcess, onComplete)
             }
         } catch (e: java.util.concurrent.RejectedExecutionException) {
             logError("推理线程池已关闭，丢弃帧", e)
@@ -86,6 +90,7 @@ class FrameScheduler {
         imageProxy: ImageProxy,
         frameIdx: Long,
         rotation: Int,
+        frameGeneration: Long,
         onProcess: (ImageProxy) -> PipelineResult,
         onComplete: (PipelineResult) -> Unit
     ) {
@@ -100,15 +105,17 @@ class FrameScheduler {
                 timing = result.timing.copy(totalMs = totalMs)
             )
 
+            if (!isCurrentSession(frameGeneration)) return
             recordTiming(finalResult.timing)
 
             mainHandler.post {
-                onComplete(finalResult)
+                if (isCurrentSession(frameGeneration)) onComplete(finalResult)
             }
         } catch (e: Exception) {
             logError("管线处理异常", e)
             val totalMs = SystemClock.elapsedRealtime() - startTime
             mainHandler.post {
+                if (!isCurrentSession(frameGeneration)) return@post
                 onComplete(
                     PipelineResult(
                         frameIndex = frameIdx,
@@ -142,6 +149,7 @@ class FrameScheduler {
     fun start() {
         // ★ 确保线程池可用（release 后可复用）
         ensureExecutor()
+        sessionGeneration.incrementAndGet()
         isRunning = true
         resetStats()
         logInfo("帧处理管线已启动")
@@ -149,6 +157,7 @@ class FrameScheduler {
 
     fun stop() {
         isRunning = false
+        sessionGeneration.incrementAndGet()
         logInfo("帧处理管线已停止: processed=${processedFrames.get()}, dropped=${droppedFrames.get()}")
     }
 
@@ -221,6 +230,9 @@ class FrameScheduler {
             inferenceExecutor = Executors.newSingleThreadExecutor()
         }
     }
+
+    private fun isCurrentSession(frameGeneration: Long): Boolean =
+        isRunning && sessionGeneration.get() == frameGeneration
 }
 
 private fun ArrayDeque<Long>.averageOrZero(): Float {

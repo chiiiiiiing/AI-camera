@@ -48,6 +48,14 @@ class FramePipeline(
     /** 管线状态变化回调（调试 / 性能面板用） */
     private var onStateChanged: ((PipelineState) -> Unit)? = null
 
+    /** 用于在镜头切换时清空跨帧推荐状态；调度器保证 process 串行执行。 */
+    @Volatile
+    private var lastIsFrontCamera: Boolean? = null
+
+    /** stop 可从主线程调用；把有状态推理器的 reset 延迟到下一次推理线程执行。 */
+    @Volatile
+    private var resetInferenceBeforeNextFrame: Boolean = false
+
     // ── 公开 API ──────────────────────────────────────────────
 
     /**
@@ -75,6 +83,13 @@ class FramePipeline(
                 try {
                     // Phase 2: 推理
                     val inferenceStart = SystemClock.elapsedRealtime()
+                    if (resetInferenceBeforeNextFrame ||
+                        (lastIsFrontCamera != null && lastIsFrontCamera != isFrontCamera)
+                    ) {
+                        inference.resetSession()
+                        resetInferenceBeforeNextFrame = false
+                    }
+                    lastIsFrontCamera = isFrontCamera
                     var modelOutput = inference.predict(preprocessed.buffer, preprocessed)
 
                     // Phase 2.5: 几何引导（真实水平角/主体框 → GuidanceCue + 进度）
@@ -123,6 +138,8 @@ class FramePipeline(
 
     fun stop() {
         scheduler.stop()
+        resetInferenceBeforeNextFrame = true
+        lastIsFrontCamera = null
         logInfo("管道已停止")
     }
 
@@ -148,7 +165,10 @@ class FramePipeline(
      * MVP 阶段用 FakeInference，队友模型到位后替换为真实 LiteRT 推理器。
      */
     fun setInference(newInference: IInference) {
+        newInference.resetSession()
         this.inference = newInference
+        resetInferenceBeforeNextFrame = false
+        lastIsFrontCamera = null
         logInfo("推理器已替换: ${newInference.typeName}")
     }
 
@@ -176,6 +196,9 @@ interface IInference {
      * @return 推理结果
      */
     fun predict(buffer: ByteBuffer, frame: PreprocessedFrame): Any?
+
+    /** 切换镜头、暂停或开始新会话时清空跨帧状态。无状态推理器无需覆写。 */
+    fun resetSession() = Unit
 }
 
 /**

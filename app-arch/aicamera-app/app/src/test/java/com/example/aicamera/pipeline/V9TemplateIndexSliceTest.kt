@@ -79,4 +79,11 @@ class V9TemplateIndexSliceTest {
             V9TemplateIndex.sliceEmbedding(flatEmbeddings(), -1, dim)
         }
     }
+
+    @Test
+    fun `non positive dimension throws`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            V9TemplateIndex.sliceEmbedding(floatArrayOf(), 0, 0)
+        }
+    }
 }

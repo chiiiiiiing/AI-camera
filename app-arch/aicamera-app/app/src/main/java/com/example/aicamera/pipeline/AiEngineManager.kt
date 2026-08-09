@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancel
 import java.io.Closeable
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -59,20 +60,32 @@ class AiEngineManager @Inject constructor(
     var v9Inference: V9Inference? = null
         private set
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val engineJob = SupervisorJob()
+    private val scope = CoroutineScope(engineJob + Dispatchers.IO)
+
+    @Volatile
+    private var closed = false
 
     /**
      * 启动装配（幂等）。FAILED 后允许再次调用重试。
      */
+    @Synchronized
     fun start() {
+        if (closed) {
+            Log.w(TAG, "AI 引擎已释放，忽略 start()")
+            return
+        }
         val current = _state.value.status
         if (current == Status.COPYING || current == Status.LOADING || current == Status.READY) {
             return
         }
 
+        // Publish COPYING before dispatching so concurrent start() calls cannot enqueue a second
+        // model/session load while the first coroutine has not yet started.
+        _state.value = State(Status.COPYING)
+
         scope.launch {
             // ── Phase 1: 复制资产 ──
-            _state.value = State(Status.COPYING)
             val modelDir = AiModelAssets.ensureModelFiles(context)
             if (modelDir == null) {
                 fail("AI 资产复制失败")
@@ -103,6 +116,10 @@ class AiEngineManager @Inject constructor(
                     fail("模板索引加载失败")
                     return@launch
                 }
+                if (closed) {
+                    runtime.close()
+                    return@launch
+                }
                 v9Inference = V9Inference(runtime, index)
                 _state.value = State(Status.READY, templateCount = index.templateCount)
                 Log.i(TAG, "V9 推理引擎就绪: ${index.templateCount} 条模板")
@@ -118,7 +135,11 @@ class AiEngineManager @Inject constructor(
         _state.value = State(Status.FAILED, error = message)
     }
 
+    @Synchronized
     override fun close() {
+        if (closed) return
+        closed = true
+        engineJob.cancel()
         try { v9Inference?.close() } catch (_: Exception) {}
         v9Inference = null
     }
