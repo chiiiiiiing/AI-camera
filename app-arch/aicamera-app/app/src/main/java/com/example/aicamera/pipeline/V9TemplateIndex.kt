@@ -47,37 +47,32 @@ class V9TemplateIndex(
     /** template_id 列表（与 embeddings 索引对应） */
     private val templateIds = mutableListOf<String>()
 
-    /** 每行 metadata 是否解析成功（与文件行号对齐，用于对齐过滤） */
-    private val metadataLineOk = mutableListOf<Boolean>()
-
     // ── 加载索引 ──────────────────────────────────────────────
 
     fun load(): Boolean {
+        clearLoadedState()
         try {
             val embFile = File(indexDir, "templates.embeddings.f32")
             val metaFile = File(indexDir, "templates.metadata.jsonl")
+            val keysFile = File(indexDir, "templates.keys.json")
 
-            if (!embFile.exists() || !metaFile.exists()) {
-                Log.e(TAG, "模板索引文件缺失: emb=${embFile.exists()}, meta=${metaFile.exists()}")
+            if (!embFile.exists() || !metaFile.exists() || !keysFile.exists()) {
+                Log.e(TAG, "模板索引文件缺失: emb=${embFile.exists()}, meta=${metaFile.exists()}, keys=${keysFile.exists()}")
                 return false
             }
 
             loadEmbeddings(embFile)
+            loadTemplateIds(keysFile)
             loadMetadata(metaFile)
 
-            // ★ 对齐保障：metadata 解析失败的行对应 embedding 一并丢弃，
-            //   防止失败后所有行的 embedding ↔ metadata 错位（静默认错模板）。
-            if (metadataLineOk.size == embeddings.size && metadataLineOk.contains(false)) {
-                val kept = embeddings.filterIndexed { i, _ -> metadataLineOk[i] }
-                embeddings.clear()
-                embeddings.addAll(kept)
-                Log.w(TAG, "丢弃 ${metadataLineOk.count { !it }} 条 metadata 解析失败的模板")
-            }
             if (embeddings.size != templateIds.size) {
-                val aligned = minOf(embeddings.size, templateIds.size)
-                Log.w(TAG, "embedding(${embeddings.size}) 与 metadata(${templateIds.size}) 数量不一致，截断对齐到 $aligned")
-                while (embeddings.size > aligned) embeddings.removeAt(embeddings.size - 1)
-                while (templateIds.size > aligned) templateIds.removeAt(templateIds.size - 1)
+                throw IllegalStateException(
+                    "embedding(${embeddings.size}) 与 keys(${templateIds.size}) 数量不一致"
+                )
+            }
+            val missingMetadata = templateIds.filter { it !in metadata }
+            if (missingMetadata.isNotEmpty()) {
+                throw IllegalStateException("有 ${missingMetadata.size} 个 embedding 缺少 metadata")
             }
 
             templateCount = embeddings.size
@@ -85,11 +80,16 @@ class V9TemplateIndex(
             return true
         } catch (e: Exception) {
             Log.e(TAG, "模板索引加载失败", e)
+            clearLoadedState()
             return false
         }
     }
 
     private fun loadEmbeddings(file: File) {
+        val bytesPerEmbedding = V9EmbeddingRuntime.EMBEDDING_DIM * Float.SIZE_BYTES
+        if (file.length() <= 0L || file.length() % bytesPerEmbedding != 0L) {
+            throw IllegalStateException("embedding 文件大小不是 $bytesPerEmbedding 的整数倍: ${file.length()}")
+        }
         val bytes = file.readBytes()
         val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
         val floatBuffer = buffer.asFloatBuffer()
@@ -100,9 +100,20 @@ class V9TemplateIndex(
         floatBuffer.get(temp)
 
         for (i in 0 until count) {
-            embeddings.add(sliceEmbedding(temp, i, dim))
+            val embedding = sliceEmbedding(temp, i, dim)
+            if (!V9EmbeddingRuntime.isUsableEmbedding(embedding)) {
+                throw IllegalStateException("第 $i 条 template embedding 非法")
+            }
+            embeddings.add(embedding)
         }
         Log.d(TAG, "从 ${file.name} 加载 ${embeddings.size} 条 embedding")
+    }
+
+    /** Uses the producer-generated keys file as the only embedding-order authority. */
+    private fun loadTemplateIds(file: File) {
+        val ids = parseTemplateIds(file.readText())
+        templateIds.addAll(ids)
+        Log.d(TAG, "从 ${file.name} 加载 ${templateIds.size} 条 template key")
     }
 
     private fun loadMetadata(file: File) {
@@ -119,6 +130,12 @@ class V9TemplateIndex(
                     val lighting = annotation?.optJSONObject("lighting")
                     val camera = annotation?.optJSONObject("camera")
                     val visualSummary = annotation?.optString("visual_summary", "")
+                    if (templateId.isBlank()) {
+                        throw IllegalArgumentException("metadata template_id 为空")
+                    }
+                    if (metadata.containsKey(templateId)) {
+                        throw IllegalArgumentException("metadata template_id 重复: $templateId")
+                    }
 
                     metadata[templateId] = TemplateMeta(
                         templateId = templateId,
@@ -138,11 +155,8 @@ class V9TemplateIndex(
                         lightingContrast = lighting?.optString("contrast", "medium") ?: "medium",
                         timeOfDay = lighting?.optString("time_of_day", "unknown") ?: "unknown"
                     )
-                    templateIds.add(templateId)
-                    metadataLineOk.add(true)
                 } catch (e: Exception) {
                     Log.w(TAG, "解析 metadata 行失败: ${e.message}")
-                    metadataLineOk.add(false)
                 }
             }
         }
@@ -159,25 +173,23 @@ class V9TemplateIndex(
      * @return 按 cosine similarity 降序排列的候选列表
      */
     fun search(query: FloatArray, topK: Int = 8): List<SearchHit> {
-        if (embeddings.isEmpty()) return emptyList()
-
-        // 计算所有模板的 cosine similarity
-        val scores = FloatArray(embeddings.size)
-        for (i in embeddings.indices) {
-            scores[i] = V9EmbeddingRuntime.cosineSimilarity(query, embeddings[i])
+        if (topK <= 0 || embeddings.isEmpty() || !V9EmbeddingRuntime.isUsableEmbedding(query)) {
+            return emptyList()
         }
 
-        // 用部分排序取 topK（避免全量排序）
-        val indices = scores.indices.toList()
-            .sortedByDescending { scores[it] }
-            .take(topK)
-
-        return indices.map { idx ->
-            val tid = if (idx < templateIds.size) templateIds[idx] else ""
+        val best = ArrayList<ScoredIndex>(minOf(topK, embeddings.size))
+        for (i in embeddings.indices) {
+            val score = V9EmbeddingRuntime.cosineSimilarity(query, embeddings[i])
+            if (!score.isFinite()) continue
+            insertTopHit(best, ScoredIndex(i, score), topK)
+        }
+        return best.map { scored ->
+            val idx = scored.index
+            val tid = templateIds[idx]
             SearchHit(
                 templateId = tid,
-                cosine = scores[idx],
-                metadata = if (tid.isNotEmpty()) metadata[tid] else null
+                cosine = scored.score,
+                metadata = metadata[tid]
             )
         }
     }
@@ -195,9 +207,10 @@ class V9TemplateIndex(
         candidates: List<SearchHit>,
         context: SceneContext = SceneContext()
     ): List<SearchHit> {
-        return candidates.map { hit ->
+        return candidates.asSequence().mapNotNull { hit ->
             val meta = hit.metadata
             var rerankScore = hit.cosine
+            if (!rerankScore.isFinite() || hit.templateId.isBlank()) return@mapNotNull null
             if (meta != null) {
                 // photo_type 匹配 / 不匹配
                 if (context.photoType != null && meta.photoType == context.photoType) {
@@ -226,11 +239,32 @@ class V9TemplateIndex(
                     rerankScore += 0.02f
                 }
             }
-            hit.copy(rerankScore = rerankScore)
-        }.sortedByDescending { it.rerankScore }.take(5)
+            hit.copy(rerankScore = rerankScore).takeIf { it.rerankScore.isFinite() }
+        }.sortedWith(
+            compareByDescending<SearchHit> { it.rerankScore }.thenBy { it.templateId }
+        ).take(5).toList()
     }
 
     fun getMetadata(templateId: String): TemplateMeta? = metadata[templateId]
+
+    private fun insertTopHit(best: MutableList<ScoredIndex>, candidate: ScoredIndex, topK: Int) {
+        val insertAt = best.indexOfFirst { current ->
+            candidate.score > current.score ||
+                (candidate.score == current.score && candidate.index < current.index)
+        }.let { if (it < 0) best.size else it }
+        if (insertAt >= topK && best.size >= topK) return
+        best.add(insertAt, candidate)
+        if (best.size > topK) best.removeAt(best.lastIndex)
+    }
+
+    private fun clearLoadedState() {
+        embeddings.clear()
+        metadata.clear()
+        templateIds.clear()
+        templateCount = 0
+    }
+
+    private data class ScoredIndex(val index: Int, val score: Float)
 
     companion object {
         private const val TAG = "V9TemplateIndex"
@@ -244,12 +278,38 @@ class V9TemplateIndex(
          */
         fun sliceEmbedding(flat: FloatArray, row: Int, dim: Int): FloatArray {
             require(row >= 0) { "row 必须 >= 0，当前 $row" }
+            require(dim > 0) { "dim 必须 > 0，当前 $dim" }
             val start = row * dim
             val end = start + dim
             require(end <= flat.size) {
                 "第 $row 条 embedding 越界: [$start, $end)，总长度 ${flat.size}"
             }
             return flat.copyOfRange(start, end)
+        }
+
+        /** Validates and extracts the producer-authored embedding order from templates.keys.json. */
+        fun parseTemplateIds(keysJson: String): List<String> {
+            val root = JSONObject(keysJson)
+            val dimension = root.optInt("dimension", -1)
+            require(dimension == V9EmbeddingRuntime.EMBEDDING_DIM) {
+                "templates.keys.json dimension=$dimension，不匹配 ${V9EmbeddingRuntime.EMBEDDING_DIM}"
+            }
+            val items = root.optJSONArray("items")
+                ?: throw IllegalArgumentException("templates.keys.json 缺少 items")
+            val expectedCount = root.optInt("count", items.length())
+            require(expectedCount == items.length() && expectedCount > 0) {
+                "templates.keys.json count=$expectedCount, items=${items.length()}"
+            }
+            val ids = ArrayList<String>(items.length())
+            for (index in 0 until items.length()) {
+                val item = items.optJSONObject(index)
+                    ?: throw IllegalArgumentException("templates.keys.json items[$index] 非对象")
+                val id = item.optString("template_id", item.optString("photo_id", "")).trim()
+                require(id.isNotEmpty()) { "templates.keys.json items[$index] 缺少 template_id" }
+                require(id !in ids) { "templates.keys.json template_id 重复: $id" }
+                ids.add(id)
+            }
+            return ids
         }
     }
 }

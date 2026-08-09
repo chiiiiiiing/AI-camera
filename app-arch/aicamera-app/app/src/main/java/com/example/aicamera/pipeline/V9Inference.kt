@@ -162,6 +162,14 @@ class V9Inference(
             } else {
                 createEmptyResult(filterRecommendation, autoZoomRecommendation)
             }
+        } catch (e: Exception) {
+            // Model/session/index failures must not terminate the camera analysis pipeline.
+            Log.e(CameraConfig.TAG, "[V9] 推理或检索失败，返回安全降级结果", e)
+            resetSession()
+            return createEmptyResult(
+                FilterRecommendations.original(reason = FilterReason.FALLBACK),
+                AutoZoomRecommendations.disabled(AutoZoomReason.FALLBACK)
+            )
         } finally {
             reconstructed?.recycle()
         }

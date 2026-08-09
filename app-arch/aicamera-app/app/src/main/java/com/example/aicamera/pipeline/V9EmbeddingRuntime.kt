@@ -96,11 +96,19 @@ class V9EmbeddingRuntime(
      * 从已预处理的 NCHW FloatArray 推理。
      */
     fun embed(input: FloatArray): FloatArray {
+        if (input.size != INPUT_FLOAT_COUNT || input.any { !it.isFinite() }) {
+            Log.w(TAG, "忽略非法模型输入: size=${input.size}")
+            return FloatArray(EMBEDDING_DIM)
+        }
         val shape = longArrayOf(1, 3, 224, 224)
         OnnxTensor.createTensor(env, FloatBuffer.wrap(input), shape).use { tensor ->
             session.run(mapOf(inputName to tensor)).use { result ->
                 @Suppress("UNCHECKED_CAST")
                 val raw = (result[0].value as Array<FloatArray>)[0]
+                if (raw.size != EMBEDDING_DIM) {
+                    Log.w(TAG, "忽略维度错误的模型输出: ${raw.size}")
+                    return FloatArray(EMBEDDING_DIM)
+                }
                 return l2Normalize(raw)
             }
         }
@@ -112,6 +120,8 @@ class V9EmbeddingRuntime(
         private const val TAG = "V9Runtime"
         const val INPUT_SIZE = 224
         const val EMBEDDING_DIM = 512
+        private const val INPUT_FLOAT_COUNT = 3 * INPUT_SIZE * INPUT_SIZE
+        private const val MIN_NORM_SQUARED = 1e-16
 
         /**
          * Bitmap → NCHW 224×224 float32。
@@ -152,10 +162,17 @@ class V9EmbeddingRuntime(
          */
         fun l2Normalize(vec: FloatArray): FloatArray {
             var sumSq = 0.0
-            for (v in vec) sumSq += (v * v).toDouble()
+            for (v in vec) {
+                if (!v.isFinite()) return vec.zeroFill()
+                sumSq += (v * v).toDouble()
+            }
+            if (!sumSq.isFinite() || sumSq <= MIN_NORM_SQUARED) return vec.zeroFill()
             val norm = kotlin.math.sqrt(sumSq)
-            if (norm > 1e-8) {
-                for (i in vec.indices) vec[i] = (vec[i] / norm).toFloat()
+            if (!norm.isFinite() || norm <= 1e-8) return vec.zeroFill()
+            for (i in vec.indices) {
+                val normalized = (vec[i] / norm).toFloat()
+                if (!normalized.isFinite()) return vec.zeroFill()
+                vec[i] = normalized
             }
             return vec
         }
@@ -164,9 +181,29 @@ class V9EmbeddingRuntime(
          * 计算两个向量的余弦相似度。
          */
         fun cosineSimilarity(a: FloatArray, b: FloatArray): Float {
+            if (a.size != b.size || a.isEmpty()) return Float.NEGATIVE_INFINITY
             var dot = 0.0
-            for (i in a.indices) dot += (a[i] * b[i]).toDouble()
-            return dot.toFloat() // 两者都是 L2 normalized，点积 ≈ cosine
+            for (i in a.indices) {
+                if (!a[i].isFinite() || !b[i].isFinite()) return Float.NEGATIVE_INFINITY
+                dot += (a[i] * b[i]).toDouble()
+            }
+            return dot.toFloat().takeIf { it.isFinite() } ?: Float.NEGATIVE_INFINITY
+        }
+
+        /** Search should reject zero, malformed, or non-finite model embeddings safely. */
+        fun isUsableEmbedding(vector: FloatArray): Boolean {
+            if (vector.size != EMBEDDING_DIM) return false
+            var sumSq = 0.0
+            for (value in vector) {
+                if (!value.isFinite()) return false
+                sumSq += (value * value).toDouble()
+            }
+            return sumSq.isFinite() && sumSq > MIN_NORM_SQUARED
+        }
+
+        private fun FloatArray.zeroFill(): FloatArray {
+            fill(0f)
+            return this
         }
     }
 
