@@ -10,6 +10,11 @@ import com.example.aicamera.filter.FilterRecommendationStabilizer
 import com.example.aicamera.filter.FilterRecommendations
 import com.example.aicamera.filter.FrameColorStatsExtractor
 import com.example.aicamera.guidance.GuidanceCue
+import com.example.aicamera.zoom.AutoZoomReason
+import com.example.aicamera.zoom.AutoZoomRecommendation
+import com.example.aicamera.zoom.AutoZoomRecommendationEngine
+import com.example.aicamera.zoom.AutoZoomRecommendationStabilizer
+import com.example.aicamera.zoom.AutoZoomRecommendations
 import java.nio.ByteBuffer
 import java.io.Closeable
 
@@ -38,7 +43,9 @@ class V9Inference(
     private val index: V9TemplateIndex,
     private val colorStatsExtractor: FrameColorStatsExtractor = FrameColorStatsExtractor(),
     private val filterEngine: FilterRecommendationEngine = FilterRecommendationEngine(),
-    private val filterStabilizer: FilterRecommendationStabilizer = FilterRecommendationStabilizer()
+    private val filterStabilizer: FilterRecommendationStabilizer = FilterRecommendationStabilizer(),
+    private val autoZoomEngine: AutoZoomRecommendationEngine = AutoZoomRecommendationEngine(),
+    private val autoZoomStabilizer: AutoZoomRecommendationStabilizer = AutoZoomRecommendationStabilizer()
 ) : IInference, Closeable {
 
     override val typeName: String = "V9-ONNX"
@@ -82,18 +89,41 @@ class V9Inference(
             val candidates = index.search(embedding, topK = 8)
             if (candidates.isEmpty()) {
                 filterStabilizer.reset()
-                return createEmptyResult(FilterRecommendations.original())
+                autoZoomStabilizer.reset()
+                return createEmptyResult(
+                    FilterRecommendations.original(),
+                    AutoZoomRecommendations.disabled(AutoZoomReason.EMPTY_CANDIDATES)
+                )
             }
             val reranked = index.rerank(candidates)
             if (reranked.isEmpty()) {
                 filterStabilizer.reset()
-                return createEmptyResult(FilterRecommendations.original())
+                autoZoomStabilizer.reset()
+                return createEmptyResult(
+                    FilterRecommendations.original(),
+                    AutoZoomRecommendations.disabled(AutoZoomReason.EMPTY_CANDIDATES)
+                )
             }
 
-            // Step 3: 推荐滤镜。失败只降级推荐，不影响现有 V9 构图链路。
+            // Step 3: 从同一张 224x224 bitmap 提取一次统计，供两个离线推荐器复用。
+            val stats = try {
+                colorStatsExtractor.extract(sourceBitmap)
+            } catch (e: Exception) {
+                Log.w(CameraConfig.TAG, "[V9] 颜色统计失败，自动变焦将安全禁用", e)
+                null
+            }
+
+            // Step 4: 推荐滤镜。失败只降级推荐，不影响现有 V9 构图链路。
             val filterRecommendation = try {
-                val stats = colorStatsExtractor.extract(sourceBitmap)
-                filterStabilizer.stabilize(filterEngine.recommend(reranked, stats))
+                if (stats == null) {
+                    filterStabilizer.reset()
+                    FilterRecommendations.original(
+                        reason = FilterReason.FALLBACK,
+                        sourceTemplateId = reranked.firstOrNull()?.templateId
+                    )
+                } else {
+                    filterStabilizer.stabilize(filterEngine.recommend(reranked, stats))
+                }
             } catch (e: Exception) {
                 Log.w(CameraConfig.TAG, "[V9] 滤镜推荐失败，回退 original", e)
                 filterStabilizer.reset()
@@ -103,13 +133,34 @@ class V9Inference(
                 )
             }
 
-            // Step 4: 现有模板稳定策略继续只负责构图输出。
+            // Step 5: 自动变焦建议只在引擎内生成并稳定，不控制 CameraX 或 UI。
+            val autoZoomRecommendation = try {
+                if (stats == null) {
+                    autoZoomStabilizer.stabilize(
+                        AutoZoomRecommendations.disabled(
+                            AutoZoomReason.STATS_UNAVAILABLE,
+                            reranked.firstOrNull()?.templateId
+                        )
+                    )
+                } else {
+                    autoZoomStabilizer.stabilize(autoZoomEngine.recommend(reranked, stats))
+                }
+            } catch (e: Exception) {
+                Log.w(CameraConfig.TAG, "[V9] 自动变焦推荐失败，安全禁用", e)
+                autoZoomStabilizer.reset()
+                AutoZoomRecommendations.disabled(
+                    AutoZoomReason.FALLBACK,
+                    reranked.firstOrNull()?.templateId
+                )
+            }
+
+            // Step 6: 现有模板稳定策略继续只负责构图输出。
             val selectedHit = selectStable(reranked)
             val meta = selectedHit.metadata ?: index.getMetadata(selectedHit.templateId)
             return if (meta != null) {
-                metaToFakeOutput(meta, selectedHit.rerankScore, filterRecommendation)
+                metaToFakeOutput(meta, selectedHit.rerankScore, filterRecommendation, autoZoomRecommendation)
             } else {
-                createEmptyResult(filterRecommendation)
+                createEmptyResult(filterRecommendation, autoZoomRecommendation)
             }
         } finally {
             reconstructed?.recycle()
@@ -181,7 +232,8 @@ class V9Inference(
     private fun metaToFakeOutput(
         meta: TemplateMeta,
         score: Float,
-        filterRecommendation: FilterRecommendation
+        filterRecommendation: FilterRecommendation,
+        autoZoomRecommendation: AutoZoomRecommendation
     ): FakeInferenceOutput {
         val strategy = compositionTypeToStrategy(meta.compositionType)
         val scene = sceneCategoryToSceneType(meta.sceneCategory)
@@ -244,6 +296,7 @@ class V9Inference(
             guidanceCue = GuidanceCue.NONE, // 等 App 侧几何检测后更新
             compositionProgress = progress
         ).withV9FilterRecommendation(filterRecommendation)
+            .withV9AutoZoomRecommendation(autoZoomRecommendation)
     }
 
     private fun compositionTypeToStrategy(type: String): CompositionStrategy = when (type) {
@@ -262,7 +315,8 @@ class V9Inference(
     }
 
     private fun createEmptyResult(
-        filterRecommendation: FilterRecommendation
+        filterRecommendation: FilterRecommendation,
+        autoZoomRecommendation: AutoZoomRecommendation
     ): FakeInferenceOutput {
         return FakeInferenceOutput(
             sceneType = SceneType.NORMAL,
@@ -277,6 +331,7 @@ class V9Inference(
             guidanceCue = GuidanceCue.NONE,
             compositionProgress = 0f
         ).withV9FilterRecommendation(filterRecommendation)
+            .withV9AutoZoomRecommendation(autoZoomRecommendation)
     }
 
     // ── 辅助 ──────────────────────────────────────────────────
@@ -309,6 +364,7 @@ class V9Inference(
         candidateTemplateId = null
         candidateLeadCount = 0
         filterStabilizer.reset()
+        autoZoomStabilizer.reset()
     }
 }
 
@@ -316,3 +372,8 @@ class V9Inference(
 internal fun FakeInferenceOutput.withV9FilterRecommendation(
     recommendation: FilterRecommendation
 ): FakeInferenceOutput = copy(filterRecommendation = recommendation)
+
+/** Explicit adapter seam used by the real V9 path; FakeInference never calls it. */
+internal fun FakeInferenceOutput.withV9AutoZoomRecommendation(
+    recommendation: AutoZoomRecommendation
+): FakeInferenceOutput = copy(autoZoomRecommendation = recommendation)
