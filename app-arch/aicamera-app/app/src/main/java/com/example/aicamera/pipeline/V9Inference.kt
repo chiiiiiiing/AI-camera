@@ -45,7 +45,8 @@ class V9Inference(
     private val filterEngine: FilterRecommendationEngine = FilterRecommendationEngine(),
     private val filterStabilizer: FilterRecommendationStabilizer = FilterRecommendationStabilizer(),
     private val autoZoomEngine: AutoZoomRecommendationEngine = AutoZoomRecommendationEngine(),
-    private val autoZoomStabilizer: AutoZoomRecommendationStabilizer = AutoZoomRecommendationStabilizer()
+    private val autoZoomStabilizer: AutoZoomRecommendationStabilizer = AutoZoomRecommendationStabilizer(),
+    private val sceneContextEstimator: V9SceneContextEstimator = V9SceneContextEstimator()
 ) : IInference, Closeable {
 
     override val typeName: String = "V9-ONNX"
@@ -95,7 +96,18 @@ class V9Inference(
                     AutoZoomRecommendations.disabled(AutoZoomReason.EMPTY_CANDIDATES)
                 )
             }
-            val reranked = index.rerank(candidates)
+            // Step 3: 从同一张 224x224 bitmap 提取一次统计，供重排和两个推荐器复用。
+            val stats = try {
+                colorStatsExtractor.extract(sourceBitmap)
+            } catch (e: Exception) {
+                Log.w(CameraConfig.TAG, "[V9] 颜色统计失败，自动变焦将安全禁用", e)
+                null
+            }
+
+            val reranked = index.rerank(
+                candidates,
+                stats?.let { sceneContextEstimator.estimate(candidates, it) } ?: SceneContext()
+            )
             if (reranked.isEmpty()) {
                 filterStabilizer.reset()
                 autoZoomStabilizer.reset()
@@ -103,14 +115,6 @@ class V9Inference(
                     FilterRecommendations.original(),
                     AutoZoomRecommendations.disabled(AutoZoomReason.EMPTY_CANDIDATES)
                 )
-            }
-
-            // Step 3: 从同一张 224x224 bitmap 提取一次统计，供两个离线推荐器复用。
-            val stats = try {
-                colorStatsExtractor.extract(sourceBitmap)
-            } catch (e: Exception) {
-                Log.w(CameraConfig.TAG, "[V9] 颜色统计失败，自动变焦将安全禁用", e)
-                null
             }
 
             // Step 4: 推荐滤镜。失败只降级推荐，不影响现有 V9 构图链路。
