@@ -36,14 +36,15 @@ class FaceSubjectDetector @Inject constructor() : Closeable {
 
     // 检测策略参数（常量集中此处，Hilt 注入要求无参构造）
     private val minIntervalMs: Long = 250L
-    private val detectTimeoutMs: Long = 150L
+    private val detectTimeoutMs: Long = 350L
     private val maxImageSide: Int = 480
 
     private val options = FaceDetectorOptions.Builder()
         .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
         .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_NONE)
         .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_NONE)
-        .setMinFaceSize(0.12f)
+        // 0.06：中远距离人像（脸占画面 6%）也能检出 — 自动变焦依赖该信号
+        .setMinFaceSize(0.06f)
         .build()
 
     private val detector: FaceDetector = FaceDetection.getClient(options)

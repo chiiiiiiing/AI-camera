@@ -45,7 +45,8 @@ class CameraCapture(
     sealed class CaptureResult {
         data class Success(
             val uri: Uri,
-            val timestamp: Long = System.currentTimeMillis()
+            val timestamp: Long = System.currentTimeMillis(),
+            val processingWarning: String? = null
         ) : CaptureResult()
 
         data class Error(
@@ -74,8 +75,8 @@ class CameraCapture(
         // 1. 映射闪光灯模式
         imageCapture.flashMode = CameraConfig.flashModeToImageCapture(flashMode)
 
-        // 2. 构建输出选项
-        val outputOptions = createOutputOptions(saveToGallery)
+        // 2. 构建输出选项（旧平台路径需在回调中做媒体扫描）
+        val (outputOptions, legacyFile) = createOutputOptionsWithFile(saveToGallery)
         if (outputOptions == null) {
             callback.onResult(CaptureResult.Error("无法创建输出文件（可能缺少存储权限）"))
             return
@@ -90,6 +91,10 @@ class CameraCapture(
                     val savedUri = output.savedUri
                     if (savedUri != null) {
                         logDebug("照片已保存: $savedUri")
+                        // ★ 旧平台媒体扫描在文件确认写入后执行
+                        legacyFile?.let { f ->
+                            MediaScannerConnection.scanFile(context, arrayOf(f.absolutePath), null, null)
+                        }
                         callback.onResult(CaptureResult.Success(savedUri))
                     } else {
                         callback.onResult(CaptureResult.Error("拍照成功但未获取到 URI"))
@@ -116,15 +121,15 @@ class CameraCapture(
     /**
      * 按平台版本和 saveToGallery 选择输出目标。
      */
-    private fun createOutputOptions(saveToGallery: Boolean): OutputFileOptions? {
+    /**
+     * @return Pair(OutputFileOptions?, File?) — File 在 Android 9- / 私有目录时供回调扫描
+     */
+    private fun createOutputOptionsWithFile(saveToGallery: Boolean): Pair<OutputFileOptions?, File?> {
         return when {
-            // Android 10+ 存相册：经 MediaStore 插入（无需任何存储权限）
             saveToGallery && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ->
-                createMediaStoreOutput()
-            // Android 9- 存相册：公共目录 + 运行时权限检查 + 媒体扫描
-            saveToGallery -> createLegacyPublicOutput()
-            // 仅应用私有目录
-            else -> createAppPrivateOutput()
+                createMediaStoreOutput() to null
+            saveToGallery -> createLegacyPublicOutputWithFile()
+            else -> createAppPrivateOutputWithFile()
         }
     }
 
@@ -148,60 +153,27 @@ class CameraCapture(
     }
 
     /**
-     * Android 9 及以下：保存到公共 Pictures/AiCamera 目录。
-     * ★ 先检查 WRITE_EXTERNAL_STORAGE 运行时权限；保存后需媒体扫描才进相册。
+     * Android 9 及以下：保存到公共目录。返回 File 供回调做媒体扫描。
      */
-    private fun createLegacyPublicOutput(): OutputFileOptions? {
+    private fun createLegacyPublicOutputWithFile(): Pair<OutputFileOptions?, File?> {
         val granted = ContextCompat.checkSelfPermission(
             context, android.Manifest.permission.WRITE_EXTERNAL_STORAGE
         ) == PackageManager.PERMISSION_GRANTED
-        if (!granted) {
-            logError("缺少 WRITE_EXTERNAL_STORAGE 权限，无法保存到公共相册")
-            return null
-        }
-
-        val dir = File(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
-            "AiCamera"
-        )
-        if (!dir.exists() && !dir.mkdirs()) {
-            logError("无法创建目录: $dir")
-            return null
-        }
-
+        if (!granted) { logError("缺少 WRITE_EXTERNAL_STORAGE 权限"); return null to null }
+        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "AiCamera")
+        if (!dir.exists() && !dir.mkdirs()) { logError("无法创建目录: $dir"); return null to null }
         val file = File(dir, generateFileName())
-        scanOnSaved(file)
-        return OutputFileOptions.Builder(file).build()
+        return OutputFileOptions.Builder(file).build() to file
     }
 
     /**
      * 仅应用私有目录（不进系统相册，卸载即删）。
      */
-    private fun createAppPrivateOutput(): OutputFileOptions? {
-        val dir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
-            ?: context.filesDir
-        if (!dir.exists() && !dir.mkdirs()) {
-            logError("无法创建应用私有图片目录")
-            return null
-        }
+    private fun createAppPrivateOutputWithFile(): Pair<OutputFileOptions?, File?> {
+        val dir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES) ?: context.filesDir
+        if (!dir.exists() && !dir.mkdirs()) { logError("无法创建应用私有图片目录"); return null to null }
         val file = File(dir, generateFileName())
-        return OutputFileOptions.Builder(file).build()
-    }
-
-    /**
-     * 旧平台保存后触发媒体扫描，让照片出现在系统相册。
-     * （在保存成功回调之外预先注册路径，takePicture 成功后由系统广播扫描）
-     */
-    private fun scanOnSaved(file: File) {
-        // 延迟扫描：CameraX 写盘是异步的，这里等 500ms 再扫，确保文件已写完
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-            MediaScannerConnection.scanFile(
-                context,
-                arrayOf(file.absolutePath),
-                arrayOf("image/jpeg"),
-                null
-            )
-        }, 500)
+        return OutputFileOptions.Builder(file).build() to file
     }
 
     // ── 辅助方法 ──────────────────────────────────────────────
@@ -219,28 +191,25 @@ class CameraCapture(
         fun getLatestPhotoUri(context: Context): Uri? {
             val projection = arrayOf(
                 MediaStore.Images.Media._ID,
-                MediaStore.Images.Media.DISPLAY_NAME,
-                MediaStore.Images.Media.DATE_TAKEN
+                MediaStore.Images.Media.DISPLAY_NAME
             )
-            val sortOrder = "${MediaStore.Images.Media.DATE_TAKEN} DESC"
+            // ★ CameraX 不写 DATE_TAKEN → 用 DATE_ADDED 排序 + DISPLAY_NAME 过滤
+            val selection = "${MediaStore.Images.Media.DISPLAY_NAME} LIKE ?"
+            val selectionArgs = arrayOf("AiCamera_%")
+            val sortOrder = "${MediaStore.Images.Media.DATE_ADDED} DESC"
 
             context.contentResolver.query(
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                 projection,
-                null, null,
+                selection, selectionArgs,
                 sortOrder
             )?.use { cursor ->
                 if (cursor.moveToFirst()) {
-                    // ★ 按文件名前缀过滤，只返回本应用拍摄的
-                    val nameIdx = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
-                    val displayName = cursor.getString(nameIdx)
-                    if (displayName?.startsWith("AiCamera_") == true) {
-                        val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID))
-                        return Uri.withAppendedPath(
-                            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                            id.toString()
-                        )
-                    }
+                    val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID))
+                    return Uri.withAppendedPath(
+                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        id.toString()
+                    )
                 }
             }
             return null

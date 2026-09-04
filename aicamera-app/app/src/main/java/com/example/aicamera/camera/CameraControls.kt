@@ -45,19 +45,30 @@ class CameraControls(
 
     /**
      * 应用变焦倍数。
-     * CameraX setZoomRatio 在调用线程同步返回；本地状态乐观更新。
+     * ★ CameraX setZoomRatio 返回 ListenableFuture，异步完成；
+     *   本地乐观更新 currentZoomRatio 用于 UI 即时反馈，
+     *   实际变焦完成由 CameraInfo.zoomState 确认。
      */
     private fun applyZoomRatio(clamped: Float, camera: Camera): Boolean {
         return try {
-            camera.cameraControl.setZoomRatio(clamped)
+            val future = camera.cameraControl.setZoomRatio(clamped)
             currentZoomRatio = clamped
             onZoomChanged?.invoke(clamped)
-            logDebug("变焦已设置: ${"%.1f".format(clamped)}x")
+            logDebug("变焦请求已发送: ${"%.1f".format(clamped)}x")
             true
         } catch (e: Exception) {
             logError("设置变焦失败", e)
             false
         }
+    }
+
+    /**
+     * 获取实际变焦倍率（从 CameraX 状态，非乐观本地值）。
+     * 用于确认 Zoom 是否真正完成。
+     */
+    fun actualZoomRatio(camera: Camera): Float {
+        return camera.cameraInfo.zoomState.value?.zoomRatio
+            ?: currentZoomRatio
     }
 
     /** 重置变焦为 1.0x */

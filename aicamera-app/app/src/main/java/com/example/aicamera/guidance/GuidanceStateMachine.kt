@@ -10,8 +10,10 @@ class GuidanceStateMachine(
     val config: GuidanceStateMachineConfig = GuidanceStateMachineConfig(),
 ) {
     data class GuidanceStateMachineConfig(
-        val nearThreshold: Float = 0.72f,
-        val alignedThreshold: Float = 0.92f,
+        /** 接近阈值：进度 >= 此值进入 NEAR 相位（原 0.72 → 宽松 0.50） */
+        val nearThreshold: Float = 0.50f,
+        /** 对齐阈值：进度 >= 此值进入 ALIGNED 相位（原 0.92 → 宽松 0.72） */
+        val alignedThreshold: Float = 0.72f,
         val framesToAlign: Int = 3,
         val framesToExitAligned: Int = 2,
     )

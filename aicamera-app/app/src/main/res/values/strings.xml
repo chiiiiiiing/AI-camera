@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">AI 构图相机</string>
+    <string name="app_name">帧好 GenWow</string>
     <string name="flash_auto">自动闪光</string>
     <string name="flash_on">强制闪光</string>
     <string name="flash_off">关闭闪光</string>
@@ -15,4 +15,12 @@
     <string name="loading">初始化中…</string>
     <string name="photo_saved">照片已保存</string>
     <string name="capture_failed">拍照失败</string>
+
+    <string name="filter_original">原图</string>
+    <string name="filter_portrait_soft">奶油人像</string>
+    <string name="filter_food_vivid">琥珀餐桌</string>
+    <string name="filter_still_life_clean">清透静物</string>
+    <string name="filter_landscape_clear">森氧</string>
+    <string name="filter_golden_warm">日落胶片</string>
+    <string name="filter_urban_crisp">蓝调都市</string>
 </resources>

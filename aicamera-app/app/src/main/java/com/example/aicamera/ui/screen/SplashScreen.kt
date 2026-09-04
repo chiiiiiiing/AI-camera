@@ -1,143 +1,99 @@
 package com.example.aicamera.ui.screen
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.example.aicamera.ui.theme.GradientPink
-import com.example.aicamera.ui.theme.GradientPurple
-import com.example.aicamera.ui.theme.TextDark
+import com.example.aicamera.R
+import com.example.aicamera.ui.auth.LightSystemBars
+import com.example.aicamera.ui.theme.BrandBackgroundGradient
+import com.example.aicamera.ui.theme.BrandChineseTextStyle
+import com.example.aicamera.ui.theme.BrandEnglishTextStyle
+import com.example.aicamera.ui.theme.GenWowMotion
 import kotlinx.coroutines.delay
 
 /**
  * 启动欢迎页 — "帧好" + "GenWow"
  *
- * 冷启动加载页，停留 2s 后自动跳转登录页。
- * 视觉：居中白色圆角方形容器内相机图标 + 品牌文字 + 英文名
+ * 视觉移植自队友 frontend/ ui/splash/SplashScreen.kt：
+ * 品牌渐变背景 + ic_genwow_logo + 品牌文字错峰淡入。
+ * 导航契约保持原样：停留 2s 后回调（登录态判断由调用方完成）。
  */
 @Composable
 fun SplashScreen(onSplashFinished: () -> Unit) {
+    LightSystemBars()
 
+    // ★ 保持原有导航时机：2s 后跳转
     LaunchedEffect(Unit) {
-        delay(2000L)
+        delay(800L)
         onSplashFinished()
     }
 
-    Box(
+    var entered by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { entered = true }
+    val logoAlpha by animateFloatAsState(
+        if (entered) 1f else 0f,
+        tween(240),
+        label = "splash logo alpha",
+    )
+    val logoScale by animateFloatAsState(
+        if (entered) 1f else 0.94f,
+        tween(240, easing = GenWowMotion.StandardEasing),
+        label = "splash logo scale",
+    )
+    val chineseAlpha by animateFloatAsState(
+        if (entered) 1f else 0f,
+        tween(220, delayMillis = 120),
+        label = "splash chinese alpha",
+    )
+    val englishAlpha by animateFloatAsState(
+        if (entered) 1f else 0f,
+        tween(240, delayMillis = 220),
+        label = "splash english alpha",
+    )
+
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                brush = Brush.radialGradient(
-                    colors = listOf(GradientPurple, GradientPink),
-                    radius = 1200f
-                )
-            ),
-        contentAlignment = Alignment.Center
+            .background(BrandBackgroundGradient)
+            .offset(y = (-12).dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            // ① 白色圆角方形 + 相机图标
-            Box(
-                modifier = Modifier
-                    .size(88.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Color.White),
-                contentAlignment = Alignment.Center
-            ) {
-                // 简约相机线性图标 (用 Compose Canvas 绘制)
-                CameraIconSimple(modifier = Modifier.size(44.dp))
-            }
-
-            Spacer(modifier = Modifier.height(28.dp))
-
-            // ② 中文品牌名 「帧好」
-            Text(
-                text = "帧好",
-                fontSize = 36.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextDark,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // ③ 英文品牌名 「GenWow」
-            Text(
-                text = "GenWow",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Normal,
-                color = TextDark.copy(alpha = 0.6f),
-                textAlign = TextAlign.Center,
-                letterSpacing = 2.sp
-            )
-        }
-    }
-}
-
-/**
- * 简约相机线性图标（纯 Compose Canvas 绘制，无额外资源）
- */
-@Composable
-private fun CameraIconSimple(modifier: Modifier = Modifier) {
-    androidx.compose.foundation.Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        val strokeWidth = w * 0.075f
-        val bodyLeft = w * 0.12f
-        val bodyTop = h * 0.25f
-        val bodyRight = w * 0.88f
-        val bodyBottom = h * 0.82f
-        val lensRadius = w * 0.28f
-
-        // 相机机身
-        drawRoundRect(
-            color = Color(0xFF6C2FB0),
-            topLeft = androidx.compose.ui.geometry.Offset(bodyLeft, bodyTop),
-            size = androidx.compose.ui.geometry.Size(
-                bodyRight - bodyLeft,
-                bodyBottom - bodyTop
-            ),
-            cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.1f),
-            style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
+        Image(
+            painter = painterResource(R.drawable.ic_genwow_logo),
+            contentDescription = null,
+            modifier = Modifier
+                .size(90.dp)
+                .scale(logoScale)
+                .alpha(logoAlpha)
+                .semantics { contentDescription = "帧好 GenWow 标志" },
         )
-
-        // 镜头
-        drawCircle(
-            color = Color(0xFF6C2FB0),
-            radius = lensRadius,
-            center = androidx.compose.ui.geometry.Offset(w * 0.5f, h * 0.52f),
-            style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
-        )
-
-        // 镜头内圈
-        drawCircle(
-            color = Color(0xFF6C2FB0),
-            radius = lensRadius * 0.45f,
-            center = androidx.compose.ui.geometry.Offset(w * 0.5f, h * 0.52f)
-        )
-
-        // 顶部凸起 (闪光灯区域)
-        drawRoundRect(
-            color = Color(0xFF6C2FB0),
-            topLeft = androidx.compose.ui.geometry.Offset(w * 0.38f, h * 0.18f),
-            size = androidx.compose.ui.geometry.Size(w * 0.24f, h * 0.1f),
-            cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.04f),
-            style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
-        )
+        Spacer(Modifier.height(38.dp))
+        Text("帧好", style = BrandChineseTextStyle, modifier = Modifier.alpha(chineseAlpha))
+        Spacer(Modifier.height(10.dp))
+        Text("GenWow", style = BrandEnglishTextStyle, modifier = Modifier.alpha(englishAlpha))
     }
 }

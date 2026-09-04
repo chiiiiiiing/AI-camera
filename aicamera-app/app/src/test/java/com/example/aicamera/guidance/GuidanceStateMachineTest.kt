@@ -6,8 +6,8 @@ import org.junit.Test
 /**
  * GuidanceStateMachine 滞回行为单元测试。
  *
- * 关键参数（来自队友设计）：alignedThreshold=0.92，framesToAlign=3，
- * framesToExitAligned=2，nearThreshold=0.72。
+ * 关键参数（v2 已放宽以降低用户操作难度）：
+ * alignedThreshold=0.72，nearThreshold=0.50，framesToAlign=3，framesToExitAligned=2。
  */
 class GuidanceStateMachineTest {
 
@@ -47,9 +47,10 @@ class GuidanceStateMachineTest {
         repeat(3) { state = machine.reduceFrame(state, GuidanceCue.NONE, 0.95f) }
         assertEquals(GuidancePhase.ALIGNED, state.phase)
 
+        // 0.5 >= nearThreshold(0.50) → exits ALIGNED into NEAR
         state = machine.reduceFrame(state, GuidanceCue.NONE, 0.5f)
         state = machine.reduceFrame(state, GuidanceCue.NONE, 0.5f)
-        assertEquals(GuidancePhase.NEUTRAL, state.phase)
+        assertEquals(GuidancePhase.NEAR, state.phase)
     }
 
     @Test

@@ -24,6 +24,8 @@ enum class GuidanceCue {
     SUBJECT_TARGET,
     /** 最新 AI 轮廓在推荐构图中已稳定 */
     SUBJECT_ALIGNED,
+    /** 设备已倒置（180°），不能通过水平校准，需翻转手机 */
+    DEVICE_UPSIDE_DOWN,
 }
 
 /** 构图引导的视觉强度 */

@@ -166,30 +166,10 @@ class CameraProControls(
         else if (isTorchOn && mode != FlashMode.TORCH) enableTorch(false)
     }
 
-    // ── Camera2 扩展（ISO / 白平衡） ──────────────────────────
-
-    /**
-     * 通过 Camera2Interop 设置白平衡模式（需在 Preview Builder 阶段调用）。
-     *
-     * @param awbMode [CaptureRequest.CONTROL_AWB_MODE_*] 常量
-     * @param previewBuilder Preview.Builder
-     */
-    @OptIn(ExperimentalCamera2Interop::class)
-    fun applyAwbToBuilder(awbMode: Int, previewBuilder: Preview.Builder) {
-        Camera2Interop.Extender(previewBuilder).setCaptureRequestOption(
-            CaptureRequest.CONTROL_AWB_MODE, awbMode
-        )
-    }
-
-    /**
-     * 通过 Camera2Interop 设置 ISO（需在 Preview Builder 阶段调用）。
-     */
-    @OptIn(ExperimentalCamera2Interop::class)
-    fun applyIsoToBuilder(iso: Int, previewBuilder: Preview.Builder) {
-        Camera2Interop.Extender(previewBuilder).setCaptureRequestOption(
-            CaptureRequest.SENSOR_SENSITIVITY, iso
-        )
-    }
+    // ── Camera2 扩展说明 ─────────────────────────────────────
+    // ISO / 白平衡 / 快门 / 对焦距离经 CameraManager.applyProOptions
+    // 在 UseCase 构建阶段写入（Camera2Interop，重绑后生效），
+    // 本类只负责相机绑定后可直接调用的实时控制（EV/变焦/对焦/闪光）。
 
     // ── 静态信息查询 ──────────────────────────────────────────
 

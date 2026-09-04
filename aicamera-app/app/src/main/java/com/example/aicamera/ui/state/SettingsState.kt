@@ -14,5 +14,7 @@ data class SettingsState(
     val overlayAlpha: Float = 1.0f,
     val soundEnabled: Boolean = true,
     val saveOriginal: Boolean = true,
-    val proModeEnabled: Boolean = false
+    val proModeEnabled: Boolean = false,
+    /** 自动变焦开关（关闭时只提供构图引导，不改变用户焦段） */
+    val aiAutoZoomEnabled: Boolean = true
 )

@@ -47,14 +47,18 @@ class CameraManager(
         private set
 
     /**
-     * Pro 模式手动参数（ISO / 白平衡）。
+     * Pro 模式手动参数（ISO / 白平衡 / 快门 / 对焦距离）。
      * 设置后在下一次 [bindUseCases] 时经 Camera2Interop 应用到 capture session。
      */
     data class ProOptions(
         /** ISO 感光度（null = 自动） */
         val iso: Int? = null,
         /** 白平衡模式 CaptureRequest.CONTROL_AWB_MODE_*（null = 自动） */
-        val awbMode: Int? = null
+        val awbMode: Int? = null,
+        /** 快门曝光时间（纳秒，null = 自动） */
+        val exposureTimeNs: Long? = null,
+        /** 手动对焦距离（屈光度 diopter，0 = 无穷远，null = 自动对焦） */
+        val focusDistance: Float? = null
     )
 
     /** 当前 Pro 参数（为 null 表示全自动） */
@@ -181,32 +185,55 @@ class CameraManager(
     private fun applyProOptions(builder: Any) {
         val opts = proOptions ?: return
         when (builder) {
-            is Preview.Builder -> {
-                val ext = androidx.camera.camera2.interop.Camera2Interop.Extender(builder)
-                opts.iso?.let {
-                    ext.setCaptureRequestOption(
-                        android.hardware.camera2.CaptureRequest.SENSOR_SENSITIVITY, it
-                    )
-                }
-                opts.awbMode?.let {
-                    ext.setCaptureRequestOption(
-                        android.hardware.camera2.CaptureRequest.CONTROL_AWB_MODE, it
-                    )
-                }
-            }
-            is ImageCapture.Builder -> {
-                val ext = androidx.camera.camera2.interop.Camera2Interop.Extender(builder)
-                opts.iso?.let {
-                    ext.setCaptureRequestOption(
-                        android.hardware.camera2.CaptureRequest.SENSOR_SENSITIVITY, it
-                    )
-                }
-                opts.awbMode?.let {
-                    ext.setCaptureRequestOption(
-                        android.hardware.camera2.CaptureRequest.CONTROL_AWB_MODE, it
-                    )
-                }
-            }
+            is Preview.Builder -> applyProToExtender(
+                androidx.camera.camera2.interop.Camera2Interop.Extender(builder), opts
+            )
+            is ImageCapture.Builder -> applyProToExtender(
+                androidx.camera.camera2.interop.Camera2Interop.Extender(builder), opts
+            )
+        }
+    }
+
+    /**
+     * Pro 参数 → Camera2Interop Extender。
+     *
+     * ★ 手动曝光语义：ISO 或快门任一被手动设置时关闭 AE（CONTROL_AE_MODE_OFF），
+     * 未设置的一项给安全默认（ISO 200 / 1/60s）——camera2 在 AE 关闭时
+     * 两项都必须有确定值，只设一项会被部分设备忽略或曝光漂移。
+     * 手动对焦同理：设对焦距离必须先把 AF 关掉。
+     */
+    @androidx.annotation.OptIn(androidx.camera.camera2.interop.ExperimentalCamera2Interop::class)
+    private fun applyProToExtender(
+        ext: androidx.camera.camera2.interop.Camera2Interop.Extender<out Any>,
+        opts: ProOptions
+    ) {
+        if (opts.iso != null || opts.exposureTimeNs != null) {
+            ext.setCaptureRequestOption(
+                android.hardware.camera2.CaptureRequest.CONTROL_AE_MODE,
+                android.hardware.camera2.CaptureRequest.CONTROL_AE_MODE_OFF
+            )
+            ext.setCaptureRequestOption(
+                android.hardware.camera2.CaptureRequest.SENSOR_SENSITIVITY,
+                opts.iso ?: 200
+            )
+            ext.setCaptureRequestOption(
+                android.hardware.camera2.CaptureRequest.SENSOR_EXPOSURE_TIME,
+                opts.exposureTimeNs ?: 16_666_667L // 1/60s
+            )
+        }
+        opts.awbMode?.let {
+            ext.setCaptureRequestOption(
+                android.hardware.camera2.CaptureRequest.CONTROL_AWB_MODE, it
+            )
+        }
+        opts.focusDistance?.let {
+            ext.setCaptureRequestOption(
+                android.hardware.camera2.CaptureRequest.CONTROL_AF_MODE,
+                android.hardware.camera2.CaptureRequest.CONTROL_AF_MODE_OFF
+            )
+            ext.setCaptureRequestOption(
+                android.hardware.camera2.CaptureRequest.LENS_FOCUS_DISTANCE, it
+            )
         }
     }
 

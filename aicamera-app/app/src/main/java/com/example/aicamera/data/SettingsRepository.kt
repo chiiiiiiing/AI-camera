@@ -35,6 +35,7 @@ class SettingsRepository @Inject constructor(
         val SOUND_ENABLED = booleanPreferencesKey("sound_enabled")
         val SAVE_ORIGINAL = booleanPreferencesKey("save_original")
         val PRO_MODE = booleanPreferencesKey("pro_mode_enabled")
+        val AUTO_ZOOM = booleanPreferencesKey("auto_zoom_enabled")
     }
 
     /** 设置流（DataStore 异常时回落到默认值） */
@@ -48,7 +49,8 @@ class SettingsRepository @Inject constructor(
             overlayAlpha = p[Keys.OVERLAY_ALPHA] ?: defaults.overlayAlpha,
             soundEnabled = p[Keys.SOUND_ENABLED] ?: defaults.soundEnabled,
             saveOriginal = p[Keys.SAVE_ORIGINAL] ?: defaults.saveOriginal,
-            proModeEnabled = p[Keys.PRO_MODE] ?: defaults.proModeEnabled
+            proModeEnabled = p[Keys.PRO_MODE] ?: defaults.proModeEnabled,
+            aiAutoZoomEnabled = p[Keys.AUTO_ZOOM] ?: defaults.aiAutoZoomEnabled
         )
     }
 
@@ -63,6 +65,7 @@ class SettingsRepository @Inject constructor(
             p[Keys.SOUND_ENABLED] = s.soundEnabled
             p[Keys.SAVE_ORIGINAL] = s.saveOriginal
             p[Keys.PRO_MODE] = s.proModeEnabled
+            p[Keys.AUTO_ZOOM] = s.aiAutoZoomEnabled
         }
     }
 }

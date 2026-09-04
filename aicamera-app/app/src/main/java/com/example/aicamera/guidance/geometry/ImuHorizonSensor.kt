@@ -9,26 +9,24 @@ import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.math.atan2
 
 /**
- * IMU 水平倾角传感器 — 由重力向量计算设备绕镜头轴的倾角（ROLL）。
+ * IMU 姿态传感器 — 由重力/磁力计计算设备绕镜头轴的倾角（ROLL）、
+ * 绕设备横轴的俯仰角（PITCH）以及绕设备竖轴的偏航角（YAW）。
  *
  * ## 原理
- * 重力向量 g 在设备坐标系（x 右、y 沿屏幕向上、z 出屏）中的分量随设备
- * 绕 z 轴（镜头光轴）旋转而变化：
- *   设备顺时针倾 θ 时，g = (-g·sinθ, -g·cosθ, 0)
- *   故 θ = atan2(-gx, -gy)（正值 = 顺时针倾斜）
+ * - ROLL / PITCH：由重力向量直接计算，无需磁力计，可靠。
+ * - YAW：需要磁力计配合重力向量通过 [SensorManager.getRotationMatrix] 计算，
+ *   受磁场干扰会漂移；输出时带 null 退化。
  *
- * ## 与引导指令的关系（docs/10 约定）
- * θ > +2° → 提示 ROLL_COUNTERCLOCKWISE；θ < -2° → ROLL_CLOCKWISE。
- *
- * ## 适用范围
- * App 锁定竖屏（Manifest screenOrientation=portrait），故只处理竖屏姿态；
- * 手机接近平放（|gz| 主导）时角度不可信，输出仍连续但权重应降低（由调用方决定）。
+ * ## 坐标系（Android 设备）
+ * x → 右, y → 上（沿屏幕）, z → 出屏
+ * 重力向量 g = (gx, gy, gz)
+ * 竖屏正立时 g ≈ (0, +9.8, 0)
  *
  * ## 生命周期
- * [start] 注册监听（优先 TYPE_GRAVITY，退化 TYPE_ACCELEROMETER 低通滤波）；
+ * [start] 注册监听（优先 TYPE_GRAVITY，退化 TYPE_ACCELEROMETER 低通滤波；
+ *         同时注册 TYPE_MAGNETIC_FIELD 用于 YAW）；
  * [stop] 注销。由 PipelineViewModel 的 resume/pause 驱动，后台不耗电。
  */
 @Singleton
@@ -39,10 +37,20 @@ class ImuHorizonSensor @Inject constructor(
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val gravitySensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
     private val accelSensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+    private val magneticSensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
 
-    /** 最新倾角（度，正值 = 顺时针）。Volatile 保证推理线程读到最新值。 */
+    /** 最新完整观测（经圆周平滑）。Volatile 保证推理线程读到最新值。 */
     @Volatile
-    private var latestAngleDeg: Float? = null
+    private var latestObservation: HorizonObservation? = null
+
+    /** 圆周角平滑器 — sin/cos 向量 EMA，消除 ±180° 跳变 */
+    private val rollSmoother = CircularAngleSmoother(alpha = 0.35f)
+    private val pitchSmoother = CircularAngleSmoother(alpha = 0.3f)
+    private val yawSmoother = CircularAngleSmoother(alpha = 0.2f)
+
+    /** 最近一次重力与磁力计读数 */
+    private var gravityValues: FloatArray? = null
+    private var magneticValues: FloatArray? = null
 
     /** 加速度计低通滤波状态（无重力传感器时用） */
     private var filteredGravity: FloatArray? = null
@@ -54,16 +62,31 @@ class ImuHorizonSensor @Inject constructor(
     val isAvailable: Boolean
         get() = gravitySensor != null || accelSensor != null
 
+    /** 磁力计是否可用（false 时 YAW 始终为 null） */
+    val isMagneticAvailable: Boolean
+        get() = magneticSensor != null
+
     fun start() {
         if (listening) return
-        val sensor = gravitySensor ?: accelSensor
-        if (sensor == null) {
+
+        val gravity = gravitySensor ?: accelSensor
+        if (gravity == null) {
             Log.w(TAG, "设备无重力/加速度传感器，水平仪不可用")
             return
         }
-        sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+
+        rollSmoother.reset()
+        pitchSmoother.reset()
+        yawSmoother.reset()
+        gravityValues = null
+        magneticValues = null
+
+        sensorManager.registerListener(this, gravity, SensorManager.SENSOR_DELAY_NORMAL)
+        magneticSensor?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
+        }
         listening = true
-        Log.i(TAG, "水平传感器已启动: ${sensor.name}")
+        Log.i(TAG, "姿态传感器已启动: gravity=${gravity.name}, mag=${magneticSensor?.name ?: "无"}")
     }
 
     fun stop() {
@@ -73,29 +96,72 @@ class ImuHorizonSensor @Inject constructor(
     }
 
     /** 读取最新倾角（度），无信号返回 null */
-    fun latestAngleDegrees(): Float? = latestAngleDeg
+    fun latestAngleDegrees(): Float? = latestObservation?.rollDegrees
+
+    /** 读取最新完整观测（含 roll/pitch/yaw / isUpright / confidence） */
+    fun latestObservation(): HorizonObservation? = latestObservation
 
     override fun onSensorChanged(event: SensorEvent) {
-        val g = when (event.sensor.type) {
-            Sensor.TYPE_GRAVITY -> event.values
+        when (event.sensor.type) {
+            Sensor.TYPE_GRAVITY -> {
+                gravityValues = event.values.clone()
+                updateObservation()
+            }
             Sensor.TYPE_ACCELEROMETER -> {
-                // 低通滤波提取重力分量（alpha=0.8 保留旧值，标准做法）
+                if (gravitySensor != null) return
+                // 低通滤波提取重力分量（alpha=0.8 保留旧值）
                 val alpha = 0.8f
                 val prev = filteredGravity ?: event.values.clone()
                 val next = FloatArray(3) { i -> alpha * prev[i] + (1 - alpha) * event.values[i] }
                 filteredGravity = next
-                next
+                gravityValues = next
+                updateObservation()
             }
-            else -> return
+            Sensor.TYPE_MAGNETIC_FIELD -> {
+                magneticValues = event.values.clone()
+                updateYaw()
+            }
         }
-
-        // θ = atan2(-gx, -gy)，竖屏持机时即设备绕镜头轴的倾角
-        val angleRad = atan2(-g[0].toDouble(), -g[1].toDouble())
-        latestAngleDeg = Math.toDegrees(angleRad).toFloat()
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
         // 不需要处理；重力估计精度变化不影响连续输出
+    }
+
+    @Synchronized
+    private fun updateObservation() {
+        val g = gravityValues ?: return
+        val raw = HorizonMath.compute(g[0], g[1], g[2])
+        val smoothedRoll = rollSmoother.smooth(raw.rollDegrees)
+        val smoothedPitch = pitchSmoother.smooth(raw.pitchDegrees ?: 0f)
+
+        latestObservation = HorizonObservation(
+            rollDegrees = smoothedRoll,
+            pitchDegrees = smoothedPitch,
+            yawDegrees = latestObservation?.yawDegrees,
+            isUpright = raw.isUpright,
+            confidence = raw.confidence
+        )
+
+        // 重力更新后也需要重新计算 YAW（如果磁力计已就绪）
+        updateYaw()
+    }
+
+    @Synchronized
+    private fun updateYaw() {
+        val g = gravityValues ?: return
+        val m = magneticValues ?: return
+
+        val rotationMatrix = FloatArray(9)
+        val success = SensorManager.getRotationMatrix(rotationMatrix, null, g, m)
+        if (!success) return
+
+        val orientation = FloatArray(3)
+        SensorManager.getOrientation(rotationMatrix, orientation)
+        val yawDeg = Math.toDegrees(orientation[0].toDouble()).toFloat()
+        val smoothedYaw = yawSmoother.smooth(yawDeg)
+
+        latestObservation = latestObservation?.copy(yawDegrees = smoothedYaw)
     }
 
     companion object {

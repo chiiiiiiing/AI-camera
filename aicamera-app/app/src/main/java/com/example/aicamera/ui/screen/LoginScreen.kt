@@ -1,42 +1,53 @@
 package com.example.aicamera.ui.screen
 
-import androidx.compose.animation.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.PhoneAndroid
-import androidx.compose.material3.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.aicamera.data.AuthRepository
-import com.example.aicamera.ui.components.UnderlineTextField
-import com.example.aicamera.ui.theme.*
+import com.example.aicamera.ui.auth.AgreementText
+import com.example.aicamera.ui.auth.AuthField
+import com.example.aicamera.ui.auth.AuthFieldIcon
+import com.example.aicamera.ui.auth.BrandPrimaryButton
+import com.example.aicamera.ui.auth.LightSystemBars
+import com.example.aicamera.ui.auth.VerificationButton
+import com.example.aicamera.ui.theme.BrandBackgroundGradient
+import com.example.aicamera.ui.theme.BrandOnSurface
+import com.example.aicamera.ui.theme.BrandOnSurfaceMuted
+import com.example.aicamera.ui.theme.BrandPurple
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
- * 登录页 — 支持邮箱/手机号/用户名 + 密码登录。
+ * 登录页 — GenWow 设计规范（Canvas 线性图标，无 emoji）。
  *
- * ★ 新增：
- * - 邮箱/手机号 Tab 切换
- * - 密码可见性切换（眼睛图标）
- * - 验证码快捷登录入口
- * - 微信 / QQ 第三方登录入口
- * - 忘记密码流程
- * - 输入校验 + 错误提示
+ * 两种登录方式：
+ * - 密码登录：手机号/邮箱 + 密码
+ * - 验证码登录：手机号/邮箱 + 6 位验证码（未注册自动开户）
+ *
+ * 服务器在线走服务器（账号跨设备持久），离线自动回退本地账号。
+ * 第三方（微信/QQ）因无开放平台资质不接入，仅保留视觉占位。
  */
 @Composable
 fun LoginScreen(
@@ -46,132 +57,156 @@ fun LoginScreen(
 ) {
     val context = LocalContext.current
     val authRepo = remember { AuthRepository.getInstance(context) }
+    val scope = rememberCoroutineScope()
 
-    // ── 登录方式：0=手机号, 1=邮箱/用户名 ──
-    var loginMethod by remember { mutableIntStateOf(0) }
+    // 登录方式：false=密码登录, true=验证码登录
+    var codeMode by remember { mutableStateOf(false) }
     var account by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
+    var verifyCode by remember { mutableStateOf("") }
+    var devCodeHint by remember { mutableStateOf<String?>(null) }
+    var countdown by remember { mutableIntStateOf(0) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
 
-    // ★ 输入校验
-    val isEmailMode = loginMethod == 1
-    val isAccountValid = when {
-        isEmailMode -> account.isNotBlank() && account.length >= 3
-        else -> account.isNotBlank() && account.length >= 11
+    LaunchedEffect(countdown) {
+        if (countdown > 0) {
+            delay(1000L)
+            countdown--
+        }
     }
 
-    fun clearError() { if (errorMessage != null) errorMessage = null }
+    val accountValid = account.isNotBlank() &&
+            (PHONE_RE.matches(account) || EMAIL_RE.matches(account) || (!codeMode && account.length >= 2))
+    val formValid = if (codeMode) {
+        accountValid && (PHONE_RE.matches(account) || EMAIL_RE.matches(account)) && verifyCode.length == 6
+    } else {
+        accountValid && password.length >= 6
+    }
+
+    fun doLogin() {
+        if (!formValid || isLoading) return
+        isLoading = true
+        errorMessage = null
+        scope.launch {
+            val result = if (codeMode) {
+                authRepo.loginWithCode(account.trim(), verifyCode)
+            } else {
+                authRepo.login(account.trim(), password)
+            }
+            isLoading = false
+            when (result) {
+                is AuthRepository.LoginResult.Success -> onLoginSuccess()
+                is AuthRepository.LoginResult.Error -> errorMessage = result.message
+            }
+        }
+    }
+
+    fun requestCode() {
+        if (countdown > 0 || isLoading) return
+        if (!(PHONE_RE.matches(account) || EMAIL_RE.matches(account))) {
+            errorMessage = "请先输入正确的手机号或邮箱"
+            return
+        }
+        errorMessage = null
+        scope.launch {
+            when (val r = authRepo.requestCode(account.trim(), "login")) {
+                is AuthRepository.CodeResult.Sent -> {
+                    countdown = 60
+                    devCodeHint = r.devCode
+                }
+                is AuthRepository.CodeResult.Error -> errorMessage = r.message
+            }
+        }
+    }
+
+    LightSystemBars()
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                brush = Brush.radialGradient(
-                    colors = listOf(GradientPurple, GradientPink),
-                    radius = 1200f
-                )
-            )
+            .background(BrandBackgroundGradient)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 32.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 52.dp)
                 .align(Alignment.Center),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // ── Logo 区 ──
             Text(
-                text = "帧好 GenWow",
-                fontSize = 30.sp,
+                text = "登录",
+                color = BrandOnSurface,
+                fontSize = 26.sp,
                 fontWeight = FontWeight.Bold,
-                color = TextDark
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "AI 构图，拍出你的风格",
-                fontSize = 14.sp,
-                color = TextGray
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(38.dp))
 
-            // ── 登录方式切换 Tab ──
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
-                    .padding(4.dp),
-                horizontalArrangement = Arrangement.Center
-            ) {
-                listOf("📱 手机号" to 0, "📧 邮箱" to 1).forEach { (label, method) ->
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .background(
-                                if (method == loginMethod) DeepPurple else Color.Transparent,
-                                RoundedCornerShape(10.dp)
-                            )
-                            .clickable { loginMethod = method; clearError() }
-                            .padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
+            AuthField(
+                value = account,
+                onValueChange = { account = it; errorMessage = null },
+                placeholder = "输入手机号/邮箱",
+                contentDescription = "账号",
+                icon = AuthFieldIcon.PERSON,
+                keyboardType = KeyboardType.Email,
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            if (codeMode) {
+                AuthField(
+                    value = verifyCode,
+                    onValueChange = { verifyCode = it.filter { c -> c.isDigit() }.take(6); errorMessage = null },
+                    placeholder = "输入 6 位验证码",
+                    contentDescription = "验证码",
+                    icon = AuthFieldIcon.SHIELD,
+                    keyboardType = KeyboardType.NumberPassword,
+                    imeAction = ImeAction.Done,
+                    trailingContent = {
+                        VerificationButton(
+                            secondsRemaining = countdown,
+                            enabled = countdown == 0
+                        ) { requestCode() }
+                    }
+                )
+                devCodeHint?.let { code ->
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Start
                     ) {
                         Text(
-                            label, fontSize = 14.sp, fontWeight = FontWeight.Medium,
-                            color = if (method == loginMethod) Color.White else TextDark.copy(alpha = 0.6f)
+                            text = "开发模式验证码：$code（点按填入）",
+                            color = BrandPurple,
+                            fontSize = 12.sp,
+                            modifier = Modifier.clickable { verifyCode = code }
                         )
                     }
                 }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // ── 账号输入框 ──
-            UnderlineTextField(
-                value = account,
-                onValueChange = { account = it; clearError() },
-                placeholder = if (isEmailMode) "输入邮箱 / 用户名" else "输入手机号",
-                leadingIcon = if (isEmailMode) "📧" else "📱",
-                keyboardType = if (isEmailMode) KeyboardType.Email else KeyboardType.Phone,
-                isError = errorMessage != null
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // ── 密码输入框 ──
-            UnderlineTextField(
-                value = password,
-                onValueChange = { password = it; clearError() },
-                placeholder = "输入密码",
-                leadingIcon = "🔒",
-                keyboardType = KeyboardType.Password,
-                isPassword = true,
-                passwordVisible = showPassword,
-                onTogglePasswordVisibility = { showPassword = !showPassword },
-                imeAction = ImeAction.Done,
-                onImeAction = {
-                    // 键盘 Done → 触发登录
-                    if (isAccountValid && password.isNotBlank()) {
-                        // 触发登录逻辑（见按钮 onClick）
-                    }
-                },
-                isError = errorMessage != null
-            )
-
-            // ── 错误提示 ──
-            AnimatedVisibility(visible = errorMessage != null) {
-                Text(
-                    text = errorMessage ?: "",
-                    color = Color(0xFFE53935),
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(top = 8.dp)
+            } else {
+                AuthField(
+                    value = password,
+                    onValueChange = { password = it; errorMessage = null },
+                    placeholder = "输入密码",
+                    contentDescription = "密码",
+                    icon = AuthFieldIcon.LOCK,
+                    password = true,
+                    passwordVisible = showPassword,
+                    onTogglePasswordVisibility = { showPassword = !showPassword },
+                    imeAction = ImeAction.Done,
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            errorMessage?.let {
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(it, color = ERROR_RED, fontSize = 13.sp)
+            }
 
-            // ── 辅助文字行 ──
+            Spacer(modifier = Modifier.height(14.dp))
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -179,145 +214,130 @@ fun LoginScreen(
                 Text(
                     text = "忘记密码",
                     fontSize = 13.sp,
-                    color = DeepPurple,
+                    color = BrandOnSurfaceMuted,
                     fontWeight = FontWeight.Medium,
-                    modifier = Modifier.clickable {
-                        onNavigateToForgotPassword?.invoke()
-                    }
+                    modifier = Modifier.clickable { onNavigateToForgotPassword?.invoke() }
                 )
                 Text(
-                    text = "验证码登录",
+                    text = "注册账号",
                     fontSize = 13.sp,
-                    color = TextGray,
-                    modifier = Modifier.clickable { /* TODO: 切到验证码登录模式 */ }
+                    color = BrandOnSurfaceMuted,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.clickable { onNavigateToRegister() }
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(26.dp))
 
-            // ── 登录按钮 ──
-            Button(
-                onClick = {
-                    if (!isAccountValid) {
-                        errorMessage = if (isEmailMode) "请输入正确的邮箱或用户名" else "请输入正确的手机号"
-                        return@Button
-                    }
-                    if (password.isBlank()) {
-                        errorMessage = "请输入密码"
-                        return@Button
-                    }
+            BrandPrimaryButton(
+                label = if (isLoading) "登录中…" else "登录",
+                enabled = formValid && !isLoading,
+                onClick = { doLogin() }
+            )
 
-                    isLoading = true
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Text(
+                text = if (codeMode) "密码登录" else "验证码登录",
+                fontSize = 13.sp,
+                color = BrandPurple,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.clickable {
+                    codeMode = !codeMode
                     errorMessage = null
-
-                    val result = authRepo.login(account, password)
-                    isLoading = false
-
-                    when (result) {
-                        is AuthRepository.LoginResult.Success -> onLoginSuccess()
-                        is AuthRepository.LoginResult.Error -> errorMessage = result.message
-                    }
-                },
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-                shape = RoundedCornerShape(25.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = DeepPurple,
-                    contentColor = Color.White,
-                    disabledContainerColor = DeepPurple.copy(alpha = 0.5f)
-                ),
-                enabled = isAccountValid && password.isNotBlank() && !isLoading
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp
-                    )
-                } else {
-                    Text("登录", fontSize = 17.sp, fontWeight = FontWeight.Medium)
                 }
-            }
+            )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(34.dp))
 
-            // ── 注册入口 ──
-            Row(
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("还没有账号？", fontSize = 13.sp, color = TextGray)
-                TextButton(onClick = onNavigateToRegister) {
-                    Text("立即注册", fontSize = 14.sp, color = DeepPurple, fontWeight = FontWeight.Bold)
-                }
-            }
+            Text(
+                text = "第三方账号登录",
+                color = BrandOnSurfaceMuted,
+                fontSize = 12.sp,
+            )
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // ── 第三方登录分割线 ──
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                HorizontalDivider(modifier = Modifier.weight(1f), color = TextLightGray.copy(alpha = 0.3f))
-                Text(
-                    "  第三方账号登录  ", fontSize = 12.sp, color = TextGray
+            Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) {
+                WeChatIcon(
+                    modifier = Modifier.size(36.dp),
+                    tint = BrandPurple,
                 )
-                HorizontalDivider(modifier = Modifier.weight(1f), color = TextLightGray.copy(alpha = 0.3f))
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // ── 微信 + QQ 按钮 ──
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(24.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // 微信
-                Button(
-                    onClick = { /* TODO: 微信 OAuth */ },
-                    modifier = Modifier.height(48.dp),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF07C160),
-                        contentColor = Color.White
-                    )
-                ) {
-                    Text("微  信", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                }
-
-                // QQ
-                Button(
-                    onClick = { /* TODO: QQ OAuth */ },
-                    modifier = Modifier.height(48.dp),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF12B7F5),
-                        contentColor = Color.White
-                    )
-                ) {
-                    Text("Q   Q", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                }
+                QQIcon(
+                    modifier = Modifier.size(36.dp),
+                    tint = BrandPurple,
+                )
             }
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // ── 协议 ──
-            Row(
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    "登录即同意", fontSize = 11.sp, color = TextLightGray
-                )
-                Text(
-                    "《用户服务协议》", fontSize = 11.sp, color = DeepPurple,
-                    modifier = Modifier.clickable { /* TODO: 打开协议页 */ }
-                )
-                Text(
-                    "和", fontSize = 11.sp, color = TextLightGray
-                )
-                Text(
-                    "《隐私政策》", fontSize = 11.sp, color = DeepPurple,
-                    modifier = Modifier.clickable { /* TODO: 打开隐私政策 */ }
-                )
-            }
+            AgreementText(prefix = "登录同意")
+
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
+
+// ── 第三方登录占位图标（无实际 SDK 接入） ────────────────────────
+
+@Composable
+private fun WeChatIcon(modifier: Modifier = Modifier, tint: Color) {
+    Canvas(modifier) {
+        val stroke = Stroke(1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        // 两个对话气泡
+        drawCircle(tint, 8.5.dp.toPx(), Offset(size.width * 0.35f, size.height * 0.42f), style = stroke)
+        drawCircle(tint, 7.dp.toPx(), Offset(size.width * 0.68f, size.height * 0.58f), style = stroke)
+        // 小尾巴
+        val tail1 = Path().apply {
+            moveTo(size.width * 0.28f, size.height * 0.48f)
+            lineTo(size.width * 0.20f, size.height * 0.58f)
+            lineTo(size.width * 0.34f, size.height * 0.54f)
+        }
+        val tail2 = Path().apply {
+            moveTo(size.width * 0.74f, size.height * 0.64f)
+            lineTo(size.width * 0.82f, size.height * 0.72f)
+            lineTo(size.width * 0.70f, size.height * 0.70f)
+        }
+        drawPath(tail1, tint, style = stroke)
+        drawPath(tail2, tint, style = stroke)
+    }
+}
+
+@Composable
+private fun QQIcon(modifier: Modifier = Modifier, tint: Color) {
+    Canvas(modifier) {
+        val stroke = Stroke(1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        // 企鹅简笔：头部圆 + 身椭圆 + 两翼
+        drawCircle(tint, 7.dp.toPx(), Offset(size.width * 0.5f, size.height * 0.36f), style = stroke)
+        drawRoundRect(
+            tint,
+            topLeft = Offset(size.width * 0.32f, size.height * 0.46f),
+            size = Size(size.width * 0.36f, size.height * 0.42f),
+            cornerRadius = CornerRadius(8.dp.toPx()),
+            style = stroke,
+        )
+        // 翅膀
+        drawArc(
+            tint,
+            startAngle = 140f,
+            sweepAngle = 80f,
+            useCenter = false,
+            topLeft = Offset(size.width * 0.12f, size.height * 0.48f),
+            size = Size(size.width * 0.18f, size.height * 0.28f),
+            style = stroke,
+        )
+        drawArc(
+            tint,
+            startAngle = 320f,
+            sweepAngle = 80f,
+            useCenter = false,
+            topLeft = Offset(size.width * 0.70f, size.height * 0.48f),
+            size = Size(size.width * 0.18f, size.height * 0.28f),
+            style = stroke,
+        )
+    }
+}
+
+internal val PHONE_RE = Regex("^1\\d{10}$")
+internal val EMAIL_RE = Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")
+internal val ERROR_RED = androidx.compose.ui.graphics.Color(0xFFC76464)

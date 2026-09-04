@@ -19,10 +19,11 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // — NDK ABI 过滤（如果你按渠道分包可在 buildTypes 里按 flavor 细化） —
-        ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
-        }
+        // 认证后端地址（构建期可覆盖：./gradlew -PAUTH_BASE_URL=http://192.168.x.x:8080/）
+        buildConfigField("String", "AUTH_BASE_URL", "\"${project.findProperty("AUTH_BASE_URL") ?: "http://192.168.0.100:8080/"}\"")
+
+        // — NDK ABI 过滤 —
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
     buildTypes {
@@ -66,6 +67,10 @@ android {
     // — 单元测试：Android 类（Log 等）返回默认值，便于纯 JVM 测试 —
     testOptions {
         unitTests.isReturnDefaultValues = true
+    }
+
+    ksp {
+        arg("room.schemaLocation", "$projectDir/schemas")
     }
 }
 
@@ -117,6 +122,14 @@ dependencies {
 
     // ── 设置持久化 (DataStore) ──
     implementation(libs.datastore.preferences)
+
+    // ── 数据库 (Room) ──
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    ksp(libs.room.compiler)
+
+    // ── 网络（认证后端 API） ──
+    implementation(libs.okhttp)
 
     // ── 测试 ──
     testImplementation("junit:junit:4.13.2")

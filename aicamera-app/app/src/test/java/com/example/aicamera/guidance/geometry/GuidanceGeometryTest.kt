@@ -21,7 +21,7 @@ class GuidanceGeometryTest {
         val cue = GuidanceGeometry.guidanceCue(
             subjectCx = null, subjectCy = null,
             expectsSubject = false,
-            horizonAngleDeg = 3.5f
+            horizonAngleDeg = 15f  // > ROLL_THRESHOLD_DEG
         )
         assertEquals(GuidanceCue.ROLL_COUNTERCLOCKWISE, cue)
     }
@@ -31,7 +31,7 @@ class GuidanceGeometryTest {
         val cue = GuidanceGeometry.guidanceCue(
             subjectCx = null, subjectCy = null,
             expectsSubject = false,
-            horizonAngleDeg = -4f
+            horizonAngleDeg = -15f  // < -ROLL_THRESHOLD_DEG
         )
         assertEquals(GuidanceCue.ROLL_CLOCKWISE, cue)
     }
@@ -41,7 +41,7 @@ class GuidanceGeometryTest {
         val cue = GuidanceGeometry.guidanceCue(
             subjectCx = null, subjectCy = null,
             expectsSubject = false,
-            horizonAngleDeg = 1.5f
+            horizonAngleDeg = 1f  // |1| < ROLL_THRESHOLD_DEG
         )
         assertEquals(GuidanceCue.NONE, cue)
     }
@@ -53,7 +53,7 @@ class GuidanceGeometryTest {
             subjectCx = 0.9f, subjectCy = 0.5f,
             expectsSubject = true,
             targetCx = 0.333f, targetCy = 0.333f, targetTolerance = 0.12f,
-            horizonAngleDeg = 5f
+            horizonAngleDeg = 15f  // > ROLL_THRESHOLD_DEG
         )
         assertEquals(GuidanceCue.ROLL_COUNTERCLOCKWISE, cue)
     }

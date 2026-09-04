@@ -71,7 +71,8 @@ data class SubjectBoxParams(
     val x: Float,      // 左上角 x（归一化 0.0–1.0）
     val y: Float,      // 左上角 y
     val width: Float,  // 宽度（归一化）
-    val height: Float  // 高度（归一化）
+    val height: Float, // 高度（归一化）
+    val aligned: Boolean = false  // 是否已进入目标区
 ) {
     fun toRectF(): RectF = RectF(x, y, x + width, y + height)
 }
@@ -145,11 +146,13 @@ object GuideLineParser {
         val y = params.float("y", 0.3f)
         val width = params.float("width", 0.5f)
         val height = params.float("height", 0.4f)
+        val aligned = params["aligned"] as? Boolean ?: false
         return SubjectBoxParams(
             x = x,
             y = y,
             width = width.coerceIn(0f, 1f - x),
-            height = height.coerceIn(0f, 1f - y)
+            height = height.coerceIn(0f, 1f - y),
+            aligned = aligned
         )
     }
 

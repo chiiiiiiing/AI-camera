@@ -86,6 +86,14 @@ coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil" }
 # — 导航 —
 navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "navigation" }
 
+# — 网络（认证后端 API） —
+okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
+
+# — 数据库 (Room) —
+room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
+room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
+room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
+
 # — 崩溃监控 (按需取消注释) —
 # firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase-bom" }
 # firebase-crashlytics = { module = "com.google.firebase:firebase-crashlytics-ktx" }

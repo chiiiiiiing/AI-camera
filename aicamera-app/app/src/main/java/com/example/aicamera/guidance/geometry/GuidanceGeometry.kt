@@ -20,8 +20,14 @@ import kotlin.math.hypot
  */
 object GuidanceGeometry {
 
-    /** 水平角阈值（度）：超过才给 ROLL 指令，避免水平仪附近抖动 */
-    const val ROLL_THRESHOLD_DEG = 2f
+    /** 水平角阈值（度）：对齐 HorizonPolicy.enterLevelToleranceDeg，用于触发 ROLL 指令 */
+    const val ROLL_THRESHOLD_DEG = 4.0f
+
+    /** 俯仰角阈值（度）：大于此值触发 PITCH 指令 */
+    const val PITCH_THRESHOLD_DEG = 7.0f
+
+    /** 偏航角阈值（度）：大于此值触发 YAW 指令；磁力计噪声较大，阈值放宽 */
+    const val YAW_THRESHOLD_DEG = 12.0f
 
     /** 目标区容差下限（归一化）：模板 radius 过小时兜底，防止指令过灵敏 */
     const val MIN_TOLERANCE = 0.06f
@@ -30,16 +36,24 @@ object GuidanceGeometry {
     const val POSITION_REF_DIST = 0.5f
 
     /** 水平角参考范围（度）：倾角达到该值时水平得分降为 0 */
-    const val HORIZON_REF_DEG = 10f
+    const val HORIZON_REF_DEG = 14f
 
-    /** 位置/水平在进度中的权重 */
-    const val POSITION_WEIGHT = 0.7f
-    const val HORIZON_WEIGHT = 0.3f
+    /** 俯仰角参考范围（度） */
+    const val PITCH_REF_DEG = 28f
+
+    /** 偏航角参考范围（度） */
+    const val YAW_REF_DEG = 36f
+
+    /** 位置/水平/俯仰/偏航在进度中的权重 */
+    const val POSITION_WEIGHT = 0.4f
+    const val ROLL_WEIGHT = 0.25f
+    const val PITCH_WEIGHT = 0.2f
+    const val YAW_WEIGHT = 0.15f
 
     /**
      * 计算引导指令。
      *
-     * 优先级与 docs/10 的 guidanceCueFromGeometry 一致：ROLL 优先于平移。
+     * 优先级与 docs/10 的 guidanceCueFromGeometry 一致：ROLL > PITCH > YAW > 平移。
      *
      * @param subjectCx 主体中心 x（归一化显示坐标），无主体传 null
      * @param subjectCy 主体中心 y（归一化显示坐标），无主体传 null
@@ -48,6 +62,9 @@ object GuidanceGeometry {
      * @param targetCy 目标区中心 y（归一化）
      * @param targetTolerance 目标区容差（归一化，取模板 radius）
      * @param horizonAngleDeg 设备水平倾角（度，正值 = 顺时针倾斜），无信号传 null
+     * @param pitchAngleDeg 设备俯仰角（度，正值 = 上仰），无信号传 null
+     * @param yawAngleDeg 设备偏航角（度），无信号传 null
+     * @param yawTargetDeg 偏航目标角（度），null 时不判断偏航
      */
     fun guidanceCue(
         subjectCx: Float?,
@@ -56,20 +73,34 @@ object GuidanceGeometry {
         targetCx: Float = 0.5f,
         targetCy: Float = 0.5f,
         targetTolerance: Float = 0.12f,
-        horizonAngleDeg: Float? = null
+        horizonAngleDeg: Float? = null,
+        pitchAngleDeg: Float? = null,
+        yawAngleDeg: Float? = null,
+        yawTargetDeg: Float? = null
     ): GuidanceCue {
         // 1. 水平倾斜优先（构图先要端平）
         val angle = horizonAngleDeg
         if (angle != null && angle > ROLL_THRESHOLD_DEG) return GuidanceCue.ROLL_COUNTERCLOCKWISE
         if (angle != null && angle < -ROLL_THRESHOLD_DEG) return GuidanceCue.ROLL_CLOCKWISE
 
-        // 2. 模板期望主体但没检测到 → 引导用户放入主体
+        // 2. 俯仰角
+        if (pitchAngleDeg != null && pitchAngleDeg > PITCH_THRESHOLD_DEG) return GuidanceCue.PITCH_DOWN
+        if (pitchAngleDeg != null && pitchAngleDeg < -PITCH_THRESHOLD_DEG) return GuidanceCue.PITCH_UP
+
+        // 3. 偏航角（需有目标朝向）
+        if (yawAngleDeg != null && yawTargetDeg != null) {
+            val delta = normalizeAngle(yawAngleDeg - yawTargetDeg)
+            if (delta > YAW_THRESHOLD_DEG) return GuidanceCue.YAW_RIGHT
+            if (delta < -YAW_THRESHOLD_DEG) return GuidanceCue.YAW_LEFT
+        }
+
+        // 4. 模板期望主体但没检测到 → 引导用户放入主体
         val hasSubject = subjectCx != null && subjectCy != null
         if (!hasSubject) {
             return if (expectsSubject) GuidanceCue.SUBJECT_TARGET else GuidanceCue.NONE
         }
 
-        // 3. 主体 vs 目标区差值（与 docs/10 的映射一致）
+        // 5. 主体 vs 目标区差值（与 docs/10 的映射一致）
         val tolerance = targetTolerance.coerceAtLeast(MIN_TOLERANCE)
         val dx = subjectCx!! - targetCx
         val dy = subjectCy!! - targetCy
@@ -87,7 +118,7 @@ object GuidanceGeometry {
     /**
      * 计算构图进度 (0.0–1.0)。
      *
-     * 位置得分与水平得分按权重归一化混合；两类信号都缺失时返回 null
+     * 位置/水平/俯仰/偏航按权重归一化混合；所有信号都缺失时返回 null
      * （调用方应回退到模板检索分）。
      */
     fun compositionProgress(
@@ -95,7 +126,10 @@ object GuidanceGeometry {
         subjectCy: Float?,
         targetCx: Float = 0.5f,
         targetCy: Float = 0.5f,
-        horizonAngleDeg: Float? = null
+        horizonAngleDeg: Float? = null,
+        pitchAngleDeg: Float? = null,
+        yawAngleDeg: Float? = null,
+        yawTargetDeg: Float? = null
     ): Float? {
         var score = 0f
         var weight = 0f
@@ -109,8 +143,21 @@ object GuidanceGeometry {
 
         if (horizonAngleDeg != null) {
             val hScore = (1f - abs(horizonAngleDeg) / HORIZON_REF_DEG).coerceIn(0f, 1f)
-            score += HORIZON_WEIGHT * hScore
-            weight += HORIZON_WEIGHT
+            score += ROLL_WEIGHT * hScore
+            weight += ROLL_WEIGHT
+        }
+
+        if (pitchAngleDeg != null) {
+            val pScore = (1f - abs(pitchAngleDeg) / PITCH_REF_DEG).coerceIn(0f, 1f)
+            score += PITCH_WEIGHT * pScore
+            weight += PITCH_WEIGHT
+        }
+
+        if (yawAngleDeg != null && yawTargetDeg != null) {
+            val delta = normalizeAngle(yawAngleDeg - yawTargetDeg)
+            val yScore = (1f - abs(delta) / YAW_REF_DEG).coerceIn(0f, 1f)
+            score += YAW_WEIGHT * yScore
+            weight += YAW_WEIGHT
         }
 
         return if (weight > 0f) (score / weight).coerceIn(0f, 1f) else null
@@ -133,6 +180,16 @@ object GuidanceGeometry {
         } else {
             progress
         }
+    }
+
+    /**
+     * 将任意角度归一化到 (-180, 180]。
+     */
+    private fun normalizeAngle(deg: Float): Float {
+        var d = deg % 360f
+        if (d > 180f) d -= 360f
+        if (d <= -180f) d += 360f
+        return d
     }
 
     /**

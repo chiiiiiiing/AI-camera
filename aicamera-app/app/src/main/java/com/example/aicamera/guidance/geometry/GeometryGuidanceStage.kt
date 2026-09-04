@@ -37,10 +37,17 @@ class GeometryGuidanceStage @Inject constructor(
 
     /** 水平角 EMA（传感器 5–10Hz 噪声约 ±1°） */
     private val horizonEma = EmaSmoother(HORIZON_EMA_ALPHA)
+    /** 俯仰角 EMA */
+    private val pitchEma = EmaSmoother(PITCH_EMA_ALPHA)
+    /** 偏航角 EMA（磁力计噪声更大，平滑更强） */
+    private val yawEma = EmaSmoother(YAW_EMA_ALPHA)
 
     /** 主体框中心 EMA（检测限频 4Hz + 检测器本身有抖动） */
     private val subjectEmaX = EmaSmoother(SUBJECT_EMA_ALPHA)
     private val subjectEmaY = EmaSmoother(SUBJECT_EMA_ALPHA)
+
+    /** ★ 偏航目标：进入引导时记录当前朝向，后续提示用户保持该朝向 */
+    private var yawTargetDeg: Float? = null
 
     /**
      * 把几何信号应用到推理输出。
@@ -52,9 +59,13 @@ class GeometryGuidanceStage @Inject constructor(
     fun apply(output: Any?, imageProxy: ImageProxy, isFrontCamera: Boolean): Any? {
         if (output !is FakeInferenceOutput) return output
 
-        // ── 1. 真实水平角 ──
-        val rawAngle = horizonSensor.latestAngleDegrees()
+        // ── 1. 真实水平/俯仰/偏航观测（含 isUpright/confidence） ──
+        // ★ 传感器已做圆周平滑，此处保留 EMA 做二次去抖
+        val rawObs = horizonSensor.latestObservation()
+        val rawAngle = rawObs?.rollDegrees
         val smoothAngle = rawAngle?.let { horizonEma.add(it) }
+        val smoothPitch = rawObs?.pitchDegrees?.let { pitchEma.add(it) }
+        val smoothYaw = rawObs?.yawDegrees?.let { yawEma.add(it) }
 
         // ── 2. 真实主体框 ──
         val rawBox = faceDetector.detectIfDue(imageProxy, isFrontCamera)
@@ -83,6 +94,11 @@ class GeometryGuidanceStage @Inject constructor(
         // 模板是否期望主体：有人像类占位框即期望主体
         val expectsSubject = output.guideLines.any { it.type == "subject_box" }
 
+        // ★ 记录偏航目标：首次获得有效偏航时锁定当前朝向
+        if (yawTargetDeg == null && smoothYaw != null) {
+            yawTargetDeg = smoothYaw
+        }
+
         // ── 4. 计算指令与进度 ──
         val cue = GuidanceGeometry.guidanceCue(
             subjectCx = smoothBox?.centerX,
@@ -91,14 +107,20 @@ class GeometryGuidanceStage @Inject constructor(
             targetCx = targetCx,
             targetCy = targetCy,
             targetTolerance = targetTol,
-            horizonAngleDeg = smoothAngle
+            horizonAngleDeg = smoothAngle,
+            pitchAngleDeg = smoothPitch,
+            yawAngleDeg = smoothYaw,
+            yawTargetDeg = yawTargetDeg
         )
         val geometryProgress = GuidanceGeometry.compositionProgress(
             subjectCx = smoothBox?.centerX,
             subjectCy = smoothBox?.centerY,
             targetCx = targetCx,
             targetCy = targetCy,
-            horizonAngleDeg = smoothAngle
+            horizonAngleDeg = smoothAngle,
+            pitchAngleDeg = smoothPitch,
+            yawAngleDeg = smoothYaw,
+            yawTargetDeg = yawTargetDeg
         )
         // ★ 指令-进度对齐：SUBJECT_ALIGNED 时提升到 ALIGNED 阈值之上，
         //   GuidanceStateMachine 才能进入 ALIGNED 相位（触发达标震动/绿闪）
@@ -113,18 +135,30 @@ class GeometryGuidanceStage @Inject constructor(
             when (line.type) {
                 "horizon_level" -> {
                     if (smoothAngle != null) {
-                        line.copy(params = line.params + mapOf("angle_degrees" to smoothAngle))
+                        val extra = mutableMapOf<String, Any>("angle_degrees" to smoothAngle)
+                        // ★ 传递 isUpright 标记（供分步引导序列器做倒置检测）
+                        rawObs?.let { extra["is_upright"] = it.isUpright }
+                        // ★ 传递俯仰/偏航角（供 Pitch/Yaw 引导使用）
+                        smoothPitch?.let { extra["pitch_degrees"] = it }
+                        smoothYaw?.let { extra["yaw_degrees"] = it }
+                        line.copy(params = line.params + extra)
                     } else null
                 }
                 "subject_box" -> {
                     if (smoothBox != null) {
-                        // 真实检测框替换占位框
+                        // 真实检测框替换占位框（real=true 标记：分步引导只信真实检测）
+                        val aligned = kotlin.math.hypot(
+                            smoothBox.centerX - targetCx,
+                            smoothBox.centerY - targetCy
+                        ) <= targetTol
                         line.copy(
                             params = mapOf(
                                 "x" to smoothBox.left,
                                 "y" to smoothBox.top,
                                 "width" to smoothBox.width,
-                                "height" to smoothBox.height
+                                "height" to smoothBox.height,
+                                "real" to true,
+                                "aligned" to aligned
                             )
                         )
                     } else line
@@ -135,6 +169,10 @@ class GeometryGuidanceStage @Inject constructor(
 
         // 模板没给主体框但检测到了主体（如风景照里有人）→ 也画出来
         if (smoothBox != null && !expectsSubject) {
+            val aligned = kotlin.math.hypot(
+                smoothBox.centerX - targetCx,
+                smoothBox.centerY - targetCy
+            ) <= targetTol
             newLines.add(
                 FakeGuideLine(
                     type = "subject_box", visible = true,
@@ -142,7 +180,9 @@ class GeometryGuidanceStage @Inject constructor(
                         "x" to smoothBox.left,
                         "y" to smoothBox.top,
                         "width" to smoothBox.width,
-                        "height" to smoothBox.height
+                        "height" to smoothBox.height,
+                        "real" to true,
+                        "aligned" to aligned
                     )
                 )
             )
@@ -152,7 +192,9 @@ class GeometryGuidanceStage @Inject constructor(
             guideLines = newLines,
             guidanceCue = cue,
             // 有几何信号用几何进度（含对齐提升）；两者都缺回退模板分
-            compositionProgress = boostedProgress ?: output.compositionProgress
+            compositionProgress = boostedProgress ?: output.compositionProgress,
+            // 标注模板主体期望：分步引导序列器据此决定是否需要 SUBJECT 步
+            expectsSubject = expectsSubject
         )
     }
 
@@ -160,8 +202,11 @@ class GeometryGuidanceStage @Inject constructor(
     fun reset() {
         faceDetector.resetCache()
         horizonEma.reset()
+        pitchEma.reset()
+        yawEma.reset()
         subjectEmaX.reset()
         subjectEmaY.reset()
+        yawTargetDeg = null
     }
 
     override fun close() {
@@ -176,6 +221,8 @@ class GeometryGuidanceStage @Inject constructor(
 
         /** EMA 平滑系数 */
         private const val HORIZON_EMA_ALPHA = 0.3f
+        private const val PITCH_EMA_ALPHA = 0.3f
+        private const val YAW_EMA_ALPHA = 0.25f
         private const val SUBJECT_EMA_ALPHA = 0.35f
 
         /** 判断构图是否「达标」（供震动反馈等使用）：主体对齐且端平 */

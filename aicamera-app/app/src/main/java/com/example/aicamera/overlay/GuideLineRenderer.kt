@@ -125,6 +125,7 @@ object GuideLineRenderer {
         isFrontCamera: Boolean = false,
         rotationDegrees: Int = 0,
         pulseAlpha: Float = 1f,
+        aligned: Boolean = false,
         density: Float = 3.0f
     ) {
         // ★ 使用 CoordinateMapper 映射矩形（★ 修复：rotationDegrees 之前漏传，
@@ -135,13 +136,18 @@ object GuideLineRenderer {
         )
         val cornerLen = 12f * density
 
-        subjectBoxPaint.color = RenderConfig.SUBJECT_BOX_COLOR
+        val boxColor = if (aligned) RenderConfig.SUBJECT_BOX_ALIGNED_COLOR else RenderConfig.SUBJECT_BOX_COLOR
+        subjectBoxPaint.color = boxColor
         subjectBoxPaint.alpha = (200 * pulseAlpha).toInt()
         subjectBoxPaint.strokeWidth = 2f * density
+        subjectBoxPaint.pathEffect = if (!aligned) {
+            DashPathEffect(floatArrayOf(10f * density, 8f * density), 0f)
+        } else null
         canvas.drawRoundRect(rect, 6f * density, 6f * density, subjectBoxPaint)
 
-        cornerPaint.color = RenderConfig.SUBJECT_BOX_COLOR
+        cornerPaint.color = boxColor
         cornerPaint.alpha = (255 * pulseAlpha).toInt()
+        cornerPaint.pathEffect = null
 
         val (l, t, r, b) = listOf(rect.left, rect.top, rect.right, rect.bottom)
         // 左上
@@ -183,14 +189,9 @@ object GuideLineRenderer {
         canvas.drawCircle(center.x, center.y, radius, targetZoneFillPaint)
 
         targetZoneStrokePaint.color = RenderConfig.TARGET_ZONE_COLOR
-        targetZoneStrokePaint.alpha = (180 * pulseAlpha).toInt()
+        targetZoneStrokePaint.alpha = (120 * pulseAlpha).toInt()
         targetZoneStrokePaint.strokeWidth = 1.5f * density
         canvas.drawCircle(center.x, center.y, radius, targetZoneStrokePaint)
-
-        val crossLen = radius * 0.4f
-        targetZoneStrokePaint.alpha = (200 * pulseAlpha).toInt()
-        canvas.drawLine(center.x - crossLen, center.y, center.x + crossLen, center.y, targetZoneStrokePaint)
-        canvas.drawLine(center.x, center.y - crossLen, center.x, center.y + crossLen, targetZoneStrokePaint)
     }
 
     // ── 水平仪 ────────────────────────────────────────────────
@@ -339,7 +340,8 @@ object GuideLineRenderer {
 object RenderConfig {
     val GRID_LINE_COLOR: Int = Color.argb(80, 255, 255, 255)
     val SUBJECT_BOX_COLOR: Int = Color.rgb(0, 200, 255)
-    val TARGET_ZONE_COLOR: Int = Color.rgb(255, 107, 53)
+    val SUBJECT_BOX_ALIGNED_COLOR: Int = Color.rgb(0, 230, 118)
+    val TARGET_ZONE_COLOR: Int = Color.rgb(244, 182, 194) // BrandPink 替代旧橙色
     val ACCENT_COLOR: Int = Color.rgb(255, 255, 255)
     val GUIDE_LINE_COLOR: Int = Color.rgb(255, 215, 0)
     val HORIZON_BG_COLOR: Int = Color.argb(100, 255, 255, 255)

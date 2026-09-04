@@ -2,266 +2,254 @@ package com.example.aicamera.ui.screen
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Logout
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.aicamera.data.AuthRepository
+import com.example.aicamera.BuildConfig
 import com.example.aicamera.ui.state.SettingsState
+import com.example.aicamera.ui.theme.BrandOnSurface
+import com.example.aicamera.ui.theme.BrandOnSurfaceMuted
+import com.example.aicamera.ui.theme.BrandPink
+import com.example.aicamera.ui.theme.BrandPurple
+import com.example.aicamera.ui.auth.SystemBarsAppearance
+
+/** 设置页背景渐变（队友 GenWow 设计） */
+private val SettingsBackground = Brush.verticalGradient(
+    listOf(
+        Color(0xFFFFE7F3),
+        Color(0xFFF6E5F7),
+        Color(0xFFD9CEFF),
+    ),
+)
 
 /**
- * 设置页。
- *
- * 功能：
- * - 辅助线开关（三分线 / 主体框 / 目标区域 / 水平仪）
- * - 辅助线透明度 slider
- * - 对焦相关设置
- * - 关于（版本号 / 隐私政策占位）
- * - 退出登录
+ * 设置页 — 移植自队友 ui/settings/SettingsScreen.kt，适配主项目 SettingsState。
  */
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
     onLogout: () -> Unit,
     settings: SettingsState,
-    onSettingsChange: (SettingsState) -> Unit
+    onSettingsChange: (SettingsState) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
-    var showLogoutDialog by remember { mutableStateOf(false) }
+    SystemBarsAppearance(light = true)
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF0D0D0D))
+            .background(SettingsBackground)
+            .windowInsetsPadding(WindowInsets.statusBars)
+            .windowInsetsPadding(WindowInsets.navigationBars)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp),
     ) {
-        // ── 顶部栏 ──
+        Spacer(Modifier.height(18.dp))
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回", tint = Color.White)
-            }
+            Text(
+                text = "返回",
+                color = BrandOnSurfaceMuted,
+                fontSize = 14.sp,
+                modifier = Modifier
+                    .semantics {
+                        contentDescription = "返回设置"
+                        role = Role.Button
+                    }
+                    .clickable(onClick = onBack)
+                    .padding(vertical = 10.dp),
+            )
+            Spacer(Modifier.weight(1f))
             Text(
                 text = "设置",
-                color = Color.White,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
+                color = BrandOnSurface,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
             )
+            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(40.dp))
         }
+        Spacer(Modifier.height(18.dp))
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-        ) {
-            // ── 辅助线设置 ──
-            SettingsSectionHeader("辅助线显示")
-
-            SettingsToggle("三分线网格", settings.showGrid) {
-                onSettingsChange(settings.copy(showGrid = it))
-            }
-            SettingsToggle("主体定位框", settings.showSubjectBox) {
-                onSettingsChange(settings.copy(showSubjectBox = it))
-            }
-            SettingsToggle("目标区域", settings.showTargetZone) {
-                onSettingsChange(settings.copy(showTargetZone = it))
-            }
-            SettingsToggle("水平仪", settings.showHorizon) {
-                onSettingsChange(settings.copy(showHorizon = it))
-            }
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // 透明度
-            Text(
-                "辅助线透明度: ${(settings.overlayAlpha * 100).toInt()}%",
-                color = Color.White.copy(alpha = 0.7f),
-                fontSize = 14.sp
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Slider(
+        SettingsSection(title = "辅助线与引导") {
+            SettingsSliderRow(
+                label = "辅助线透明度",
+                subtitle = "明亮背景下保持可见又不过度遮挡",
                 value = settings.overlayAlpha,
                 onValueChange = { onSettingsChange(settings.copy(overlayAlpha = it)) },
-                valueRange = 0.2f..1.0f,
-                colors = SliderDefaults.colors(
-                    thumbColor = Color(0xFF8B5FBF),
-                    activeTrackColor = Color(0xFF8B5FBF)
-                )
             )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // ── 拍摄 ──
-            SettingsSectionHeader("拍摄")
-
-            SettingsToggle("快门声音", settings.soundEnabled) {
-                onSettingsChange(settings.copy(soundEnabled = it))
-            }
-            SettingsToggle("保存到系统相册", settings.saveOriginal) {
-                onSettingsChange(settings.copy(saveOriginal = it))
-            }
-            SettingsToggle("Pro 模式（EV/ISO/白平衡）", settings.proModeEnabled) {
-                onSettingsChange(settings.copy(proModeEnabled = it))
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // ── AI 模型 ──
-            SettingsSectionHeader("AI 模型")
-
-            SettingsInfoRow("推理引擎", "ONNX Runtime v1.19.2")
-            SettingsInfoRow("当前模型", "V9 static int8 (301KB)")
-            SettingsInfoRow("模板数量", "728 条")
-            SettingsInfoRow("推理延迟", "< 150ms (目标)")
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // ── 缓存与存储 ──
-            SettingsSectionHeader("缓存与存储")
-
-            SettingsNavRow("清除缓存") { /* TODO: 清除 Glide/Coil + 模型索引缓存 */ }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // ── 关于 ──
-            SettingsSectionHeader("关于")
-
-            SettingsInfoRow("版本号", "1.0.0")
-            SettingsNavRow("隐私政策") { /* TODO: 打开隐私政策网页 */ }
-            SettingsNavRow("用户协议") { /* TODO: 打开用户协议网页 */ }
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // ── 退出登录 ──
-            Button(
-                onClick = { showLogoutDialog = true },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFE53935).copy(alpha = 0.2f),
-                    contentColor = Color(0xFFEF5350)
-                )
-            ) {
-                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("退出登录")
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
+            SettingsSwitchRow(
+                label = "显示三分线网格",
+                subtitle = "默认开启，用于静态参考",
+                checked = settings.showGrid,
+                onCheckedChange = { onSettingsChange(settings.copy(showGrid = it)) },
+            )
+            SettingsSwitchRow(
+                label = "显示主体框",
+                subtitle = "检测到主体时绘制边界框",
+                checked = settings.showSubjectBox,
+                onCheckedChange = { onSettingsChange(settings.copy(showSubjectBox = it)) },
+            )
+            SettingsSwitchRow(
+                label = "显示目标区",
+                subtitle = "展示推荐构图位置参考框",
+                checked = settings.showTargetZone,
+                onCheckedChange = { onSettingsChange(settings.copy(showTargetZone = it)) },
+            )
+            SettingsSwitchRow(
+                label = "显示水平仪",
+                subtitle = "IMU 实时水平参考线",
+                checked = settings.showHorizon,
+                onCheckedChange = { onSettingsChange(settings.copy(showHorizon = it)) },
+            )
         }
-    }
 
-    // 退出确认弹窗
-    if (showLogoutDialog) {
-        AlertDialog(
-            onDismissRequest = { showLogoutDialog = false },
-            title = { Text("退出登录") },
-            text = { Text("确定要退出当前账号吗？") },
-            confirmButton = {
-                TextButton(onClick = {
-                    AuthRepository.getInstance(context).logout()
-                    showLogoutDialog = false
-                    onLogout()
-                }) {
-                    Text("确定", color = Color.Red)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showLogoutDialog = false }) {
-                    Text("取消")
-                }
-            }
-        )
+        Spacer(Modifier.height(16.dp))
+
+        SettingsSection(title = "拍摄与相册") {
+            SettingsSwitchRow(
+                label = "安全自动变焦",
+                subtitle = "仅识别到真实人物时轻微调整，最高 1.8×",
+                checked = settings.aiAutoZoomEnabled,
+                onCheckedChange = { onSettingsChange(settings.copy(aiAutoZoomEnabled = it)) },
+            )
+            SettingsSwitchRow(
+                label = "保存原图到相册",
+                subtitle = "默认开启，拍摄后直接写入系统相册",
+                checked = settings.saveOriginal,
+                onCheckedChange = { onSettingsChange(settings.copy(saveOriginal = it)) },
+            )
+            SettingsSwitchRow(
+                label = "拍照音效",
+                subtitle = "默认关闭，减少公共场景干扰",
+                checked = settings.soundEnabled,
+                onCheckedChange = { onSettingsChange(settings.copy(soundEnabled = it)) },
+            )
+            SettingsSwitchRow(
+                label = "Pro 手动模式",
+                subtitle = "开启后可手动调节 EV/ISO/白平衡/对焦",
+                checked = settings.proModeEnabled,
+                onCheckedChange = { onSettingsChange(settings.copy(proModeEnabled = it)) },
+            )
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        SettingsSection(title = "关于") {
+            SettingsInfoRow("产品名称", "帧好 GenWow")
+            SettingsInfoRow("版本", BuildConfig.VERSION_NAME)
+            SettingsInfoRow("定位", "AI 构图相机")
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(BrandPurple, RoundedCornerShape(18.dp))
+                .clickable(onClick = onLogout)
+                .padding(vertical = 16.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("退出登录", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+        }
+        Spacer(Modifier.height(24.dp))
     }
 }
 
-// ── 设置项组件 ──────────────────────────────────────────────────
-
 @Composable
-private fun SettingsSectionHeader(title: String) {
-    Text(
-        text = title,
-        color = Color(0xFF8B5FBF),
-        fontSize = 13.sp,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(vertical = 12.dp)
+private fun SettingsSection(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.White.copy(alpha = 0.8f), RoundedCornerShape(24.dp))
+            .padding(horizontal = 18.dp, vertical = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        content = {
+            Text(title, color = BrandOnSurface, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            content()
+        },
     )
 }
 
 @Composable
-private fun SettingsToggle(
+private fun SettingsSwitchRow(
     label: String,
+    subtitle: String,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, color = Color.White.copy(alpha = 0.85f), fontSize = 15.sp)
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = Color(0xFF8B5FBF)
-            )
-        )
+        Column(Modifier.weight(1f)) {
+            Text(label, color = BrandOnSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Spacer(Modifier.height(4.dp))
+            Text(subtitle, color = BrandOnSurfaceMuted, fontSize = 11.sp, lineHeight = 16.sp)
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun SettingsSliderRow(
+    label: String,
+    subtitle: String,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(label, color = BrandOnSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Spacer(Modifier.height(4.dp))
+                Text(subtitle, color = BrandOnSurfaceMuted, fontSize = 11.sp, lineHeight = 16.sp)
+            }
+            Text("${(value * 100).toInt()}%", color = BrandPink.copy(alpha = 0.92f), fontSize = 13.sp)
+        }
+        Slider(value = value, onValueChange = onValueChange, valueRange = 0.25f..1f)
     }
 }
 
 @Composable
 private fun SettingsInfoRow(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(label, color = Color.White.copy(alpha = 0.85f), fontSize = 15.sp)
-        Text(value, color = Color.White.copy(alpha = 0.4f), fontSize = 14.sp)
-    }
-}
-
-@Composable
-private fun SettingsNavRow(label: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(label, color = Color.White.copy(alpha = 0.85f), fontSize = 15.sp)
-        Icon(
-            Icons.Default.ChevronRight,
-            contentDescription = null,
-            tint = Color.White.copy(alpha = 0.3f),
-            modifier = Modifier.size(20.dp)
-        )
+    Row(Modifier.fillMaxWidth()) {
+        Text(label, color = BrandOnSurfaceMuted, fontSize = 12.sp, modifier = Modifier.weight(1f))
+        Text(value, color = BrandOnSurface, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
 }

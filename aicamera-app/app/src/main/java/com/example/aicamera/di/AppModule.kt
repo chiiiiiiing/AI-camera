@@ -3,6 +3,9 @@ package com.example.aicamera.di
 import android.content.Context
 import com.example.aicamera.camera.CameraCapture
 import com.example.aicamera.camera.CameraManager
+import com.example.aicamera.data.db.AppDatabase
+import com.example.aicamera.data.db.CommunityDao
+import com.example.aicamera.data.db.UserDao
 import com.example.aicamera.pipeline.FramePipeline
 import com.example.aicamera.pipeline.FramePreprocessor
 import com.example.aicamera.pipeline.FrameScheduler
@@ -23,6 +26,26 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
+
+    // ── 数据库 (Room) ────────────────────────────────────────
+
+    @Provides
+    @Singleton
+    fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
+        return AppDatabase.getInstance(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideUserDao(db: AppDatabase): UserDao {
+        return db.userDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideCommunityDao(db: AppDatabase): CommunityDao {
+        return db.communityDao()
+    }
 
     // ── 相机链路 ──────────────────────────────────────────────
 

@@ -4,6 +4,8 @@ import android.hardware.camera2.CaptureRequest
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,11 +25,15 @@ import androidx.compose.ui.unit.sp
  * 专业模式控制面板 — 叠加在相机取景器上的手动控制 UI。
  *
  * ## 控制项
- * - EV 曝光补偿 (slider)
- * - ISO 感光度 (预设按钮)
- * - 白平衡模式 (预设按钮)
- * - 对焦模式 (切换)
+ * - EV 曝光补偿 (slider，实时生效)
+ * - ISO 感光度 (预设按钮，重绑生效)
+ * - 快门速度 (预设按钮，重绑生效)
+ * - 白平衡模式 (预设按钮，重绑生效)
+ * - 对焦距离 (滑杆，屈光度，重绑生效)
  * - 变焦快捷档位
+ *
+ * 注：面板只接管曝光/对焦链路，AI 构图分析（ImageAnalysis）与
+ * 引导叠加层完全独立，开关面板不影响 AI 辅助构图。
  */
 @Composable
 fun ProModePanel(
@@ -40,6 +46,10 @@ fun ProModePanel(
     onIsoChange: (Int) -> Unit = {},
     awbMode: Int = CaptureRequest.CONTROL_AWB_MODE_AUTO,
     onAwbChange: (Int) -> Unit = {},
+    exposureTimeNs: Long? = null,
+    onExposureTimeChange: (Long?) -> Unit = {},
+    focusDistance: Float? = null,
+    onFocusDistanceChange: (Float?) -> Unit = {},
     zoomRatio: Float = 1f,
     zoomRange: Pair<Float, Float> = Pair(1f, 4f),
     onZoomChange: (Float) -> Unit = {},
@@ -54,6 +64,7 @@ fun ProModePanel(
             modifier = modifier
                 .fillMaxWidth()
                 .background(Color.Black.copy(alpha = 0.85f))
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
             // ── 标题栏 ──
@@ -101,6 +112,71 @@ fun ProModePanel(
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // ── 快门速度 ──
+            Text("快门速度", color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp)
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // (label, 曝光时间 ns；null = 自动)
+                val shutterOptions = listOf(
+                    "自动" to null,
+                    "1/15" to 66_666_667L,
+                    "1/30" to 33_333_333L,
+                    "1/60" to 16_666_667L,
+                    "1/125" to 8_000_000L,
+                    "1/250" to 4_000_000L,
+                    "1/500" to 2_000_000L,
+                    "1/1000" to 1_000_000L
+                )
+                shutterOptions.forEach { (label, ns) ->
+                    val selected = exposureTimeNs == ns || (ns == null && exposureTimeNs == null)
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (selected) Color(0xFF35C6D4) else Color.White.copy(alpha = 0.1f))
+                            .clickable { onExposureTimeChange(ns) }
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                    ) {
+                        Text(label, color = if (selected) Color.Black else Color.White, fontSize = 11.sp,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // ── 对焦距离（屈光度：0 = 无穷远，值越大越近） ──
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    "对焦距离: " + (focusDistance?.let { "${"%.1f".format(it)}D" } ?: "自动"),
+                    color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp
+                )
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (focusDistance == null) Color(0xFF35C6D4) else Color.White.copy(alpha = 0.1f))
+                        .clickable { onFocusDistanceChange(null) }
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text("自动对焦", color = if (focusDistance == null) Color.Black else Color.White, fontSize = 11.sp)
+                }
+            }
+            Slider(
+                value = focusDistance ?: 0f,
+                onValueChange = { onFocusDistanceChange(if (it <= 0.05f) null else it) },
+                valueRange = 0f..10f,
+                modifier = Modifier.fillMaxWidth(),
+                colors = SliderDefaults.colors(thumbColor = Color(0xFF35C6D4), activeTrackColor = Color(0xFF35C6D4))
+            )
 
             Spacer(modifier = Modifier.height(8.dp))
 

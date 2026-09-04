@@ -170,24 +170,24 @@ class CompositionOverlayView @JvmOverloads constructor(
         val density = currentDensity
 
         // 动画分阶段：
-        // 0.0–0.3：白色圆圈放大（缩小效果，从大到正常）
-        // 0.3–0.6：圆圈变绿（对焦成功）
-        // 0.6–1.0：淡出消失
+        // 0.0–0.3：白色外圈脉冲放大 + 主圈从大到正常
+        // 0.3–0.8：圆圈变绿（对焦成功，保持更久便于用户看清）
+        // 0.8–1.0：淡出消失
 
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
-            strokeWidth = 2.5f * density
+            strokeWidth = 4f * density
         }
 
-        val baseRadius = 28f * density
+        val baseRadius = 42f * density
         val radius = when {
             progress < 0.3f -> baseRadius * (1.5f - progress / 0.3f * 0.5f)
             else -> baseRadius
         }
 
         val alpha = when {
-            progress < 0.6f -> 255
-            else -> (255 * (1f - (progress - 0.6f) / 0.4f)).toInt().coerceIn(0, 255)
+            progress < 0.8f -> 255
+            else -> (255 * (1f - (progress - 0.8f) / 0.2f)).toInt().coerceIn(0, 255)
         }
 
         val color = when {
@@ -197,6 +197,16 @@ class CompositionOverlayView @JvmOverloads constructor(
 
         paint.color = color
         canvas.drawCircle(fc.centerX, fc.centerY, radius, paint)
+
+        // 前 0.3s 增加白色外圈脉冲环
+        if (progress < 0.3f) {
+            val pulseProgress = progress / 0.3f
+            val outerRadius = baseRadius * (1.2f + pulseProgress * 0.6f)
+            val outerAlpha = (255 * (1f - pulseProgress)).toInt().coerceIn(0, 255)
+            paint.color = android.graphics.Color.argb(outerAlpha, 255, 255, 255)
+            paint.strokeWidth = 2f * density
+            canvas.drawCircle(fc.centerX, fc.centerY, outerRadius, paint)
+        }
     }
 
     private fun drawLine(
@@ -222,7 +232,7 @@ class CompositionOverlayView @JvmOverloads constructor(
                 val params = GuideLineParser.parseSubjectBox(line.params)
                 GuideLineRenderer.drawSubjectBox(
                     canvas, params, w, h, isFrontCamera, rotationDegrees,
-                    pulseAlpha, density
+                    pulseAlpha, params.aligned, density
                 )
             }
 

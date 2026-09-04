@@ -167,7 +167,9 @@ data class FakeInferenceOutput(
     /** ★ 构图引导指令（与队友 GuidanceCue 对齐） */
     val guidanceCue: GuidanceCue = GuidanceCue.NONE,
     /** 构图匹配度 (0.0–1.0)，用于 GuidanceStateMachine */
-    val compositionProgress: Float = 0.5f
+    val compositionProgress: Float = 0.5f,
+    /** ★ 模板是否期望主体（人像类），由 GeometryGuidanceStage 标注，分步引导用 */
+    val expectsSubject: Boolean = false
 )
 
 data class FakeGuideLine(

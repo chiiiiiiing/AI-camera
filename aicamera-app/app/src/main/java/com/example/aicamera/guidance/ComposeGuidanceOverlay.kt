@@ -460,6 +460,7 @@ internal fun GuidanceCue.visualFamily(): GuideVisualFamily = when (this) {
     GuidanceCue.PITCH_UP, GuidanceCue.PITCH_DOWN, GuidanceCue.YAW_LEFT, GuidanceCue.YAW_RIGHT -> GuideVisualFamily.AXIS_ROTATION
     GuidanceCue.ROLL_CLOCKWISE, GuidanceCue.ROLL_COUNTERCLOCKWISE -> GuideVisualFamily.PLANAR_ROTATION
     GuidanceCue.SUBJECT_TARGET, GuidanceCue.SUBJECT_ALIGNED -> GuideVisualFamily.SUBJECT
+    GuidanceCue.DEVICE_UPSIDE_DOWN -> GuideVisualFamily.NONE
 }
 
 enum class GuideVisualFamily { NONE, TRANSLATION, AXIS_ROTATION, PLANAR_ROTATION, SUBJECT }
@@ -515,12 +516,12 @@ fun AlignmentFlashOverlay(
 // ═══════════════════════════════════════════════════════════════
 
 @Composable
-fun GuidanceMessage(state: GuidanceState, isDemo: Boolean = false) {
+fun GuidanceMessage(state: GuidanceState, isDemo: Boolean = false, stepHint: String? = null) {
     val text = when {
         state.phase == GuidancePhase.WRONG_DIRECTION -> "方向相反，稍微回一点"
         state.cue == GuidanceCue.SUBJECT_TARGET -> "将人物移入轮廓"
         state.cue == GuidanceCue.SUBJECT_ALIGNED -> "保持，人物构图已对齐"
-        state.phase == GuidancePhase.ALIGNED -> "保持，构图已对齐 ✓"
+        state.phase == GuidancePhase.ALIGNED -> "保持，构图已对齐"
         state.cue == GuidanceCue.MOVE_LEFT -> "← 向左移动"
         state.cue == GuidanceCue.MOVE_RIGHT -> "→ 向右移动"
         state.cue == GuidanceCue.MOVE_UP -> "↑ 手机稍向上"
@@ -531,6 +532,8 @@ fun GuidanceMessage(state: GuidanceState, isDemo: Boolean = false) {
         state.cue == GuidanceCue.YAW_RIGHT -> "向右转动手机"
         state.cue == GuidanceCue.ROLL_CLOCKWISE -> "顺时针旋转"
         state.cue == GuidanceCue.ROLL_COUNTERCLOCKWISE -> "逆时针旋转"
+        // ★ 分步引导：当前步骤无具体指令时显示步骤提示（如"端平手机"）
+        !stepHint.isNullOrBlank() -> stepHint
         state.cue == GuidanceCue.NONE && state.phase == GuidancePhase.NEUTRAL -> "寻找拍摄主体..."
         else -> "调整构图"
     }

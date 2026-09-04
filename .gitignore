@@ -8,6 +8,8 @@ aicamera-app/.idea/
 
 # Local configuration
 aicamera-app/local.properties
+.claude/
+**/CLAUDE.md
 
 # OS files
 .DS_Store
@@ -29,3 +31,9 @@ Thumbs.db
 .gradle/
 !aicamera-app/gradle/wrapper/gradle-wrapper.jar
 _archive/
+
+# Kotlin compiler logs
+.kotlin/
+
+# Transient session artifacts
+loop_shturl/

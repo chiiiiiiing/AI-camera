@@ -44,6 +44,10 @@ class PipelineViewModel @Inject constructor(
     /** AI 引擎装配状态（HUD/调试面板展示用） */
     val aiState: StateFlow<AiEngineManager.State> = aiEngine.state
 
+    /** ★ V9 熔断降级原因（null = 未降级）；降级后如实告诉 UI「AI 演示模式」 */
+    private val _v9DegradedReason = MutableStateFlow<String?>(null)
+    val v9DegradedReason: StateFlow<String?> = _v9DegradedReason.asStateFlow()
+
     private val _pipelineState = MutableStateFlow(PipelineState())
     val pipelineState: StateFlow<PipelineState> = _pipelineState.asStateFlow()
 
@@ -59,15 +63,24 @@ class PipelineViewModel @Inject constructor(
         // 装配几何引导阶段（IMU 水平角 + ML Kit 人脸 → 真实 GuidanceCue）
         pipeline.setGeometryStage(geometryStage)
 
-        // AI 引擎 READY 后热替换推理器（Fake → V9-ONNX）
+        // AI 引擎 READY 后热替换推理器（Fake → V9-ONNX，经熔断器包装）
         viewModelScope.launch {
             aiEngine.state.collect { state ->
                 if (state.status == AiEngineManager.Status.READY) {
                     val v9 = aiEngine.v9Inference
                     if (v9 != null && pipeline.getState().inferenceType != v9.typeName) {
-                        pipeline.setInference(v9)
+                        // ★ 熔断包装：V9 逐帧异常/空输出 → 自动回退 Fake，指引永不中断
+                        pipeline.setInference(
+                            com.example.aicamera.pipeline.ResilientInference(
+                                primary = v9,
+                                onDegraded = { reason ->
+                                    _v9DegradedReason.value = reason
+                                    _pipelineState.update { pipeline.getState() }
+                                }
+                            )
+                        )
                         _pipelineState.update { pipeline.getState() }
-                        Log.i(CameraConfig.TAG, "[PipelineVM] V9 推理引擎已接入管线 (${state.templateCount} 条模板)")
+                        Log.i(CameraConfig.TAG, "[PipelineVM] V9 推理引擎已接入管线 (${state.templateCount} 条模板，含熔断保护)")
                     }
                 }
             }
