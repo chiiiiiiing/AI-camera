@@ -33,8 +33,19 @@ fun CompactProPanel(
     onDismiss: () -> Unit
 ) {
     var selected by remember { mutableStateOf(ProControl.EV) }
-    AnimatedVisibility(isVisible, enter = slideInVertically { it / 2 } + fadeIn(), exit = slideOutVertically { it / 2 } + fadeOut()) {
-        Column(modifier.background(Color.Black.copy(alpha = .48f), RoundedCornerShape(20.dp)).padding(12.dp)) {
+    AnimatedVisibility(
+        visible = isVisible,
+        modifier = modifier,
+        enter = slideInVertically { it / 2 } + fadeIn(),
+        exit = slideOutVertically { it / 2 } + fadeOut()
+    ) {
+        Column(
+            Modifier
+                .widthIn(max = 560.dp)
+                .fillMaxWidth()
+                .background(Color.Black.copy(alpha = .64f), RoundedCornerShape(20.dp))
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+        ) {
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                 ProChip("EV", if (evValue == 0) "0" else "%+.1f".format(evValue / 3f), selected == ProControl.EV) { selected = ProControl.EV }
                 ProChip("ISO", if (isoValue == 0) "AUTO" else "$isoValue", selected == ProControl.ISO) { selected = ProControl.ISO }

@@ -121,8 +121,7 @@ cp "$AIDIR/ai/docs/产品需求理解.md" "$TMP/ai/docs/" 2>/dev/null || true
 cp "$AIDIR/ai/docs/提示交互方案.md" "$TMP/ai/docs/" 2>/dev/null || true
 cp "$AIDIR/ai/docs/文档总览.md" "$TMP/ai/docs/" 2>/dev/null || true
 
-cp "$AIDIR/app-arch/09-AI接入包说明.md" "$TMP/app-arch/" 2>/dev/null || true
-cp "$AIDIR/app-arch/10-给App队友-交付清单回复.md" "$TMP/app-arch/" 2>/dev/null || true
+cp "$AIDIR/docs/09-AI接入包说明.md" "$TMP/app-arch/" 2>/dev/null || true
 
 cp "$AIDIR/output/android_v9_ai_delivery/README.md" "$TMP/ai/output/" 2>/dev/null || true
 cp "$AIDIR/output/android_v9_ai_delivery/android_runtime_config.json" "$TMP/ai/output/" 2>/dev/null || true

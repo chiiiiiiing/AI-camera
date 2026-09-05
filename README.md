@@ -19,17 +19,17 @@ Ai-camera/
 │
 ├── docs/                      # 📖 设计文档（共 12 篇）
 │   ├── README.md              #   文档索引
-│   ├── 移动端开发核心指引.md    #   角色定位、管线架构、技术选型
 │   ├── 01-相机链路.md          #   CameraX 预览/拍照/权限
 │   ├── 02-帧处理管线.md        #   跳帧调度/预处理/线程模型
-│   ├── 03-AI模型接入.md        #   LiteRT 加载/推理/结果解析
 │   ├── 04-辅助线渲染引擎.md    #   Canvas Overlay / 坐标映射 / 动画
 │   ├── 05-构图引导交互.md      #   反馈/动画/UI 控件/状态机
 │   ├── 06-性能优化.md          #   帧率/延迟/内存/发热/设备分级
 │   ├── 07-上线工程.md          #   工程搭建/测试/模型下发
 │   ├── 08-MVP方案与迭代.md     #   版本规划与依赖关系
 │   ├── 附录A-队友协作接口.md   #   模型输入输出约定/问题清单
-│   └── 附录B-技术选型速查.md   #   技术栈速览
+│   ├── 项目审计-2026-09.md     #   当前实现核验与风险边界
+│   ├── Demo拍摄方案.md         #   产品演示录制脚本
+│   └── 项目开发时间线.md       #   版本和阶段时间线
 │
 └── _archive/                  # 🗄️ 历史参考代码（已归档，不再维护）
     ├── modules/               #   早期独立模块参考实现（已合并进 app）
@@ -67,7 +67,7 @@ cd aicamera-app
 | UI | Jetpack Compose + Material3 | BOM 2024.12 |
 | 构建 | Gradle (Kotlin DSL) | AGP 8.7.3 |
 | 相机 | CameraX | 1.4.1 |
-| AI 推理 | LiteRT (TFLite) + GPU Delegate | 2.16.1 |
+| AI 推理 | ONNX Runtime Mobile + v9 embedding | 1.19.2 |
 | 架构 | MVVM + Hilt DI | Hilt 2.53.1 |
 
 ## 团队分工

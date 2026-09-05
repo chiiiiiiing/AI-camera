@@ -43,9 +43,11 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
@@ -56,6 +58,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
@@ -152,6 +155,14 @@ fun CameraScreen(
     var captureError by remember { mutableStateOf<String?>(null) }
     var showFilterPanel by remember { mutableStateOf(false) }
     var showFilterEditor by remember { mutableStateOf(false) }
+    var bottomBarHeightPx by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
+    val measuredBottomBarHeight = if (bottomBarHeightPx > 0) {
+        with(density) { bottomBarHeightPx.toDp() }
+    } else {
+        152.dp
+    }
+    val floatingControlsBottom = measuredBottomBarHeight + 14.dp
     // 点击对焦位置与曝光条显隐
     var focusCenter by remember { mutableStateOf(Offset.Zero) }
     var showExposureSlider by remember { mutableStateOf(false) }
@@ -657,14 +668,18 @@ fun CameraScreen(
                 },
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(start = 12.dp, bottom = 148.dp)
+                    .zIndex(6f)
+                    .padding(start = 16.dp, end = 16.dp, bottom = floatingControlsBottom)
             )
         }
 
         // ── 第 3 层：底部拍摄工具栏 ──
         if (uiState.isInitialized) {
             CameraBottomBar(
-                modifier = Modifier.align(Alignment.BottomCenter),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .zIndex(5f)
+                    .onSizeChanged { bottomBarHeightPx = it.height },
                 latestPhotoUri = uiState.latestPhotoUri,
                 onTakePhoto = { triggerCapture() },
                 onToggleCamera = { cameraViewModel.toggleCamera() },
@@ -695,8 +710,9 @@ fun CameraScreen(
             CompactProPanel(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
+                    .zIndex(7f)
                     .padding(horizontal = 10.dp)
-                    .padding(bottom = 154.dp),
+                    .padding(bottom = floatingControlsBottom),
                 isVisible = true,
                 evValue = evIndex,
                 evRange = cameraViewModel.evRange(),
