@@ -121,7 +121,7 @@ fun ProfileScreen(
     val context = LocalContext.current
     val authRepo = remember { AuthRepository.getInstance(context) }
     val currentUser = authRepo.currentUsername ?: "摄影师"
-    val isCurrentUser = profileUsername == null
+    val isCurrentUser = profileUsername == null || profileUsername == currentUser
     val username = profileUsername ?: currentUser
     val bio = if (isCurrentUser) {
         authRepo.currentBio ?: "用 AI 构图，记录每一帧美好"
@@ -302,7 +302,7 @@ fun ProfileScreen(
                         } else {
                             ProfilePostGrid(
                                 posts = userPosts,
-                                currentUser = username,
+                                currentUser = currentUser,
                                 viewModel = communityViewModel,
                                 onNavigateToProfile = onNavigateToProfile,
                             )
@@ -317,7 +317,7 @@ fun ProfileScreen(
                         } else {
                             ProfilePostGrid(
                                 posts = likedPosts,
-                                currentUser = username,
+                                currentUser = currentUser,
                                 viewModel = communityViewModel,
                                 onNavigateToProfile = onNavigateToProfile,
                             )
@@ -332,7 +332,7 @@ fun ProfileScreen(
                         } else {
                             ProfilePostGrid(
                                 posts = favoritedPosts,
-                                currentUser = username,
+                                currentUser = currentUser,
                                 viewModel = communityViewModel,
                                 onNavigateToProfile = onNavigateToProfile,
                             )
@@ -436,10 +436,9 @@ private fun FollowButton(
     targetUser: String,
     viewModel: CommunityViewModel?,
 ) {
-    var isFollowing by remember { mutableStateOf(false) }
-    LaunchedEffect(targetUser, currentUser) {
-        isFollowing = viewModel?.isFollowing(currentUser, targetUser) ?: false
-    }
+    val isFollowing by remember(targetUser, currentUser, viewModel) {
+        viewModel?.observeIsFollowing(currentUser, targetUser) ?: flowOf(false)
+    }.collectAsState(initial = false)
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -447,7 +446,6 @@ private fun FollowButton(
             .background(if (isFollowing) Color.White.copy(alpha = 0.72f) else BrandPink)
             .clickable {
                 viewModel?.toggleFollow(currentUser, targetUser)
-                isFollowing = !isFollowing
             }
             .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center
@@ -575,8 +573,9 @@ private fun ProfilePostCard(
         tween(if (pressed) GenWowMotion.PressMillis else GenWowMotion.PressReleaseMillis),
         label = "profile card press",
     )
-    var liked by remember { mutableStateOf(false) }
-    LaunchedEffect(post.id) { liked = viewModel?.isLiked(post.id, currentUser) ?: false }
+    val liked by remember(post.id, currentUser, viewModel) {
+        viewModel?.observeIsLiked(post.id, currentUser) ?: flowOf(false)
+    }.collectAsState(initial = false)
 
     val (title, _) = remember(post.body) { splitPostBody(post.body) }
 
@@ -634,7 +633,6 @@ private fun ProfilePostCard(
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.clickable {
-                    liked = !liked
                     viewModel?.toggleLike(post.id, currentUser)
                 }
             ) {

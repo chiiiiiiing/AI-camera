@@ -116,11 +116,6 @@ class CompositionSessionController {
 
     private val horizonPolicy = HorizonPolicy()
 
-    /** 最近一次构图进度（0–1），供拍后评分页读取 */
-    val lastProgress: Float
-        get() = _lastProgress
-    private var _lastProgress: Float = 0f
-
     // ── 滞回状态 ──
     private var levelGoodFrames = 0
     private var levelBadFrames = 0
@@ -186,9 +181,6 @@ class CompositionSessionController {
         // ── Stale frame 丢弃 ──
         if (obs.frameId > 0 && obs.frameId <= lastAppliedFrameId) return
         lastAppliedFrameId = obs.frameId
-
-        // ★ 更新最新进度（供拍后评分读取）
-        _lastProgress = computeProgress(obs)
 
         val currentState = _state.value
         when (currentState) {

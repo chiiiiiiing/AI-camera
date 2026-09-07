@@ -10,12 +10,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -127,10 +124,9 @@ private fun UserListItem(
     onClick: () -> Unit,
     viewModel: CommunityViewModel
 ) {
-    var isFollowing by remember { mutableStateOf(false) }
-    LaunchedEffect(username, currentUser) {
-        isFollowing = viewModel.isFollowing(currentUser, username)
-    }
+    val isFollowing by remember(username, currentUser) {
+        viewModel.observeIsFollowing(currentUser, username)
+    }.collectAsState(initial = false)
 
     Row(
         modifier = Modifier
@@ -164,7 +160,6 @@ private fun UserListItem(
                     .background(if (isFollowing) Color.Transparent else BrandPink.copy(alpha = 0.12f))
                     .clickable {
                         viewModel.toggleFollow(currentUser, username)
-                        isFollowing = !isFollowing
                     }
                     .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {

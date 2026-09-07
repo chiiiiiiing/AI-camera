@@ -51,6 +51,9 @@ class CommunityRepository @Inject constructor(
     suspend fun isLiked(postId: Long, username: String): Boolean =
         dao.isLiked(postId, username)
 
+    fun observeIsLiked(postId: Long, username: String): Flow<Boolean> =
+        dao.observeIsLiked(postId, username)
+
     suspend fun toggleLike(postId: Long, username: String) {
         withContext(Dispatchers.IO) {
             if (dao.isLiked(postId, username)) {
@@ -70,6 +73,9 @@ class CommunityRepository @Inject constructor(
 
     suspend fun isFavorited(postId: Long, username: String): Boolean =
         dao.isFavorited(postId, username)
+
+    fun observeIsFavorited(postId: Long, username: String): Flow<Boolean> =
+        dao.observeIsFavorited(postId, username)
 
     suspend fun toggleFavorite(postId: Long, username: String) {
         withContext(Dispatchers.IO) {
@@ -93,6 +99,9 @@ class CommunityRepository @Inject constructor(
 
     suspend fun isFollowing(follower: String, following: String): Boolean =
         dao.isFollowing(follower, following)
+
+    fun observeIsFollowing(follower: String, following: String): Flow<Boolean> =
+        dao.observeIsFollowing(follower, following)
 
     suspend fun toggleFollow(follower: String, following: String) {
         withContext(Dispatchers.IO) {

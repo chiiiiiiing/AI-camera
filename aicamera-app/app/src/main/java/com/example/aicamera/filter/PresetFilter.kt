@@ -26,10 +26,10 @@ enum class PresetFilter(
         FilterIds.PORTRAIT_SOFT,
         R.string.filter_portrait_soft,
         ColorMatrix().apply {
-            setSaturation(0.94f)
-            postConcat(contrastMatrix(0.97f))
-            postConcat(rgbScaleMatrix(r = 1.03f, g = 1.0f, b = 0.98f))
-            postConcat(brightnessMatrix(1.02f))
+            setSaturation(0.88f)
+            postConcat(contrastMatrix(0.92f))
+            postConcat(rgbScaleMatrix(r = 1.10f, g = 1.035f, b = 0.94f))
+            postConcat(brightnessMatrix(1.055f))
         }
     ),
 
@@ -38,9 +38,9 @@ enum class PresetFilter(
         FilterIds.FOOD_VIVID,
         R.string.filter_food_vivid,
         ColorMatrix().apply {
-            setSaturation(1.12f)
-            postConcat(rgbScaleMatrix(r = 1.04f, g = 1.025f, b = 0.97f))
-            postConcat(contrastMatrix(1.04f))
+            setSaturation(1.30f)
+            postConcat(rgbScaleMatrix(r = 1.10f, g = 1.055f, b = 0.91f))
+            postConcat(contrastMatrix(1.10f))
         }
     ),
 
@@ -49,9 +49,9 @@ enum class PresetFilter(
         FilterIds.STILL_LIFE_CLEAN,
         R.string.filter_still_life_clean,
         ColorMatrix().apply {
-            setSaturation(0.97f)
-            postConcat(brightnessMatrix(1.04f))
-            postConcat(contrastMatrix(1.06f))
+            setSaturation(0.82f)
+            postConcat(brightnessMatrix(1.075f))
+            postConcat(contrastMatrix(1.12f))
         }
     ),
 
@@ -60,9 +60,9 @@ enum class PresetFilter(
         FilterIds.LANDSCAPE_CLEAR,
         R.string.filter_landscape_clear,
         ColorMatrix().apply {
-            setSaturation(1.08f)
-            postConcat(rgbScaleMatrix(r = 0.99f, g = 1.025f, b = 1.04f))
-            postConcat(contrastMatrix(1.035f))
+            setSaturation(1.24f)
+            postConcat(rgbScaleMatrix(r = 0.92f, g = 1.07f, b = 1.15f))
+            postConcat(contrastMatrix(1.11f))
         }
     ),
 
@@ -71,9 +71,10 @@ enum class PresetFilter(
         FilterIds.GOLDEN_WARM,
         R.string.filter_golden_warm,
         ColorMatrix().apply {
-            setSaturation(0.98f)
-            postConcat(rgbScaleMatrix(r = 1.05f, g = 1.015f, b = 0.94f))
-            postConcat(brightnessMatrix(1.02f))
+            setSaturation(1.08f)
+            postConcat(rgbScaleMatrix(r = 1.16f, g = 1.07f, b = 0.82f))
+            postConcat(contrastMatrix(1.06f))
+            postConcat(brightnessMatrix(1.035f))
         }
     ),
 
@@ -82,9 +83,9 @@ enum class PresetFilter(
         FilterIds.URBAN_CRISP,
         R.string.filter_urban_crisp,
         ColorMatrix().apply {
-            setSaturation(0.92f)
-            postConcat(contrastMatrix(1.08f))
-            postConcat(rgbScaleMatrix(r = 0.97f, g = 1.0f, b = 1.045f))
+            setSaturation(0.72f)
+            postConcat(contrastMatrix(1.22f))
+            postConcat(rgbScaleMatrix(r = 0.86f, g = 0.99f, b = 1.16f))
         }
     );
 

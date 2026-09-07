@@ -37,6 +37,9 @@ class CommunityViewModel @Inject constructor(
 
     suspend fun isLiked(postId: Long, username: String): Boolean = repo.isLiked(postId, username)
 
+    fun observeIsLiked(postId: Long, username: String): Flow<Boolean> =
+        repo.observeIsLiked(postId, username)
+
     fun toggleLike(postId: Long, username: String) {
         viewModelScope.launch { repo.toggleLike(postId, username) }
     }
@@ -75,6 +78,9 @@ class CommunityViewModel @Inject constructor(
     suspend fun isFavorited(postId: Long, username: String): Boolean =
         repo.isFavorited(postId, username)
 
+    fun observeIsFavorited(postId: Long, username: String): Flow<Boolean> =
+        repo.observeIsFavorited(postId, username)
+
     fun toggleFavorite(postId: Long, username: String) {
         viewModelScope.launch { repo.toggleFavorite(postId, username) }
     }
@@ -91,6 +97,9 @@ class CommunityViewModel @Inject constructor(
 
     suspend fun isFollowing(follower: String, following: String): Boolean =
         repo.isFollowing(follower, following)
+
+    fun observeIsFollowing(follower: String, following: String): Flow<Boolean> =
+        repo.observeIsFollowing(follower, following)
 
     fun toggleFollow(follower: String, following: String) {
         viewModelScope.launch { repo.toggleFollow(follower, following) }

@@ -127,6 +127,7 @@ class CameraManager(
         val provider = cameraProvider ?: return false
         val lifecycle = lifecycleOwner ?: return false
         val view = previewView ?: return false
+        val targetRotation = view.display?.rotation ?: android.view.Surface.ROTATION_0
 
         // 解绑旧的 UseCase（切换摄像头时复用此方法）
         provider.unbindAll()
@@ -136,12 +137,14 @@ class CameraManager(
 
         // 1. Preview — 实时取景（应用 Pro 参数）
         preview = Preview.Builder()
+            .setTargetRotation(targetRotation)
             .also { applyProOptions(it) }
             .build()
             .also { it.setSurfaceProvider(view.surfaceProvider) }
 
         // 2. ImageCapture — 拍照（应用 Pro 参数，保证成片与预览一致）
         imageCapture = ImageCapture.Builder()
+            .setTargetRotation(targetRotation)
             .also { applyProOptions(it) }
             .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
             .setFlashMode(ImageCapture.FLASH_MODE_AUTO)
@@ -149,6 +152,7 @@ class CameraManager(
 
         // 3. ImageAnalysis — 帧分析（给 AI 推理用）
         imageAnalysis = ImageAnalysis.Builder()
+            .setTargetRotation(targetRotation)
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
             .setTargetResolution(CameraConfig.ANALYSIS_RESOLUTION)
@@ -333,6 +337,13 @@ class CameraManager(
 
     /** 获取当前 PreviewView（坐标映射参考） */
     fun getPreviewView(): PreviewView? = previewView
+
+    /** 横竖屏变化时同步预览、成片和 AI 分析方向，无需重绑相机。 */
+    fun updateTargetRotation(rotation: Int) {
+        preview?.targetRotation = rotation
+        imageCapture?.targetRotation = rotation
+        imageAnalysis?.targetRotation = rotation
+    }
 
     /** 是否为前置摄像头 */
     fun isFrontCamera(): Boolean = currentFace == CameraFace.FRONT

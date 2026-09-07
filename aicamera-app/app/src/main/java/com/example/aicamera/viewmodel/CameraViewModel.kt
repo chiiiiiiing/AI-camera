@@ -406,6 +406,10 @@ class CameraViewModel @Inject constructor(
         controls.setZoomRatio(ratio, camera)
     }
 
+    fun updateTargetRotation(rotation: Int) {
+        cameraManager.updateTargetRotation(rotation)
+    }
+
     // ── 自动变焦（分步引导第①步） ─────────────────────────────
 
     private var autoZoomJob: Job? = null

@@ -110,7 +110,7 @@ fun MainScreen(
 private enum class BottomGlyph { CAMERA, SHARE, PERSON }
 
 /**
- * 底部全局三 Tab 导航栏 — 设计稿 Tab Bar.png: icon-only, 无文字, 浅粉底, 粉色选中
+ * 底部全局三 Tab 导航栏 — 黑色相机底栏 + 粉色图标。
  */
 @Composable
 private fun BottomTabBar(
@@ -118,7 +118,7 @@ private fun BottomTabBar(
     onTabSelected: (Int) -> Unit
 ) {
     Surface(
-        color = Color(0xFFFFF1F5),  // ★ 统一浅粉底栏（不对相机 Tab 深色）
+        color = Color(0xFF09090B),
         shadowElevation = 8.dp
     ) {
         Row(
@@ -154,7 +154,7 @@ private fun BottomGlyphTab(
     isSelected: Boolean,
     onClick: () -> Unit,
 ) {
-    val iconColor = if (isSelected) BrandPink else Color(0xFF8A8093)
+    val iconColor = if (isSelected) BrandPink else BrandPink.copy(alpha = 0.55f)
     val iconSize = if (isSelected) 28.dp else 25.dp  // ★ 选中稍大
 
     Box(

@@ -116,6 +116,12 @@ fun CommunityScreen(
     val context = LocalContext.current
     val authRepo = remember { AuthRepository.getInstance(context) }
     val currentUser = authRepo.currentUsername ?: "用户"
+    val followingUsers by remember(currentUser) {
+        viewModel.getFollowing(currentUser)
+    }.collectAsState(initial = emptyList())
+    val followingPosts = remember(posts, followingUsers) {
+        posts.filter { it.author in followingUsers }
+    }
 
     var showComments by remember { mutableStateOf(false) }
     var selectedPostId by remember { mutableStateOf<Long?>(null) }
@@ -124,11 +130,36 @@ fun CommunityScreen(
     Column(Modifier.fillMaxSize().background(FeedBackground).statusBarsPadding()) {
         CommunityTopTabs(selectedIndex = selectedTab, onSelected = { selectedTab = it })
         when (selectedTab) {
-            0 -> FeedEmptyState(
-                title = "还没有关注任何人",
-                subtitle = "去发现页看看",
-                modifier = Modifier.fillMaxWidth().weight(1f),
-            )
+            0 -> if (followingUsers.isEmpty()) {
+                FeedEmptyState(
+                    title = "还没有关注任何人",
+                    subtitle = "去发现页关注喜欢的摄影师",
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                )
+            } else if (followingPosts.isEmpty()) {
+                FeedEmptyState(
+                    title = "关注的人还没有发布作品",
+                    subtitle = "他们的新作品会自动出现在这里",
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(22.dp),
+                ) {
+                    items(followingPosts, key = { "following_${it.id}" }) { post ->
+                        FeedPostItem(
+                            post = post,
+                            onToggleLike = { viewModel.toggleLike(post.id, currentUser) },
+                            onCommentClick = { selectedPostId = post.id; showComments = true },
+                            onNavigateToProfile = onNavigateToProfile,
+                            viewModel = viewModel,
+                            currentUser = currentUser,
+                        )
+                    }
+                }
+            }
             1 -> if (posts.isEmpty()) {
                 FeedEmptyState(modifier = Modifier.fillMaxWidth().weight(1f))
             } else {
@@ -151,26 +182,25 @@ fun CommunityScreen(
                         )
                     }
                 }
-
-                if (showComments && selectedPostId != null) {
-                    ModalBottomSheet(
-                        onDismissRequest = { showComments = false },
-                        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-                        containerColor = Color(0xFFFFF1F5)
-                    ) {
-                        CommentSheet(
-                            postId = selectedPostId!!,
-                            viewModel = viewModel,
-                            currentUser = currentUser
-                        )
-                    }
-                }
             }
             else -> FeedEmptyState(
                 title = "暂无消息",
                 subtitle = "互动消息会显示在这里",
                 modifier = Modifier.fillMaxWidth().weight(1f),
             )
+        }
+        if (showComments && selectedPostId != null) {
+            ModalBottomSheet(
+                onDismissRequest = { showComments = false },
+                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                containerColor = Color(0xFFFFF1F5)
+            ) {
+                CommentSheet(
+                    postId = selectedPostId!!,
+                    viewModel = viewModel,
+                    currentUser = currentUser
+                )
+            }
         }
     }
 }
@@ -443,8 +473,9 @@ private fun LikeAction(
         animationSpec = tween(if (pressed) GenWowMotion.PressMillis else GenWowMotion.PressReleaseMillis),
         label = "like press",
     )
-    var liked by remember { mutableStateOf(false) }
-    LaunchedEffect(post.id) { liked = viewModel.isLiked(post.id, currentUser) }
+    val liked by remember(post.id, currentUser) {
+        viewModel.observeIsLiked(post.id, currentUser)
+    }.collectAsState(initial = false)
     Row(
         modifier = Modifier
             .scale(scale)
@@ -454,7 +485,6 @@ private fun LikeAction(
                 interactionSource = interaction,
                 indication = null,
                 onClick = {
-                    liked = !liked
                     onToggleLike()
                 },
             )
@@ -508,13 +538,13 @@ private fun FavoriteAction(
     viewModel: CommunityViewModel,
     currentUser: String,
 ) {
-    var favorited by remember { mutableStateOf(false) }
-    LaunchedEffect(post.id) { favorited = viewModel.isFavorited(post.id, currentUser) }
+    val favorited by remember(post.id, currentUser) {
+        viewModel.observeIsFavorited(post.id, currentUser)
+    }.collectAsState(initial = false)
     Row(
         modifier = Modifier
             .semantics { contentDescription = "收藏 ${post.author}" }
             .clickable {
-                favorited = !favorited
                 viewModel.toggleFavorite(post.id, currentUser)
             }
             .padding(vertical = 4.dp),

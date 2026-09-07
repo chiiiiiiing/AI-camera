@@ -55,6 +55,9 @@ interface CommunityDao {
     @Query("SELECT COUNT(*) FROM community_favorites WHERE post_id = :postId AND username = :username")
     suspend fun isFavorited(postId: Long, username: String): Boolean
 
+    @Query("SELECT EXISTS(SELECT 1 FROM community_favorites WHERE post_id = :postId AND username = :username)")
+    fun observeIsFavorited(postId: Long, username: String): Flow<Boolean>
+
     @Query("SELECT * FROM community_posts WHERE id IN (SELECT post_id FROM community_favorites WHERE username = :username) ORDER BY created_at DESC")
     fun getFavoritedPosts(username: String): Flow<List<CommunityPost>>
 
@@ -75,6 +78,9 @@ interface CommunityDao {
     fun getCommentsByAuthor(username: String): Flow<List<CommunityComment>>
     @Query("SELECT COUNT(*) FROM user_follows WHERE follower = :follower AND following = :following")
     suspend fun isFollowing(follower: String, following: String): Boolean
+
+    @Query("SELECT EXISTS(SELECT 1 FROM user_follows WHERE follower = :follower AND following = :following)")
+    fun observeIsFollowing(follower: String, following: String): Flow<Boolean>
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertFollow(follow: UserFollow)
