@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -39,6 +41,9 @@ import androidx.compose.ui.unit.sp
 import com.example.aicamera.guidance.GuidanceCue
 import com.example.aicamera.guidance.GuidancePhase
 import com.example.aicamera.guidance.geometry.HorizonPolicy
+import com.example.aicamera.overlay.model.GuideLine
+import com.example.aicamera.overlay.model.GuideLineParser
+import com.example.aicamera.overlay.model.GuideLineType
 import com.example.aicamera.ui.theme.BrandPink
 import com.example.aicamera.ui.theme.BrandPurple
 import com.example.aicamera.ui.theme.GuideAligned
@@ -80,9 +85,23 @@ fun CaptureWorkflowOverlay(
     /** 真实主体中心点（归一化），null = 无真实主体，箭头从画面中心出发 */
     subjectNx: Float? = null,
     subjectNy: Float? = null,
+    showGrid: Boolean = true,
+    showSubjectBox: Boolean = true,
+    showTargetZone: Boolean = true,
+    showHorizon: Boolean = true,
+    overlayAlpha: Float = 1f,
+    guideLines: List<GuideLine> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        if (state in listOf(
+                CaptureWorkflowState.ANALYZING, CaptureWorkflowState.ROTATING,
+                CaptureWorkflowState.GUIDING, CaptureWorkflowState.READY,
+                CaptureWorkflowState.NO_SUBJECT, CaptureWorkflowState.UPSIDE_DOWN
+            )) {
+            WorkflowGuideLines(state, cue, horizonAngleDeg, guideLines,
+                showGrid, showSubjectBox, showTargetZone, showHorizon, overlayAlpha)
+        }
         if (state != CaptureWorkflowState.IDLE) {
             WorkflowProgress(
                 state = state,
@@ -169,6 +188,66 @@ fun CaptureWorkflowOverlay(
             exit = fadeOut(tween(200))
         ) {
             NoSubjectOverlay()
+        }
+    }
+}
+
+/** The older View overlay is no longer mounted; draw the actual workflow guide lines here. */
+@Composable
+private fun WorkflowGuideLines(
+    state: CaptureWorkflowState, cue: GuidanceCue?, rollDeg: Float?,
+    guideLines: List<GuideLine>, showGrid: Boolean, showSubjectBox: Boolean,
+    showTargetZone: Boolean, showHorizon: Boolean, overlayAlpha: Float
+) {
+    Canvas(Modifier.fillMaxSize()) {
+        val opacity = overlayAlpha.coerceIn(0.25f, 1f)
+        if (showGrid) {
+            val gridColor = Color.White.copy(alpha = 0.34f * opacity)
+            listOf(1f / 3f, 2f / 3f).forEach { fraction ->
+                drawLine(gridColor, Offset(size.width * fraction, 0f),
+                    Offset(size.width * fraction, size.height), 1.dp.toPx())
+                drawLine(gridColor, Offset(0f, size.height * fraction),
+                    Offset(size.width, size.height * fraction), 1.dp.toPx())
+            }
+        }
+        if (state in listOf(CaptureWorkflowState.GUIDING, CaptureWorkflowState.READY)) {
+            guideLines.filter { it.visible }.forEach { line ->
+                when (line.type) {
+                    GuideLineType.SUBJECT_BOX -> if (showSubjectBox) {
+                        val box = GuideLineParser.parseSubjectBox(line.params)
+                        drawRoundRect(
+                            color = (if (box.aligned) GuideAligned else BrandPink).copy(alpha = opacity),
+                            topLeft = Offset(box.x * size.width, box.y * size.height),
+                            size = Size(box.width * size.width, box.height * size.height),
+                            cornerRadius = CornerRadius(10.dp.toPx()),
+                            style = Stroke(width = 2.dp.toPx())
+                        )
+                    }
+                    GuideLineType.TARGET_ZONE -> if (showTargetZone) {
+                        val zone = GuideLineParser.parseTargetZone(line.params)
+                        drawCircle(Color.White.copy(alpha = opacity * 0.8f),
+                            zone.radius * size.minDimension,
+                            Offset(zone.centerX * size.width, zone.centerY * size.height),
+                            style = Stroke(width = 2.dp.toPx()))
+                    }
+                    else -> Unit
+                }
+            }
+        }
+        if (showHorizon && state == CaptureWorkflowState.ROTATING &&
+            cue in listOf(GuidanceCue.ROLL_CLOCKWISE, GuidanceCue.ROLL_COUNTERCLOCKWISE) &&
+            rollDeg != null) {
+            val center = Offset(size.width / 2f, size.height * 0.46f)
+            val half = size.width * 0.37f
+            val angle = Math.toRadians(rollDeg.coerceIn(-20f, 20f).toDouble())
+            val dx = (half * kotlin.math.cos(angle)).toFloat()
+            val dy = (half * kotlin.math.sin(angle)).toFloat()
+            drawLine(Color.White.copy(alpha = 0.75f * opacity), Offset(center.x - half, center.y),
+                Offset(center.x + half, center.y), 2.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(9.dp.toPx(), 8.dp.toPx())))
+            drawLine((if (kotlin.math.abs(rollDeg) <= ROTATION_TOLERANCE_DEG) GuideAligned else BrandPink).copy(alpha = opacity),
+                Offset(center.x - dx, center.y - dy), Offset(center.x + dx, center.y + dy),
+                3.dp.toPx(), StrokeCap.Round)
         }
     }
 }
@@ -453,17 +532,17 @@ private fun RotatingOverlay(horizonAngleDeg: Float?, cue: GuidanceCue?) {
     val (title, subtitle, color) = when {
         isRoll -> when {
             rollAligned -> Triple("水平已对齐", "保持当前角度", GuideAligned)
-            cue == GuidanceCue.ROLL_CLOCKWISE -> Triple("旋转手机", "向左旋转", BrandPink)
-            else -> Triple("旋转手机", "向右旋转", BrandPink)
+            cue == GuidanceCue.ROLL_CLOCKWISE -> Triple("调整水平", "顺时针旋转手机，让粉线贴合白色虚线", BrandPink)
+            else -> Triple("调整水平", "逆时针旋转手机，让粉线贴合白色虚线", BrandPink)
         }
         isPitch -> Triple(
             "调整俯仰",
-            if (cue == GuidanceCue.PITCH_UP) "向上倾斜" else "向下倾斜",
+            if (cue == GuidanceCue.PITCH_UP) "抬高手机镜头" else "降低手机镜头",
             BrandPink
         )
         isYaw -> Triple(
             "调整方向",
-            if (cue == GuidanceCue.YAW_LEFT) "向左转动" else "向右转动",
+            if (cue == GuidanceCue.YAW_LEFT) "向左转动手机" else "向右转动手机",
             BrandPink
         )
         else -> Triple("调整构图", "", BrandPink)
@@ -471,19 +550,19 @@ private fun RotatingOverlay(horizonAngleDeg: Float?, cue: GuidanceCue?) {
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            text = "第 2 步 · 调整手机姿态",
+            text = "第 1 步 · 调整手机姿态",
             color = Color.White.copy(alpha = 0.72f),
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium
         )
         Spacer(modifier = Modifier.height(10.dp))
         Box(
-            modifier = Modifier.size(300.dp, 130.dp),
+            modifier = Modifier.size(300.dp, 146.dp),
             contentAlignment = Alignment.Center
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 drawRoundRect(
-                    color = Color.Black.copy(alpha = 0.16f),
+                    color = Color.Black.copy(alpha = 0.82f),
                     topLeft = Offset(0f, 0f),
                     size = Size(size.width, size.height),
                     cornerRadius = CornerRadius(26.dp.toPx(), 26.dp.toPx())
@@ -493,93 +572,103 @@ private fun RotatingOverlay(horizonAngleDeg: Float?, cue: GuidanceCue?) {
             when {
                 isPitch -> PitchGuide(cue)
                 isYaw -> YawGuide(cue)
-                else -> RollGuide(horizonAngleDeg ?: 0f)
+                else -> RollGuide(horizonAngleDeg)
             }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
-        Text(
-            text = title,
-            color = color,
-            fontSize = 17.sp,
-            fontWeight = FontWeight.Medium,
-            textAlign = TextAlign.Center
-        )
-        if (subtitle.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(4.dp))
+        Column(
+            modifier = Modifier.background(Color.Black.copy(alpha = 0.72f), RoundedCornerShape(12.dp))
+                .padding(horizontal = 12.dp, vertical = 7.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
             Text(
-                text = subtitle,
-                color = color.copy(alpha = 0.85f),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Normal,
+                text = title,
+                color = color,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center
             )
+            if (subtitle.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = subtitle,
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Normal,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun RollGuide(rollDeg: Float) {
-    val aligned = kotlin.math.abs(rollDeg) <= ROTATION_TOLERANCE_DEG
-    Image(
-        painter = painterResource(
-            if (aligned) com.example.aicamera.R.drawable.guidance_roll_aligned
-            else com.example.aicamera.R.drawable.guidance_roll_off
-        ),
-        contentDescription = if (aligned) "手机已水平" else "按箭头旋转手机",
-        modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 5.dp),
-        contentScale = ContentScale.Fit,
-        colorFilter = ColorFilter.tint(if (aligned) GuideAligned else BrandPink)
-    )
+private fun RollGuide(rollDeg: Float?) {
+    val aligned = rollDeg != null && kotlin.math.abs(rollDeg) <= ROTATION_TOLERANCE_DEG
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize()) {
+            val cy = size.height * 0.46f
+            val half = size.width * 0.32f
+            val angle = Math.toRadians((rollDeg ?: 0f).coerceIn(-20f, 20f).toDouble())
+            val dx = (half * kotlin.math.cos(angle)).toFloat()
+            val dy = (half * kotlin.math.sin(angle)).toFloat()
+            drawLine(Color.White.copy(alpha = 0.85f), Offset(size.width / 2f - half, cy),
+                Offset(size.width / 2f + half, cy), 3.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(10.dp.toPx(), 8.dp.toPx())))
+            drawLine(if (aligned) GuideAligned else BrandPink,
+                Offset(size.width / 2f - dx, cy - dy), Offset(size.width / 2f + dx, cy + dy),
+                4.dp.toPx(), StrokeCap.Round)
+        }
+        Text("白色虚线＝目标水平  ·  ${if (aligned) "绿线＝已对齐" else if (rollDeg == null) "正在读取水平角度" else "粉线＝当前角度"}",
+            color = Color.White.copy(alpha = 0.8f), fontSize = 10.sp,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 13.dp))
+    }
 }
 
 @Composable
 private fun PitchGuide(cue: GuidanceCue?) {
     val up = cue == GuidanceCue.PITCH_UP
-    Image(
-        painter = painterResource(
-            if (up) com.example.aicamera.R.drawable.guidance_pitch_ccw_misaligned
-            else com.example.aicamera.R.drawable.guidance_pitch_cw_misaligned
-        ),
-        contentDescription = if (up) "向上倾斜手机" else "向下倾斜手机",
-        modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 5.dp),
-        contentScale = ContentScale.Fit,
-        colorFilter = ColorFilter.tint(BrandPink)
-    )
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize()) {
+            val cx = size.width / 2f
+            val top = size.height * 0.24f
+            val bottom = size.height * 0.70f
+            drawLine(Color.White.copy(alpha = 0.85f), Offset(cx, top), Offset(cx, bottom),
+                3.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(10.dp.toPx(), 8.dp.toPx())))
+            val start = if (up) bottom else top
+            val end = if (up) top else bottom
+            drawLine(BrandPink, Offset(cx + 28.dp.toPx(), start), Offset(cx + 28.dp.toPx(), end),
+                4.dp.toPx(), StrokeCap.Round)
+            val sign = if (up) 1f else -1f
+            drawLine(BrandPink, Offset(cx + 28.dp.toPx(), end), Offset(cx + 18.dp.toPx(), end + sign * 12.dp.toPx()), 4.dp.toPx())
+            drawLine(BrandPink, Offset(cx + 28.dp.toPx(), end), Offset(cx + 38.dp.toPx(), end + sign * 12.dp.toPx()), 4.dp.toPx())
+        }
+        Text("白色虚线＝目标  ·  粉色箭头＝镜头移动方向", color = Color.White.copy(alpha = 0.8f),
+            fontSize = 10.sp, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 13.dp))
+    }
 }
 
 @Composable
 private fun YawGuide(cue: GuidanceCue?) {
     val left = cue == GuidanceCue.YAW_LEFT
-    val rotation = if (left) 0f else 180f
-    val color = BrandPink
-
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val cx = size.width / 2f
-            val cy = size.height / 2f
-            val len = size.width * 0.55f
-            val dashEffect = PathEffect.dashPathEffect(
-                floatArrayOf(14.dp.toPx(), 10.dp.toPx()), 0f
-            )
-            drawLine(
-                color = color.copy(alpha = 0.78f),
-                start = Offset(cx - len / 2f, cy),
-                end = Offset(cx + len / 2f, cy),
-                strokeWidth = 4.dp.toPx(),
-                cap = StrokeCap.Round,
-                pathEffect = dashEffect
-            )
+            val cy = size.height * 0.47f
+            val half = size.width * 0.30f
+            drawLine(Color.White.copy(alpha = 0.85f), Offset(cx - half, cy), Offset(cx + half, cy),
+                3.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(10.dp.toPx(), 8.dp.toPx())))
+            val start = if (left) cx + half * 0.65f else cx - half * 0.65f
+            val end = if (left) cx - half * 0.25f else cx + half * 0.25f
+            drawLine(BrandPink, Offset(start, cy - 18.dp.toPx()), Offset(end, cy - 18.dp.toPx()),
+                4.dp.toPx(), StrokeCap.Round)
+            val sign = if (left) 1f else -1f
+            drawLine(BrandPink, Offset(end, cy - 18.dp.toPx()), Offset(end + sign * 12.dp.toPx(), cy - 28.dp.toPx()), 4.dp.toPx())
+            drawLine(BrandPink, Offset(end, cy - 18.dp.toPx()), Offset(end + sign * 12.dp.toPx(), cy - 8.dp.toPx()), 4.dp.toPx())
         }
-        Image(
-            painter = painterResource(com.example.aicamera.R.drawable.guidance_roll_arrow),
-            contentDescription = null,
-            modifier = Modifier
-                .size(72.dp)
-                .rotate(rotation),
-            colorFilter = ColorFilter.tint(color),
-            contentScale = ContentScale.Fit
-        )
+        Text("沿粉色箭头转动手机  ·  无需移动身体", color = Color.White.copy(alpha = 0.8f),
+            fontSize = 10.sp, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 13.dp))
     }
 }
 

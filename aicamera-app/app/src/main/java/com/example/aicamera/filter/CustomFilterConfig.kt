@@ -23,15 +23,15 @@ data class CustomFilterConfig(
 ) {
     fun colorMatrix(): ColorMatrix {
         val exposureScale = Math.pow(2.0, exposure.toDouble()).toFloat()
-        val contrastScale = 1f + contrast / 100f + sharpness / 500f
+        val contrastScale = 1f + contrast / 100f
         val offset = (1f - contrastScale) * 127.5f
         val warm = temperature / 100f
         val magenta = tint / 100f
         val matrix = ColorMatrix().apply { setSaturation((1f + saturation / 100f).coerceIn(0f, 2f)) }
         matrix.postConcat(ColorMatrix(floatArrayOf(
-            exposureScale * contrastScale * (1f + red / 100f + warm * 0.12f), 0f, 0f, 0f, offset + shadows * 0.22f + highlights * 0.06f,
-            0f, exposureScale * contrastScale * (1f + green / 100f - magenta * 0.08f), 0f, 0f, offset + shadows * 0.22f + highlights * 0.06f,
-            0f, 0f, exposureScale * contrastScale * (1f + blue / 100f - warm * 0.12f), 0f, offset + shadows * 0.18f + highlights * 0.05f,
+            exposureScale * contrastScale * (1f + red / 100f + warm * 0.12f), 0f, 0f, 0f, offset,
+            0f, exposureScale * contrastScale * (1f + green / 100f - magenta * 0.08f), 0f, 0f, offset,
+            0f, 0f, exposureScale * contrastScale * (1f + blue / 100f - warm * 0.12f), 0f, offset,
             0f, 0f, 0f, 1f, 0f
         )))
         return matrix

@@ -12,7 +12,7 @@ data class SettingsState(
     val showTargetZone: Boolean = true,
     val showHorizon: Boolean = true,
     val overlayAlpha: Float = 1.0f,
-    val soundEnabled: Boolean = true,
+    val soundEnabled: Boolean = false,
     val saveOriginal: Boolean = true,
     val proModeEnabled: Boolean = false,
     /** 自动变焦开关（关闭时只提供构图引导，不改变用户焦段） */

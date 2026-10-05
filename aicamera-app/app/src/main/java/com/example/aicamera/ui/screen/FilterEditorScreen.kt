@@ -1,5 +1,7 @@
 package com.example.aicamera.ui.screen
 
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -11,16 +13,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.aicamera.R
 import com.example.aicamera.filter.CustomFilterConfig
+import com.example.aicamera.filter.BitmapFilterApplier
 import com.example.aicamera.ui.theme.BrandPink
+import kotlinx.coroutines.delay
 
 @Composable
 fun FilterEditorScreen(
@@ -29,18 +32,26 @@ fun FilterEditorScreen(
     onSave: (CustomFilterConfig) -> Unit
 ) {
     var config by remember(initial) { mutableStateOf(initial ?: CustomFilterConfig()) }
-    val previewFilter = remember(config) {
-        ColorFilter.colorMatrix(ColorMatrix(config.colorMatrix().array))
+    val context = LocalContext.current
+    val previewSource = remember(context) {
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeResource(context.resources, R.drawable.community_cafe_portrait, options)
+        var sample = 1
+        while (maxOf(options.outWidth, options.outHeight) / sample > 960) sample *= 2
+        BitmapFactory.decodeResource(context.resources, R.drawable.community_cafe_portrait,
+            BitmapFactory.Options().apply { inSampleSize = sample; inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888 })
+    }
+    var previewBitmap by remember { mutableStateOf(previewSource) }
+    LaunchedEffect(config, previewSource) {
+        delay(80)
+        if (previewSource != null) previewBitmap = BitmapFilterApplier.apply(previewSource, config)
     }
     Column(Modifier.fillMaxSize().background(Color(0xFF111116))) {
         Box(Modifier.fillMaxWidth().weight(0.42f)) {
-            androidx.compose.foundation.Image(
-                painter = painterResource(R.drawable.community_cafe_portrait),
-                contentDescription = "滤镜效果预览",
-                contentScale = ContentScale.Crop,
-                colorFilter = previewFilter,
-                modifier = Modifier.fillMaxSize()
-            )
+            previewBitmap?.let { bitmap ->
+                Image(bitmap = bitmap.asImageBitmap(), contentDescription = "滤镜效果预览",
+                    contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            }
             Row(
                 Modifier.fillMaxWidth().padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically

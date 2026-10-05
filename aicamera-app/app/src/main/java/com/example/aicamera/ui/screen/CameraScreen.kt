@@ -77,17 +77,13 @@ import com.example.aicamera.data.AuthRepository
 import com.example.aicamera.filter.PresetFilter
 import com.example.aicamera.filter.CustomFilterConfig
 import com.example.aicamera.guidance.AlignmentFlashOverlay
-import com.example.aicamera.guidance.ComposeGuidanceOverlay
 import com.example.aicamera.guidance.CompositionSessionController
 import com.example.aicamera.guidance.GuidanceCue
 import com.example.aicamera.guidance.GuidancePhase
-import com.example.aicamera.overlay.CompositionOverlayView
 import com.example.aicamera.ui.components.CaptureWorkflowOverlay
 import com.example.aicamera.ui.components.CaptureWorkflowState
 import com.example.aicamera.ui.components.CaptureResultSheet
 import com.example.aicamera.ui.components.FocusExposureOverlay
-import com.example.aicamera.overlay.model.GuideLineType
-import com.example.aicamera.overlay.model.RenderInput
 import com.example.aicamera.ui.components.CompactProPanel
 import com.example.aicamera.ui.state.SettingsState
 import com.example.aicamera.ui.theme.BrandPink
@@ -116,17 +112,13 @@ import kotlinx.coroutines.launch
  * ```
  * Box
  *   ├── PreviewView              (相机实时画面)
- *   ├── CompositionOverlayView   (AI 动态辅助线：目标区/主体框/水平仪/箭头 + 对焦圈)
- *   ├── ComposeGuidanceOverlay   (引导层：静态三分线 + 目标框 + 方向指令动画)
- *   ├── ProModePanel             (可选，Pro 手动控制)
+ *   ├── CaptureWorkflowOverlay  (Compose 三分线、主体框、目标区、水平与姿态引导)
+ *   ├── FocusExposureOverlay    (对焦框与曝光控制)
+ *   ├── CompactProPanel         (可选，Pro 手动控制)
  *   ├── TopBar / BottomBar / 步骤指示 / 引导文案 / 倒计时
  * ```
  *
- * ## 2026-07-31 改版
- * - 顶栏：相册 / 闪光灯 / 定时器 / 设置（去掉与底部 Tab 重复的分享、个人入口）
- * - 删除左上角调试参数 HUD（场景/引擎/帧/耗时）
- * - 分步引导：自动变焦 → 水平 → 主体，一屏只出一个指令
- * - 快门/变焦条按队友 GenWow 设计规范重绘
+ * 预览使用真机画面，工作流叠加层根据真实观测绘制；静态验收站只复现其 UI 状态。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -223,7 +215,6 @@ fun CameraScreen(
 
     // ── 相机初始化 ──
     var cameraInitialized by remember { mutableStateOf(false) }
-    var overlayView by remember { mutableStateOf<CompositionOverlayView?>(null) }
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     LaunchedEffect(configuration.orientation, uiState.cameraBindVersion) {
         delay(100)
@@ -268,22 +259,9 @@ fun CameraScreen(
         prevGuidancePhase = guidanceState.phase
     }
 
-    // ★ AI 推理结果 → 动态辅助线 overlay
-    LaunchedEffect(settings.showSubjectBox, settings.showTargetZone, settings.showHorizon) {
-        renderViewModel.renderInput.collect { input ->
-            overlayView?.update(input.filteredBy(settings), animate = true)
-        }
-    }
-
-    // 辅助线整体透明度（设置项）
-    LaunchedEffect(settings.overlayAlpha) {
-        overlayView?.alpha = settings.overlayAlpha
-    }
-
-    // 订阅 focusCircle → Overlay 绘制对焦圆圈 + 显示曝光条
+    // 订阅 focusCircle → Compose 对焦框及曝光条（旧 View 叠加层已卸载）
     LaunchedEffect(Unit) {
         cameraViewModel.focusCircle.collect { focusData ->
-            overlayView?.showFocusCircle(focusData.centerX, focusData.centerY)
             focusCenter = Offset(focusData.centerX, focusData.centerY)
             showExposureSlider = true
         }
@@ -807,6 +785,12 @@ fun CameraScreen(
                 horizonAngleDeg = horizonAngle,
                 subjectNx = subjectCenter?.first,
                 subjectNy = subjectCenter?.second,
+                showGrid = settings.showGrid,
+                showSubjectBox = settings.showSubjectBox,
+                showTargetZone = settings.showTargetZone,
+                showHorizon = settings.showHorizon,
+                overlayAlpha = settings.overlayAlpha,
+                guideLines = renderInput.guideLines,
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -1106,21 +1090,6 @@ private fun AiStatusChip(
             fontSize = 11.sp
         )
     }
-}
-
-/**
- * 按设置过滤辅助线（设置页的 主体框/目标区/水平仪 开关在这里生效）。
- */
-private fun RenderInput.filteredBy(s: SettingsState): RenderInput {
-    val filtered = guideLines.filter { line ->
-        when (line.type) {
-            GuideLineType.SUBJECT_BOX -> s.showSubjectBox
-            GuideLineType.TARGET_ZONE -> s.showTargetZone
-            GuideLineType.HORIZON_LEVEL -> s.showHorizon
-            else -> true
-        }
-    }
-    return copy(guideLines = filtered)
 }
 
 // ────────────────────────────────────────────────────────────────

@@ -111,7 +111,7 @@ fun SettingsScreen(
             )
             SettingsSwitchRow(
                 label = "显示三分线网格",
-                subtitle = "默认开启，用于静态参考",
+                subtitle = "按下快门后显示三分线参考",
                 checked = settings.showGrid,
                 onCheckedChange = { onSettingsChange(settings.copy(showGrid = it)) },
             )
