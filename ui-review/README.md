@@ -4,7 +4,9 @@
 
 ## 队友在线验收
 
-仓库 `main` 分支每次推送 `ui-review/`、Android 页面源码或预览使用的图片改动，GitHub Actions 会导出并部署静态验收站。固定入口：[https://chiiiiiiing.github.io/AI-camera/](https://chiiiiiiing.github.io/AI-camera/)。首次部署前，仓库管理员需在 **Settings → Pages → Build and deployment → Source** 选择 **GitHub Actions**。到 **Actions → Publish UI review** 检查是否发布成功。
+仓库 `main` 分支每次推送 `ui-review/`、Android 页面源码或预览使用的图片改动，GitHub Actions 会导出静态验收站并保存为 `ui-review-static` 构建产物。仓库目前为**私有**，Pages 尚未启用，因此固定入口 [https://chiiiiiiing.github.io/AI-camera/](https://chiiiiiiing.github.io/AI-camera/) **暂不可访问**。不能在未确认公开权限的情况下直接开放站点。
+
+若团队同意公开预览，且 GitHub 计划允许此仓库使用 Pages：仓库管理员在 **Settings → Pages → Build and deployment → Source** 选择 **GitHub Actions**；随后在 **Settings → Secrets and variables → Actions → Variables** 添加 `GENWOW_PAGES_ENABLED=true`，并在 **Actions → Publish UI review** 手动运行一次。之后每次推送将自动部署。即使仓库是私有的，Pages 站点也可能面向互联网公开，启用前请核对站点内的素材与源码链接是否适合公开。[GitHub Pages 发布源文档](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site)
 
 队友打开后可以复制具体页面/场景的链接。在线页面每 10 秒检查已部署版本，发现预览版本变化会自动刷新；这意味着更新须先提交并推送到 `main`，不是本机未提交文件的实时直播。Android 源码改变会提示预览可能过期，不会自动生成对应 HTML。GitHub Pages 公开可访问，不要放未公开的客户照片、账号或密钥。网页验收意见仍只在各自浏览器，需使用「导出全部验收意见」把 JSON 发回开发者。
 
@@ -13,6 +15,8 @@
 ## 启动
 
 在此目录执行 `node server.mjs`，或 PowerShell 执行 `./start.ps1`（隐藏窗口后台启动）。打开 http://127.0.0.1:4173 。默认仅监听本机。
+
+同一局域网内需要即时看**未推送的本地修改**时，在 PowerShell 运行 `$env:HOST='0.0.0.0'; node server.mjs`，队友用 `http://你的电脑局域网IP:4173/` 打开。若无法访问，检查 Windows 防火墙是否允许该端口；该方式需要你的电脑保持开机并运行服务，且会把预览及代码查看入口暴露给同一网络，请只在可信网络使用。默认启动仍只监听本机。
 
 端口被占用时，可设置 `$env:PORT='4174'; node server.mjs` 后打开对应端口。
 

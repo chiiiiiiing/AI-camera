@@ -56,5 +56,6 @@ export const server=http.createServer((req,resp)=>{
   } catch {resp.writeHead(404);resp.end('Not found');}
 });
 if(process.argv[1]===fileURLToPath(import.meta.url)){
-  server.listen(Number(process.env.PORT||4173),'127.0.0.1',()=>console.log('GenWow review: http://127.0.0.1:'+server.address().port));
+  const host=process.env.HOST||'127.0.0.1';
+  server.listen(Number(process.env.PORT||4173),host,()=>console.log('GenWow review: http://'+host+':'+server.address().port));
 }
