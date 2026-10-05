@@ -1499,6 +1499,12 @@ private fun FilterDock(
                     onClick = onEditCustom
                 )
             }
+            Text(
+                "实时取景仅显示基础色彩；高光、阴影、锐化、暗角在成片中完整应用。",
+                color = Color.White.copy(alpha = 0.78f),
+                fontSize = 10.sp,
+                modifier = Modifier.padding(top = 6.dp, start = 2.dp, end = 2.dp)
+            )
         }
         Spacer(Modifier.height(8.dp))
         Surface(

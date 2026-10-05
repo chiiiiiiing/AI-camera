@@ -58,9 +58,11 @@ try{
  await tab.waitForURL('**/filters.html');
  assert.ok((await tab.locator('.filterstrip').innerText()).includes('验收滤镜'));
  await tab.waitForFunction(()=>document.querySelector('.preview img')?.src.startsWith('data:image/png'));
+ const liveFilterPreview=await tab.locator('.preview img').getAttribute('src');
  assert.ok((await tab.locator('[data-custom-cover]').first().getAttribute('src')).startsWith('data:image/png'),'saved custom filter cover must render');
  await tab.goto(base+'/capture-result.html');
  await tab.waitForFunction(()=>document.querySelector('[data-custom-output]')?.src.startsWith('data:image/png'));
+ assert.notEqual(await tab.locator('[data-custom-output]').getAttribute('src'),liveFilterPreview,'full-quality saved result must include vignette absent from live preview');
  await tab.goto(base+'/login.html');
  await tab.locator('[data-action="auth-mode"]').click();
  assert.equal(await tab.locator('[name="code"]').count(),1,'login mode toggle must not submit form');

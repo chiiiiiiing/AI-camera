@@ -109,7 +109,7 @@ function camera(){
  (guidance.includes(state)?'<div class="progress" data-layer="工作流进度"><div class="dots">● ━ ● ━ ●</div>分析 · 调整 · 拍摄</div><div class="guide '+(aligned?'good':'')+'" data-layer="旋转俯仰移动引导">'+art+'<h3>'+hints[state][0]+'</h3><p>'+hints[state][1]+'</p></div>':'<div class="ai" data-layer="引擎状态提示">● AI 已就绪 · 预览模拟</div>')+
  (state==='对焦曝光'?'<div class="focusbox" data-layer="对焦与曝光"><input aria-label="曝光补偿" type="range" min="-2" max="2" step=".1" value="0" data-ev><output>0 EV</output></div>':'')+
  (state==='超时提示'?btn('按当前画面立即拍摄','capture','take-now'):'')+
- (proOpen?proPanel():'<div class="filterdock" data-layer="滤镜组件">'+(expanded?filterStrip():'')+btn('◉ '+(activeCustom?escape(activeCustom.name):filters[filter])+' · 滤镜','filters')+'</div>')+
+ (proOpen?proPanel():'<div class="filterdock" data-layer="滤镜组件">'+(expanded?filterStrip()+'<small class="filter-hint">实时取景仅显示基础色彩；高光、阴影、锐化、暗角在成片中完整应用。</small>':'')+btn('◉ '+(activeCustom?escape(activeCustom.name):filters[filter])+' · 滤镜','filters')+'</div>')+
  '<div class="camtools" data-layer="快门相册翻转变焦"><div class="capture-row">'+btn(captured?'<img alt="最新照片" src="'+image()+'">':'','gallery','thumb')+btn('','shutter','shutter')+icon('flip','flip','切换前后摄像头')+'</div><div class="zoom"><label><output id="zoom-value">'+zoom.toFixed(1)+'×</output><input aria-label="变焦倍率" id="zoom" type="range" min="1" max="3" step=".1" value="'+zoom+'"></label>'+btn('PRO','pro','probutton')+'</div></div>'+nav('camera')+'</div>';
 }
 function filterStrip(){return '<div class="filterstrip">'+filters.map((f,i)=>btn('<img src="'+image()+'" style="filter:'+effects[i]+'" alt="'+f+'封面">'+f,'filter:'+i,!data.activeCustomId&&i===filter?'selected':'')).join('')+route('<img src="'+image()+'" alt="自定义滤镜">＋ 自定义','filter-editor')+(data.filters||[]).map(f=>btn('<img src="'+image()+'" data-custom-cover="'+escape(f.id||f.name)+'" alt="'+escape(f.name)+'封面">'+escape(f.name),'custom-filter:'+(f.id||f.name),data.activeCustomId===(f.id||f.name)?'selected':'')).join('')+'</div>'}
@@ -195,11 +195,18 @@ function renderStoredCustomPreview(){
   ctx.drawImage(photo,(photo.width-sw)/2,(photo.height-sh)/2,sw,sh,0,0,canvas.width,canvas.height);
   const original=ctx.getImageData(0,0,canvas.width,canvas.height);
   for(const f of (data.filters||[]).filter(f=>covers.some(c=>c.dataset.customCover===(f.id||f.name)))){
-   processCustomPixels(canvas,original,f.params||{});
+   processCustomPixels(canvas,original,f.params||{},true);
    const url=canvas.toDataURL('image/png');
    document.querySelectorAll('[data-custom-cover="'+CSS.escape(f.id||f.name)+'"]').forEach(c=>c.src=url);
   }
-  if(selected){processCustomPixels(canvas,original,selected.params||{});const url=canvas.toDataURL('image/png');const preview=$('.preview img');if(preview)preview.src=url;document.querySelectorAll('[data-custom-output]').forEach(img=>img.src=url)}
+  if(selected){
+   processCustomPixels(canvas,original,selected.params||{},true);
+   const preview=$('.preview img');if(preview)preview.src=canvas.toDataURL('image/png');
+   if(document.querySelector('[data-custom-output]')){
+    processCustomPixels(canvas,original,selected.params||{});
+    document.querySelectorAll('[data-custom-output]').forEach(img=>img.src=canvas.toDataURL('image/png'));
+   }
+  }
  };photo.src=image();
 }
 function renderEditorPreview(){
@@ -207,7 +214,7 @@ function renderEditorPreview(){
  const p=Object.fromEntries([...document.querySelectorAll('[data-adjust]')].map(el=>[el.dataset.adjust,Number(el.value)]));
  processCustomPixels(canvas,editorOriginal,p);
 }
-function processCustomPixels(canvas,editorOriginal,p){
+function processCustomPixels(canvas,editorOriginal,p,liveOnly=false){
  const get=name=>Number(p[name]||0);
  const w=canvas.width,h=canvas.height,source=editorOriginal.data,toned=new Uint8ClampedArray(source.length);
  const exposure=Math.pow(2,get('曝光')),contrast=1+get('对比度')/100,saturation=Math.max(0,1+get('饱和度')/100);
@@ -226,10 +233,10 @@ function processCustomPixels(canvas,editorOriginal,p){
   const i=(y*w+x)*4,left=(y*w+Math.max(0,x-1))*4,right=(y*w+Math.min(w-1,x+1))*4;
   const up=(Math.max(0,y-1)*w+x)*4,down=(Math.min(h-1,y+1)*w+x)*4;
   const light=(toned[i]*.2126+toned[i+1]*.7152+toned[i+2]*.0722)/255;
-  const delta=get('阴影')*.85*(1-light)**2+get('高光')*.85*light**2;
+  const delta=liveOnly?0:get('阴影')*.85*(1-light)**2+get('高光')*.85*light**2;
   const edge=Math.max(0,Math.min(1,(Math.hypot(x-cx,y-cy)/maxRadius-.45)/.55));
-  const falloff=1-vignette*edge*edge;
-  for(let c=0;c<3;c++)pixels[i+c]=(toned[i+c]+sharpness*(4*toned[i+c]-toned[left+c]-toned[right+c]-toned[up+c]-toned[down+c])+delta)*falloff;
+  const falloff=liveOnly?1:1-vignette*edge*edge;
+  for(let c=0;c<3;c++)pixels[i+c]=(toned[i+c]+(liveOnly?0:sharpness*(4*toned[i+c]-toned[left+c]-toned[right+c]-toned[up+c]))+delta)*falloff;
   pixels[i+3]=toned[i+3];
  }
  canvas.getContext('2d').putImageData(output,0,0);
