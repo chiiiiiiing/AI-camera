@@ -1,0 +1,39 @@
+name: Publish UI review
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ui-review/**'
+      - 'aicamera-app/app/src/main/res/drawable-nodpi/**'
+      - 'aicamera-app/app/src/main/java/**'
+      - '.github/workflows/ui-review-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: ui-review-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node ui-review/export.mjs
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ui-review/dist
+      - id: deployment
+        uses: actions/deploy-pages@v4
