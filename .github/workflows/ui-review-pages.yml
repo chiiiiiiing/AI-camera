@@ -22,12 +22,28 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      pages_enabled: ${{ steps.pages.outputs.enabled }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - run: node ui-review/export.mjs
+      - id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          status=$(curl --silent --show-error --location --output /dev/null --write-out '%{http_code}' \
+            --header 'Accept: application/vnd.github+json' \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/pages")
+          if [ "$status" = 200 ]; then
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          else
+            echo "Pages not enabled (HTTP $status); static artifact will still be uploaded."
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: ui-review-static
@@ -35,7 +51,7 @@ jobs:
           include-hidden-files: true
 
   deploy:
-    if: ${{ vars.GENWOW_PAGES_ENABLED == 'true' }}
+    if: ${{ needs.build.outputs.pages_enabled == 'true' }}
     needs: build
     runs-on: ubuntu-latest
     environment:

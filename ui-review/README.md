@@ -6,7 +6,7 @@
 
 仓库 `main` 分支每次推送 `ui-review/`、Android 页面源码或预览使用的图片改动，GitHub Actions 会导出静态验收站并保存为 `ui-review-static` 构建产物。仓库目前为**私有**，Pages 尚未启用，因此固定入口 [https://chiiiiiiing.github.io/AI-camera/](https://chiiiiiiing.github.io/AI-camera/) **暂不可访问**。不能在未确认公开权限的情况下直接开放站点。
 
-若团队同意公开预览，且 GitHub 计划允许此仓库使用 Pages：仓库管理员在 **Settings → Pages → Build and deployment → Source** 选择 **GitHub Actions**；随后在 **Settings → Secrets and variables → Actions → Variables** 添加 `GENWOW_PAGES_ENABLED=true`，并在 **Actions → Publish UI review** 手动运行一次。之后每次推送将自动部署。即使仓库是私有的，Pages 站点也可能面向互联网公开，启用前请核对站点内的素材与源码链接是否适合公开。[GitHub Pages 发布源文档](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site)
+若团队同意公开预览，且 GitHub 计划允许此仓库使用 Pages：仓库管理员 `chiiiiiiing` 在 **Settings → Pages → Build and deployment → Source** 选择 **GitHub Actions**；随后在 **Actions → Publish UI review** 手动运行一次。之后每次推送将自动部署，无须再设置 Actions 变量。当前连接的 `pengjinrui278` 账号只有写入权限，无法完成这项仓库管理设置。即使仓库是私有的，Pages 站点也可能面向互联网公开，启用前请核对站点内的素材与源码链接是否适合公开。[GitHub Pages 发布源文档](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site)
 
 队友打开后可以复制具体页面/场景的链接。在线页面每 10 秒检查已部署版本，发现预览版本变化会自动刷新；这意味着更新须先提交并推送到 `main`，不是本机未提交文件的实时直播。Android 源码改变会提示预览可能过期，不会自动生成对应 HTML。GitHub Pages 公开可访问，不要放未公开的客户照片、账号或密钥。网页验收意见仍只在各自浏览器，需使用「导出全部验收意见」把 JSON 发回开发者。
 
