@@ -4,21 +4,17 @@
 
 ## 队友在线验收
 
-### 推荐：Vercel 固定网址
+### 已上线：固定网址
 
-仓库根目录的 `vercel.json` 已配置 `node ui-review/export.mjs` 构建及 `ui-review/dist` 输出；部署后入口是 Vercel 分配的固定项目域名（例如 `https://项目名.vercel.app/`），23 个独立页面在域名根路径下可直接打开。连接 Git 仓库后，`main` 的后续推送会自动部署到同一个生产域名；网页每 10 秒检查部署版本，必要时自动刷新。
+静态预览已发布到独立公开仓库 [pengjinrui278/genwow-ui-review](https://github.com/pengjinrui278/genwow-ui-review)，固定网址：[https://pengjinrui278.github.io/genwow-ui-review/](https://pengjinrui278.github.io/genwow-ui-review/)。它只包含导出的 23 个页面及图片，不包含 Android 工程、模型或本地账号数据。
 
-首次连接需仓库所有者 `chiiiiiiing` 登录 Vercel：**Add New → Project → Import Git Repository → AI-camera**，授权 Vercel GitHub App 访问该私有仓库；Root Directory 保持仓库根目录，Build Command 和 Output Directory 使用 `vercel.json` 的值，然后部署。Vercel 官方说明：个人账号名下私有仓库不能由协作者创建 Git 集成项目，需要仓库所有者连接。[Vercel GitHub 集成说明](https://vercel.com/docs/git/vercel-for-github)
+在原 AI-camera 仓库执行 `./ui-review/publish.ps1`，脚本会验证目标仓库、快进更新、导出静态页面并推送到独立仓库；GitHub Pages 随后更新。原工程的普通 `git push` **不会自动跨仓库同步**。若要每次推送原工程后全自动同步，还需配置最小权限的跨仓库凭据。
 
-此静态预览公开与否取决于 Vercel 项目访问设置；不要上传密钥、未公开的客户照片或真实账号数据。网页的点赞、评论及验收意见仍只在访问者浏览器中，**不会自动同步给队友**。
+### 可选：Vercel
 
-### 备选：GitHub Pages
+独立仓库根目录已有 `vercel.json`。仓库所有者 `pengjinrui278` 可以在 Vercel **Add New → Project → Import Git Repository → genwow-ui-review**；Framework Preset 选 **Other**，Root Directory 保持根目录，无需 Build Command，输出目录为 `.`。完成首次部署后会得到另一个固定网址，未来独立仓库 `main` 的推送会自动更新。[Vercel GitHub 集成说明](https://vercel.com/docs/git/vercel-for-github)
 
-仓库 `main` 分支每次推送 `ui-review/`、Android 页面源码或预览使用的图片改动，GitHub Actions 会导出静态验收站并保存为 `ui-review-static` 构建产物。仓库目前为**私有**，Pages 尚未启用，因此固定入口 [https://chiiiiiiing.github.io/AI-camera/](https://chiiiiiiing.github.io/AI-camera/) **暂不可访问**。不能在未确认公开权限的情况下直接开放站点。
-
-若团队同意公开预览，且 GitHub 计划允许此仓库使用 Pages：仓库管理员 `chiiiiiiing` 在 **Settings → Pages → Build and deployment → Source** 选择 **GitHub Actions**；随后在 **Actions → Publish UI review** 手动运行一次。之后每次推送将自动部署，无须再设置 Actions 变量。当前连接的 `pengjinrui278` 账号只有写入权限，无法完成这项仓库管理设置。即使仓库是私有的，Pages 站点也可能面向互联网公开，启用前请核对站点内的素材与源码链接是否适合公开。[GitHub Pages 发布源文档](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site)
-
-队友打开后可以复制具体页面/场景的链接。在线页面每 10 秒检查已部署版本，发现预览版本变化会自动刷新；这意味着更新须先提交并推送到 `main`，不是本机未提交文件的实时直播。Android 源码改变会提示预览可能过期，不会自动生成对应 HTML。GitHub Pages 公开可访问，不要放未公开的客户照片、账号或密钥。网页验收意见仍只在各自浏览器，需使用「导出全部验收意见」把 JSON 发回开发者。
+在线页面每 10 秒检查已部署版本并在变化时刷新；本机未导出、未推送的修改不会出现在固定网址。Android 源码改变会提示预览可能过期，不会自动转换成 HTML。网页的点赞、评论和验收意见只在各自浏览器中，**不会自动同步给队友**；需使用「导出全部验收意见」交回开发者。
 
 本地验证静态站：运行 `node export.mjs`，产物在忽略提交的 `dist/` 目录。`index.html` 与 23 个独立页面都会被导出，供 CI 发布。
 
