@@ -28,7 +28,7 @@ export const pages=[
 const $=s=>document.querySelector(s);
 const siteBase=new URL('.',import.meta.url).pathname.replace(/\/$/,'');
 const site=path=>siteBase+path;
-const published=siteBase!=='';
+const published=document.querySelector('meta[name="review-deployment"]')?.content==='static';
 const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function read(key,fallback){try{return JSON.parse(localStorage.getItem(key))??fallback}catch{return fallback}}
 const initial={likes:[],favorites:[],following:[],comments:[],posts:[],name:'摄影师',bio:'用 AI 构图，记录每一帧美好',avatar:'',settings:{},filters:[]};

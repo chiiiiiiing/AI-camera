@@ -17,6 +17,7 @@ function digest(paths){const hash=createHash('sha256');for(const path of paths.s
 const web=digest(['index.html','app.js','style.css'].map(name=>resolve(root,name)));
 const android=digest(files(sourceRoot).filter(path=>path.endsWith('.kt')));
 const html=readFileSync(resolve(root,'index.html'),'utf8')
+ .replace('<head>','<head><meta name="review-deployment" content="static">')
  .replace('./style.css','./style.css?v='+web)
  .replace('./app.js','./app.js?v='+web);
 mkdirSync(resolve(out,'assets'),{recursive:true});

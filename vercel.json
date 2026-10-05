@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "node ui-review/export.mjs",
+  "outputDirectory": "ui-review/dist",
+  "headers": [
+    {
+      "source": "/review-version.json",
+      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+    }
+  ]
+}
