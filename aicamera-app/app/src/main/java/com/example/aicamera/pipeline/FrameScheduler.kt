@@ -36,11 +36,16 @@ class FrameScheduler {
     private val droppedFrames = AtomicLong(0)
     private val processedFrames = AtomicLong(0)
 
+    /** Increments across pause/resume so completed old frames cannot update a new camera session. */
+    private val sessionGeneration = AtomicLong(0)
+
     /** ★ 统计队列锁：推理线程写、主线程读，旧代码无同步存在并发风险 */
     private val statsLock = Any()
     private val recentPipelineTimes = ArrayDeque<Long>(20)
     private val recentPreprocessTimes = ArrayDeque<Long>(20)
     private val recentInferenceTimes = ArrayDeque<Long>(20)
+    private val recentCompletionTimes = ArrayDeque<Long>(20)
+    private val recentModelCompletionTimes = ArrayDeque<Long>(20)
 
     fun schedule(
         imageProxy: ImageProxy,
@@ -65,13 +70,14 @@ class FrameScheduler {
 
         val frameIdx = processedFrames.incrementAndGet()
         val rotation = imageProxy.imageInfo.rotationDegrees
+        val frameGeneration = sessionGeneration.get()
 
         // ★ 修复竞态：release() 与帧到达并发时 execute() 会抛
         //   RejectedExecutionException——旧代码此处异常会导致 processing 门闩
         //   永久卡死 + ImageProxy 泄漏。
         try {
             inferenceExecutor.execute {
-                runPipeline(imageProxy, frameIdx, rotation, onProcess, onComplete)
+                runPipeline(imageProxy, frameIdx, rotation, frameGeneration, onProcess, onComplete)
             }
         } catch (e: java.util.concurrent.RejectedExecutionException) {
             logError("推理线程池已关闭，丢弃帧", e)
@@ -86,29 +92,33 @@ class FrameScheduler {
         imageProxy: ImageProxy,
         frameIdx: Long,
         rotation: Int,
+        frameGeneration: Long,
         onProcess: (ImageProxy) -> PipelineResult,
         onComplete: (PipelineResult) -> Unit
     ) {
         val startTime = SystemClock.elapsedRealtime()
 
         try {
+            if (!isCurrentSession(frameGeneration)) return
             val result = onProcess(imageProxy)
             val totalMs = SystemClock.elapsedRealtime() - startTime
 
             val finalResult = result.copy(
                 frameIndex = frameIdx,
-                timing = result.timing.copy(totalMs = totalMs)
+                timing = result.timing.copy(frameIndex = frameIdx, totalMs = totalMs)
             )
 
-            recordTiming(finalResult.timing)
+            if (!isCurrentSession(frameGeneration)) return
+            recordTiming(finalResult.timing, SystemClock.elapsedRealtime())
 
             mainHandler.post {
-                onComplete(finalResult)
+                if (isCurrentSession(frameGeneration)) onComplete(finalResult)
             }
         } catch (e: Exception) {
             logError("管线处理异常", e)
             val totalMs = SystemClock.elapsedRealtime() - startTime
             mainHandler.post {
+                if (!isCurrentSession(frameGeneration)) return@post
                 onComplete(
                     PipelineResult(
                         frameIndex = frameIdx,
@@ -142,6 +152,7 @@ class FrameScheduler {
     fun start() {
         // ★ 确保线程池可用（release 后可复用）
         ensureExecutor()
+        sessionGeneration.incrementAndGet()
         isRunning = true
         resetStats()
         logInfo("帧处理管线已启动")
@@ -149,6 +160,7 @@ class FrameScheduler {
 
     fun stop() {
         isRunning = false
+        sessionGeneration.incrementAndGet()
         logInfo("帧处理管线已停止: processed=${processedFrames.get()}, dropped=${droppedFrames.get()}")
     }
 
@@ -165,10 +177,15 @@ class FrameScheduler {
 
         // ★ 在锁内取快照，避免与推理线程的 recordTiming 并发
         val snapshot = synchronized(statsLock) {
-            Triple(
-                recentPreprocessTimes.averageOrZero() to recentInferenceTimes.averageOrZero(),
-                recentPipelineTimes.averageOrZero(),
-                recentPipelineTimes.lastOrNull() ?: 0L
+            TimingSnapshot(
+                averagePreprocessMs = recentPreprocessTimes.averageOrZero(),
+                averageInferenceMs = recentInferenceTimes.averageOrZero(),
+                averagePipelineMs = recentPipelineTimes.averageOrZero(),
+                lastPipelineMs = recentPipelineTimes.lastOrNull() ?: 0L,
+                effectiveFps = effectiveFpsFromCompletionTimes(recentCompletionTimes),
+                modelFps = effectiveFpsFromCompletionTimes(recentModelCompletionTimes),
+                inferenceP50Ms = latencyPercentile(recentInferenceTimes, 0.5),
+                inferenceP90Ms = latencyPercentile(recentInferenceTimes, 0.9)
             )
         }
 
@@ -176,31 +193,41 @@ class FrameScheduler {
             totalFrames = total,
             droppedFrames = dropped,
             processedFrames = processed,
-            avgPreprocessMs = snapshot.first.first,
-            avgInferenceMs = snapshot.first.second,
-            avgPipelineMs = snapshot.second,
-            lastPipelineMs = snapshot.third,
+            avgPreprocessMs = snapshot.averagePreprocessMs,
+            avgInferenceMs = snapshot.averageInferenceMs,
+            avgPipelineMs = snapshot.averagePipelineMs,
+            lastPipelineMs = snapshot.lastPipelineMs,
             isProcessing = processing.get(),
             isRunning = isRunning,
             inferenceType = "pipeline",
             // ★ 新增统计
             dropRate = if (total > 0) dropped.toFloat() / total else 0f,
-            effectiveFps = 0f // 后续由外部计算
+            effectiveFps = if (isRunning) snapshot.effectiveFps else 0f,
+            modelFps = if (isRunning) snapshot.modelFps else 0f,
+            inferenceP50Ms = snapshot.inferenceP50Ms,
+            inferenceP90Ms = snapshot.inferenceP90Ms
         )
     }
 
     fun getExecutor(): ExecutorService = inferenceExecutor
 
-    private fun recordTiming(timing: FrameTiming) {
+    private fun recordTiming(timing: FrameTiming, completionTimeMs: Long) {
         synchronized(statsLock) {
-            recentPreprocessTimes.addLast(timing.preprocessMs)
-            if (recentPreprocessTimes.size > 20) recentPreprocessTimes.removeFirst()
-
-            recentInferenceTimes.addLast(timing.inferenceMs)
-            if (recentInferenceTimes.size > 20) recentInferenceTimes.removeFirst()
+            // Cached model outputs are cheap geometry frames, not zero-latency inferences.
+            if (timing.modelSampled) {
+                recentPreprocessTimes.addLast(timing.preprocessMs)
+                if (recentPreprocessTimes.size > 20) recentPreprocessTimes.removeFirst()
+                recentInferenceTimes.addLast(timing.inferenceMs)
+                if (recentInferenceTimes.size > 20) recentInferenceTimes.removeFirst()
+                recentModelCompletionTimes.addLast(completionTimeMs)
+                if (recentModelCompletionTimes.size > 20) recentModelCompletionTimes.removeFirst()
+            }
 
             recentPipelineTimes.addLast(timing.totalMs)
             if (recentPipelineTimes.size > 20) recentPipelineTimes.removeFirst()
+
+            recentCompletionTimes.addLast(completionTimeMs)
+            if (recentCompletionTimes.size > 20) recentCompletionTimes.removeFirst()
         }
     }
 
@@ -212,6 +239,8 @@ class FrameScheduler {
             recentPipelineTimes.clear()
             recentPreprocessTimes.clear()
             recentInferenceTimes.clear()
+            recentCompletionTimes.clear()
+            recentModelCompletionTimes.clear()
         }
     }
 
@@ -221,11 +250,44 @@ class FrameScheduler {
             inferenceExecutor = Executors.newSingleThreadExecutor()
         }
     }
+
+    private fun isCurrentSession(frameGeneration: Long): Boolean =
+        isRunning && sessionGeneration.get() == frameGeneration
+
+    private data class TimingSnapshot(
+        val averagePreprocessMs: Float,
+        val averageInferenceMs: Float,
+        val averagePipelineMs: Float,
+        val lastPipelineMs: Long,
+        val effectiveFps: Float,
+        val modelFps: Float,
+        val inferenceP50Ms: Long,
+        val inferenceP90Ms: Long
+    )
 }
 
 private fun ArrayDeque<Long>.averageOrZero(): Float {
     if (isEmpty()) return 0f
     return map { it.toFloat() }.average().toFloat()
+}
+
+/** Pure timestamp-window calculation, usable by JVM tests and the runtime performance HUD. */
+internal fun effectiveFpsFromCompletionTimes(completionTimesMs: Collection<Long>): Float {
+    if (completionTimesMs.size < 2) return 0f
+    val first = completionTimesMs.first()
+    val last = completionTimesMs.last()
+    val elapsedMs = last - first
+    if (elapsedMs <= 0L) return 0f
+    return (((completionTimesMs.size - 1) * 1_000.0) / elapsedMs).toFloat()
+        .takeIf { it.isFinite() && it >= 0f } ?: 0f
+}
+
+/** Nearest-rank percentile over the rolling sample window. */
+internal fun latencyPercentile(samplesMs: Collection<Long>, fraction: Double): Long {
+    require(fraction > 0.0 && fraction <= 1.0)
+    if (samplesMs.isEmpty()) return 0
+    val sorted = samplesMs.sorted()
+    return sorted[kotlin.math.ceil(sorted.size * fraction).toInt() - 1]
 }
 
 private fun logInfo(msg: String) = Log.i(CameraConfig.TAG, "[Scheduler] $msg")

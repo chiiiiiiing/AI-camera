@@ -79,4 +79,18 @@ class V9TemplateIndexSliceTest {
             V9TemplateIndex.sliceEmbedding(flatEmbeddings(), -1, dim)
         }
     }
+
+    @Test
+    fun `non positive dimension throws`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            V9TemplateIndex.sliceEmbedding(floatArrayOf(), 0, 0)
+        }
+    }
+
+    @Test
+    fun `row multiplication overflow is rejected before slicing`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            V9TemplateIndex.sliceEmbedding(floatArrayOf(1f, 2f), Int.MAX_VALUE, 2)
+        }
+    }
 }

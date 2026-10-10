@@ -193,6 +193,15 @@ class CompositionSessionController {
             }
         }
 
+        // A fallback result has no verified recommendation. Sensor alignment alone must
+        // not preserve Ready or allow an automatic capture after model failure.
+        if (!obs.modelConfidence.isFinite() || obs.modelConfidence <= 0f) {
+            resetCounters(resetFrameSequence = false)
+            _state.value = State.Adjusting(GuidanceAction.HoldStill, progress = 0f)
+            _action.value = GuidanceAction.HoldStill
+            return
+        }
+
         val action = computeAction(obs)
 
         when (currentState) {
@@ -288,6 +297,14 @@ class CompositionSessionController {
             }
         }
 
+        // A portrait template needs a live subject. Level sensors cannot substitute
+        // for detection, and reacquisition must build fresh position stability.
+        if (obs.expectsSubject && !obs.hasRealSubject) {
+            positionGoodFrames = 0
+            positionBadFrames = 0
+            return GuidanceAction.HoldStill
+        }
+
         // 5. 位置检查（仅在有真实主体 + 模板期望主体时生效）
         if (obs.hasRealSubject && obs.expectsSubject &&
             obs.subjectCx != null && obs.subjectCy != null &&
@@ -319,8 +336,8 @@ class CompositionSessionController {
             }
         }
 
-        // 4. 如果没有真实主体/模板不要主体 → 水平达标即 Ready
-        if (levelStable && (!obs.expectsSubject || !obs.hasRealSubject)) {
+        // A template that does not require a subject can verify using orientation alone.
+        if (levelStable && !obs.expectsSubject) {
             return GuidanceAction.Ready
         }
 
@@ -374,13 +391,13 @@ class CompositionSessionController {
         return if (weight > 0f) (score / weight).coerceIn(0f, 1f) else 0f
     }
 
-    private fun resetCounters() {
+    private fun resetCounters(resetFrameSequence: Boolean = true) {
         levelGoodFrames = 0
         levelBadFrames = 0
         positionGoodFrames = 0
         positionBadFrames = 0
         verifyingStartMs = 0L
-        lastAppliedFrameId = -1
+        if (resetFrameSequence) lastAppliedFrameId = -1
         yawTargetDeg = null
     }
 

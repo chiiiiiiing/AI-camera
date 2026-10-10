@@ -1,8 +1,6 @@
 package com.example.aicamera.pipeline
 
-import android.content.Context
 import android.util.Log
-import com.example.aicamera.camera.CameraConfig
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.File
@@ -10,7 +8,6 @@ import java.io.FileInputStream
 import java.io.InputStreamReader
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.nio.FloatBuffer
 
 /**
  * V9 模板索引 — 加载 728 条模板 embedding + metadata，执行检索和规则重排。
@@ -101,7 +98,11 @@ class V9TemplateIndex(
 
         for (i in 0 until count) {
             val embedding = sliceEmbedding(temp, i, dim)
-            embeddings.add(embedding)
+            if (!V9EmbeddingRuntime.isUsableEmbedding(embedding)) {
+                throw IllegalStateException("第 $i 条 template embedding 非法")
+            }
+            // Normalize once at load, keeping per-frame retrieval a dot-product scan.
+            embeddings.add(V9EmbeddingRuntime.l2Normalize(embedding))
         }
         Log.d(TAG, "从 ${file.name} 加载 ${embeddings.size} 条 embedding")
     }
@@ -153,7 +154,7 @@ class V9TemplateIndex(
                         timeOfDay = lighting?.optString("time_of_day", "unknown") ?: "unknown"
                     )
                 } catch (e: Exception) {
-                    Log.w(TAG, "解析 metadata 行失败: ${e.message}")
+                    throw IllegalArgumentException("metadata 行非法: ${e.message}", e)
                 }
             }
         }
@@ -170,13 +171,14 @@ class V9TemplateIndex(
      * @return 按 cosine similarity 降序排列的候选列表
      */
     fun search(query: FloatArray, topK: Int = 8): List<SearchHit> {
-        if (topK <= 0 || embeddings.isEmpty()) {
+        if (topK <= 0 || embeddings.isEmpty() || !V9EmbeddingRuntime.isUsableEmbedding(query)) {
             return emptyList()
         }
 
+        val normalizedQuery = V9EmbeddingRuntime.l2Normalize(query.copyOf())
         val best = ArrayList<ScoredIndex>(minOf(topK, embeddings.size))
         for (i in embeddings.indices) {
-            val score = V9EmbeddingRuntime.cosineSimilarity(query, embeddings[i])
+            val score = V9EmbeddingRuntime.cosineSimilarity(normalizedQuery, embeddings[i]).coerceIn(-1f, 1f)
             if (!score.isFinite()) continue
             insertTopHit(best, ScoredIndex(i, score), topK)
         }
@@ -276,12 +278,12 @@ class V9TemplateIndex(
         fun sliceEmbedding(flat: FloatArray, row: Int, dim: Int): FloatArray {
             require(row >= 0) { "row 必须 >= 0，当前 $row" }
             require(dim > 0) { "dim 必须 > 0，当前 $dim" }
-            val start = row * dim
+            val start = row.toLong() * dim
             val end = start + dim
-            require(end <= flat.size) {
+            require(end <= flat.size.toLong()) {
                 "第 $row 条 embedding 越界: [$start, $end)，总长度 ${flat.size}"
             }
-            return flat.copyOfRange(start, end)
+            return flat.copyOfRange(start.toInt(), end.toInt())
         }
 
         /** Validates and extracts the producer-authored embedding order from templates.keys.json. */
@@ -298,12 +300,13 @@ class V9TemplateIndex(
                 "templates.keys.json count=$expectedCount, items=${items.length()}"
             }
             val ids = ArrayList<String>(items.length())
+            val seenIds = HashSet<String>(items.length())
             for (index in 0 until items.length()) {
                 val item = items.optJSONObject(index)
                     ?: throw IllegalArgumentException("templates.keys.json items[$index] 非对象")
                 val id = item.optString("template_id", item.optString("photo_id", "")).trim()
                 require(id.isNotEmpty()) { "templates.keys.json items[$index] 缺少 template_id" }
-                require(id !in ids) { "templates.keys.json template_id 重复: $id" }
+                require(seenIds.add(id)) { "templates.keys.json template_id 重复: $id" }
                 ids.add(id)
             }
             return ids

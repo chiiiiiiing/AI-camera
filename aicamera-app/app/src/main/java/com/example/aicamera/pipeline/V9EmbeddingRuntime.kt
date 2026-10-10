@@ -3,10 +3,11 @@ package com.example.aicamera.pipeline
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
+import ai.onnxruntime.OnnxJavaType
+import ai.onnxruntime.TensorInfo
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.util.Log
-import com.example.aicamera.camera.CameraConfig
 import java.io.Closeable
 import java.nio.FloatBuffer
 
@@ -40,10 +41,12 @@ class V9EmbeddingRuntime(
     val outputName: String
 
     /** 模型是否加载成功 */
+    @Volatile
     var isLoaded: Boolean = false
         private set
 
     init {
+        var createdSession: OrtSession? = null
         try {
             val opts = OrtSession.SessionOptions().apply {
                 // int8 模型用 CPU 执行；XNNPACK 已内置于 ONNX Runtime Mobile
@@ -57,23 +60,32 @@ class V9EmbeddingRuntime(
             } finally {
                 opts.close()
             }
+            createdSession = session
 
-            // 从模型读取 tensor 名称
-            inputName = session.inputNames.iterator().next()
-            outputName = session.outputNames.iterator().next()
+            require(session.inputNames.size == 1 && session.outputNames.size == 1) {
+                "V9 模型必须只有一个输入和一个输出"
+            }
+            inputName = session.inputNames.single()
+            outputName = session.outputNames.single()
 
             Log.i(TAG, "V9 ONNX 模型加载成功: $modelPath")
             Log.i(TAG, "  输入: $inputName ${session.inputInfo[inputName]?.info}")
             Log.i(TAG, "  输出: $outputName ${session.outputInfo[outputName]?.info}")
 
             // 验证输入输出 shape
-            val inputInfo = session.inputInfo[inputName]
-            val outputInfo = session.outputInfo[outputName]
-            if (inputInfo == null || outputInfo == null) {
-                throw IllegalStateException("无法读取模型输入/输出信息")
+            val inputInfo = session.inputInfo[inputName]?.info as? TensorInfo
+            val outputInfo = session.outputInfo[outputName]?.info as? TensorInfo
+            require(inputInfo?.type == OnnxJavaType.FLOAT &&
+                matchesModelShape(inputInfo.shape, longArrayOf(1, 3, INPUT_SIZE.toLong(), INPUT_SIZE.toLong()))) {
+                "V9 输入必须是 float32 [1, 3, $INPUT_SIZE, $INPUT_SIZE]"
+            }
+            require(outputInfo?.type == OnnxJavaType.FLOAT &&
+                matchesModelShape(outputInfo.shape, longArrayOf(1, EMBEDDING_DIM.toLong()))) {
+                "V9 输出必须是 float32 [1, $EMBEDDING_DIM]"
             }
             isLoaded = true
         } catch (e: Exception) {
+            try { createdSession?.close() } catch (_: Exception) {}
             Log.e(TAG, "V9 ONNX 模型加载失败", e)
             throw e
         }
@@ -95,12 +107,22 @@ class V9EmbeddingRuntime(
     /**
      * 从已预处理的 NCHW FloatArray 推理。
      */
+    @Synchronized
     fun embed(input: FloatArray): FloatArray {
+        check(isLoaded) { "V9 ONNX session 已释放" }
+        if (input.size != INPUT_FLOAT_COUNT || input.any { !it.isFinite() }) {
+            Log.w(TAG, "忽略非法模型输入: size=${input.size}")
+            return FloatArray(EMBEDDING_DIM)
+        }
         val shape = longArrayOf(1, 3, 224, 224)
         OnnxTensor.createTensor(env, FloatBuffer.wrap(input), shape).use { tensor ->
             session.run(mapOf(inputName to tensor)).use { result ->
                 @Suppress("UNCHECKED_CAST")
                 val raw = (result[0].value as Array<FloatArray>)[0]
+                if (raw.size != EMBEDDING_DIM) {
+                    Log.w(TAG, "忽略维度错误的模型输出: ${raw.size}")
+                    return FloatArray(EMBEDDING_DIM)
+                }
                 return l2Normalize(raw)
             }
         }
@@ -112,6 +134,14 @@ class V9EmbeddingRuntime(
         private const val TAG = "V9Runtime"
         const val INPUT_SIZE = 224
         const val EMBEDDING_DIM = 512
+        private const val INPUT_FLOAT_COUNT = 3 * INPUT_SIZE * INPUT_SIZE
+        private const val MIN_NORM_SQUARED = 1e-16
+
+        /** Export permits a dynamic batch axis; channel and spatial dimensions must be exact. */
+        internal fun matchesModelShape(actual: LongArray, expected: LongArray): Boolean =
+            actual.size == expected.size && actual.indices.all { axis ->
+                actual[axis] == expected[axis] || (axis == 0 && actual[axis] == -1L)
+            }
 
         /**
          * Bitmap → NCHW 224×224 float32。
@@ -152,10 +182,17 @@ class V9EmbeddingRuntime(
          */
         fun l2Normalize(vec: FloatArray): FloatArray {
             var sumSq = 0.0
-            for (v in vec) sumSq += (v * v).toDouble()
+            for (v in vec) {
+                if (!v.isFinite()) return vec.zeroFill()
+                sumSq += v.toDouble() * v.toDouble()
+            }
+            if (!sumSq.isFinite() || sumSq <= MIN_NORM_SQUARED) return vec.zeroFill()
             val norm = kotlin.math.sqrt(sumSq)
-            if (norm > 1e-8) {
-                for (i in vec.indices) vec[i] = (vec[i] / norm).toFloat()
+            if (!norm.isFinite() || norm <= 1e-8) return vec.zeroFill()
+            for (i in vec.indices) {
+                val normalized = (vec[i] / norm).toFloat()
+                if (!normalized.isFinite()) return vec.zeroFill()
+                vec[i] = normalized
             }
             return vec
         }
@@ -164,13 +201,36 @@ class V9EmbeddingRuntime(
          * 计算两个向量的余弦相似度。
          */
         fun cosineSimilarity(a: FloatArray, b: FloatArray): Float {
+            if (a.size != b.size || a.isEmpty()) return Float.NEGATIVE_INFINITY
             var dot = 0.0
-            for (i in a.indices) dot += (a[i] * b[i]).toDouble()
-            return dot.toFloat() // 两者都是 L2 normalized，点积 ≈ cosine
+            for (i in a.indices) {
+                if (!a[i].isFinite() || !b[i].isFinite()) return Float.NEGATIVE_INFINITY
+                dot += a[i].toDouble() * b[i].toDouble()
+            }
+            return dot.toFloat().takeIf { it.isFinite() } ?: Float.NEGATIVE_INFINITY
+        }
+
+        /** Search should reject zero, malformed, or non-finite model embeddings safely. */
+        fun isUsableEmbedding(vector: FloatArray): Boolean {
+            if (vector.size != EMBEDDING_DIM) return false
+            var sumSq = 0.0
+            for (value in vector) {
+                if (!value.isFinite()) return false
+                sumSq += value.toDouble() * value.toDouble()
+            }
+            return sumSq.isFinite() && sumSq > MIN_NORM_SQUARED
+        }
+
+        private fun FloatArray.zeroFill(): FloatArray {
+            fill(0f)
+            return this
         }
     }
 
+    @Synchronized
     override fun close() {
+        if (!isLoaded) return
+        isLoaded = false
         try { session.close() } catch (_: Exception) {}
         Log.i(TAG, "V9 ONNX 模型已释放")
     }

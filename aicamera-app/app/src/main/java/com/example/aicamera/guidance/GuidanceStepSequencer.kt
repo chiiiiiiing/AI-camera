@@ -46,6 +46,8 @@ class GuidanceStepSequencer {
         val minZoomRatio: Float,
         val maxZoomRatio: Float,
         val nowMs: Long,
+        /** False for missing/failed model output; never automate from demo guidance. */
+        val recommendationReady: Boolean = true,
     )
 
     data class Output(
@@ -113,6 +115,10 @@ class GuidanceStepSequencer {
      * @param rawProgress 原始构图进度
      */
     fun onFrame(input: Input, rawCue: GuidanceCue, rawProgress: Float): Output {
+        if (!input.recommendationReady) {
+            reset(input.nowMs)
+            return Output(GuidanceStep.ZOOM, GuidanceCue.NONE, 0f, null, "AI 暂未就绪，可直接拍摄")
+        }
         if (stepStartMs < 0) stepStartMs = input.nowMs
         return when (step) {
             GuidanceStep.ZOOM -> handleZoom(input)

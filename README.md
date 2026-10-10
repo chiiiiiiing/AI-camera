@@ -1,98 +1,45 @@
-# AI 构图辅助相机
+# GenWow · AI 构图辅助相机
 
-> 实时分析相机画面，自动选择合适的构图策略，通过生动的辅助线引导用户拍出构图更好的照片。
+Android 离线相机：V9 ONNX 模型生成图像 embedding，通过模板检索推荐构图，再结合 IMU 与真实人脸检测提供引导。当前优化面向中端 Android 手机。
 
-## 项目结构
+## 从哪里开始
 
-```
-Ai-camera/
-├── aicamera-app/              # 📱 可运行的 Android 工程（← 开发和构建从这里开始）
-│   ├── app/src/main/java/com/example/aicamera/
-│   │   ├── camera/            #   模块一：CameraX 相机链路
-│   │   ├── pipeline/          #   模块二：帧采集 → 预处理 → AI 推理管线
-│   │   ├── overlay/           #   模块四：辅助线渲染引擎（Canvas Overlay）
-│   │   ├── viewmodel/         #   MVVM 状态管理（Camera / Pipeline / Render）
-│   │   ├── di/                #   Hilt 依赖注入
-│   │   ├── ui/theme/          #   Material3 主题
-│   │   └── MainActivity.kt    #   ★ Compose UI 全部串联入口
-│   └── gradle/                #   Gradle wrapper + 版本目录
-│
-├── docs/                      # 📖 设计文档（共 12 篇）
-│   ├── README.md              #   文档索引
-│   ├── 01-相机链路.md          #   CameraX 预览/拍照/权限
-│   ├── 02-帧处理管线.md        #   跳帧调度/预处理/线程模型
-│   ├── 04-辅助线渲染引擎.md    #   Canvas Overlay / 坐标映射 / 动画
-│   ├── 05-构图引导交互.md      #   反馈/动画/UI 控件/状态机
-│   ├── 06-性能优化.md          #   帧率/延迟/内存/发热/设备分级
-│   ├── 07-上线工程.md          #   工程搭建/测试/模型下发
-│   ├── 08-MVP方案与迭代.md     #   版本规划与依赖关系
-│   ├── 附录A-队友协作接口.md   #   模型输入输出约定/问题清单
-│   ├── 项目审计-2026-09.md     #   当前实现核验与风险边界
-│   ├── Demo拍摄方案.md         #   产品演示录制脚本
-│   └── 项目开发时间线.md       #   版本和阶段时间线
-│
-└── _archive/                  # 🗄️ 历史参考代码（已归档，不再维护）
-    ├── modules/               #   早期独立模块参考实现（已合并进 app）
-    └── teammate-repo/         #   队友仓库旧副本（被 aicamera-app 取代）
-```
+| 工作 | 唯一入口 |
+|---|---|
+| Android 开发、运行与打包 | `aicamera-app/`，用 Android Studio 打开此目录 |
+| 手机端 AI 推理与检索 | `aicamera-app/app/src/main/java/com/example/aicamera/pipeline/` |
+| 几何引导与拍摄状态机 | `aicamera-app/app/src/main/java/com/example/aicamera/guidance/` |
+| App 实际打包的模型、索引与运行配置 | `aicamera-app/app/src/main/assets/ai/v9/` |
+| 数据处理、蒸馏、模型导出、量化与评估 | [ai/tools](ai/tools/README.md) |
+| C++ 检索与接口原型，尚未接入 Android 主链路 | [ai/engine](ai/engine/README.md) |
+| 产品与工程文档 | [docs](docs/README.md) |
+| Web 界面预览与设计稿 | `ui-review/`、`designs/` |
 
-## 快速开始
+仓库仅保留一套 Android 工程。旧 `app-arch/`、根目录 `app/`、`engine/`、`frontend/` 属于历史结构，不是当前开发入口。历史实现可从 Git 历史查阅，无需在源码树重复存放。
 
-### 环境要求
-- **Android Studio** (内置 JDK 21)
-- **Android SDK** (compileSdk 35, minSdk 24)
-- **Gradle 9.3.0** (wrapper 已包含)
+## 构建与验证
 
-### 构建与运行
-```bash
-# 1. 打开 Android Studio
-File → Open → 选择 aicamera-app/ 目录
+环境：JDK 17、Android SDK 35、Gradle 8.9（使用仓库 wrapper）、AGP 8.7.3、Kotlin 2.0.21。最低支持 Android API 24。CI 使用 JDK 17；Android Studio 的 Gradle JDK 应与此对齐。
 
-# 2. 等待 Gradle Sync 完成
-
-# 3. 连接 Android 设备（USB 调试）或启动模拟器
-
-# 4. 点击 Run 'app'
-
-# 命令行构建
+```sh
 cd aicamera-app
-./gradlew assembleDebug
+./gradlew :app:testDebugUnitTest :app:assembleDebug
 ```
 
-## 技术栈
+Windows 使用 `gradlew.bat`。资产校验从仓库根目录运行，只需 Python 标准库：
 
-| 模块 | 选型 | 版本 |
-|------|------|------|
-| 语言 | Kotlin | 2.0.21 |
-| UI | Jetpack Compose + Material3 | BOM 2024.12 |
-| 构建 | Gradle (Kotlin DSL) | AGP 8.7.3 |
-| 相机 | CameraX | 1.4.1 |
-| AI 推理 | ONNX Runtime Mobile + v9 embedding | 1.19.2 |
-| 架构 | MVVM + Hilt DI | Hilt 2.53.1 |
+```sh
+python -B ai/tools/validate_android_v9_assets.py --asset-root aicamera-app/app/src/main/assets/ai/v9
+```
 
-## 团队分工
+数据工具和 C++ 回归命令分别见对应目录 README。`.github/workflows/` 自动检查 Android 单测、打包模型/索引、C++ 与模型数据契约。
 
-| 角色 | 负责 |
-|------|------|
-| AI 模型训练（队友） | 端侧模型：场景识别 → 构图策略 → 辅助线参数 |
-| 产品/设计（队友） | 功能范围、构图策略、UI 设计稿 |
-| **移动端工程（你）** | **Android 上全部跑通：相机 → 推理 → 渲染 → 上线** |
+## 当前能力与边界
 
-## 当前状态 (2026-07-26 整改 + 2026-08-05 构图-拍摄工作流 v2)
+- 相机预览、拍照、滤镜、构图工作流及已有俯仰/偏航流程保留。
+- V9 默认每 500ms 最多执行一次模型采样，几何观测独立更新；镜头、旋转和生命周期切换清除旧推荐。
+- 模型失败时保留手动拍照，零置信度的降级结果不能触发构图达标或自动拍摄；人像缺少真实主体也不能达标。
+- 新 embedding 缓存记录模型、源图、预处理与向量 hash；模型交付重新校验实际索引，而非只读历史质量报告。
+- 本次没有重训或替换打包权重。真机耗时、发热与独立照片效果评估仍需实测；人脸框不等于全身姿态。
 
-- ✅ 项目骨架可编译运行（assembleDebug BUILD SUCCESSFUL，59 单测全过）
-- ✅ CameraX 预览 / 拍照 / 切换摄像头（照片经 MediaStore 进系统相册）
-- ✅ 帧处理管线 (ImageAnalysis → Scheduler → Preprocessor[转正/镜像/224] → Pipeline)
-- ✅ **V9 ONNX 推理链路已接通**（AiEngineManager 后台装配 → 热替换进管线；失败自动 Fake 兜底）
-- ✅ MVVM + Hilt DI（ViewModel 全部真注入）+ Compose UI 全部串联
-- ✅ 设置系统 DataStore 持久化
-- ✅ Room 数据库（用户存储，替代旧 SharedPreferences JSON）
-- ✅ **构图-拍摄工作流 v2**（按快门→缩广角→分析波纹→冻结目标点→双点连线平移指引→自动变焦→拍照→构图说明）
-- ✅ 旋转改为自动（不再要求用户手动旋转，旧旋转引导线已移除）
-- ✅ 对齐阈值放宽（NEAR 0.50 / ALIGNED 0.72，降低操作难度）
-- ✅ 同学交付图标已集成（auth 输入框图标 + 引导素材图片）
-- ✅ 游客模式持久化（首次免注册，后续无需重复登录）
-- ❌ 真机性能验收（p50/p90 延迟、10-30 分钟稳定性）
-
-> 2026-07-26 大整改详情见 docs/ 目录《审查报告-2026-07-26.md》《11-整改记录.md》。
-> 2026-08-05 构图-拍摄工作流 v2 及 UI 整治见 docs/《11-整改记录.md》第九节。
+详细变更与验收见 [AI 引擎优化记录](docs/AI引擎优化与验收-2026-10-10.md)。目录归属、私有数据及本地归档规则见 [仓库与本地目录说明](docs/仓库与本地目录说明.md)。

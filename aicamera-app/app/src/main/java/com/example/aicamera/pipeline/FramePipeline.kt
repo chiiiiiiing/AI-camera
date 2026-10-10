@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.camera.core.ImageProxy
 import com.example.aicamera.camera.CameraConfig
 import java.nio.ByteBuffer
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * 帧处理管线编排器 — 相机链路和 AI 推理之间的桥梁。
@@ -48,6 +49,14 @@ class FramePipeline(
     /** 管线状态变化回调（调试 / 性能面板用） */
     private var onStateChanged: ((PipelineState) -> Unit)? = null
 
+    /** 用于在镜头切换时清空跨帧推荐状态；调度器保证 process 串行执行。 */
+    private var lastIsFrontCamera: Boolean? = null
+    private var lastRotation: Int? = null
+    private var lastInference: IInference? = null
+    private val resetGeneration = AtomicLong(0)
+    private var appliedResetGeneration = -1L
+    private val modelSampler = ModelOutputSampler()
+
     // ── 公开 API ──────────────────────────────────────────────
 
     /**
@@ -67,49 +76,67 @@ class FramePipeline(
         scheduler.schedule(
             imageProxy = imageProxy,
             onProcess = { proxy ->
-                // Phase 1: 预处理（转正 + 前摄镜像 + resize 到模型尺寸）
-                val preprocessStart = SystemClock.elapsedRealtime()
-                val preprocessed = preprocessor.process(proxy, rotation, isFrontCamera)
-                val preprocessMs = SystemClock.elapsedRealtime() - preprocessStart
-
-                try {
-                    // Phase 2: 推理
-                    val inferenceStart = SystemClock.elapsedRealtime()
-                    var modelOutput = inference.predict(preprocessed.buffer, preprocessed)
-
-                    // Phase 2.5: 几何引导（真实水平角/主体框 → GuidanceCue + 进度）
-                    geometryStage?.let { stage ->
-                        modelOutput = stage.apply(modelOutput, proxy, isFrontCamera)
-                    }
-                    val inferenceMs = SystemClock.elapsedRealtime() - inferenceStart
-
-                    // Phase 3: 结果解析（假推理直接返回，真实模型需要额外解析步骤）
-                    val parseStart = SystemClock.elapsedRealtime()
-                    // TODO: 等队友模型到位后，此处插入 parseOutput(modelOutput)
-                    val parseMs = SystemClock.elapsedRealtime() - parseStart
-
-                    PipelineResult(
-                        frameIndex = 0, // 由 scheduler 填入
-                        rotationDegrees = rotation,
-                        isFrontCamera = isFrontCamera,
-                        modelOutput = modelOutput,
-                        timing = FrameTiming(
-                            frameIndex = 0,
-                            preprocessMs = preprocessMs,
-                            inferenceMs = inferenceMs,
-                            parseMs = parseMs,
-                            totalMs = 0  // 由 FrameScheduler 填入
-                        )
-                    )
-                } finally {
-                    // ★ 修复：推理抛异常时也必须回收 Bitmap（旧代码异常路径泄漏）
-                    preprocessed.originalBitmap?.recycle()
+                // Capture one engine for this entire frame; hot swaps happen on the next frame.
+                val frameInference = inference
+                val generation = resetGeneration.get()
+                if (appliedResetGeneration != generation || lastInference !== frameInference ||
+                    lastIsFrontCamera != isFrontCamera || lastRotation != rotation
+                ) {
+                    modelSampler.reset()
+                    frameInference.resetSession()
+                    geometryStage?.reset()
+                    appliedResetGeneration = generation
+                    lastInference = frameInference
+                    lastIsFrontCamera = isFrontCamera
+                    lastRotation = rotation
                 }
+
+                var preprocessMs = 0L
+                var inferenceMs = 0L
+                var modelSampled = false
+                var modelOutput = modelSampler.sample(
+                    SystemClock.elapsedRealtime(), frameInference.minInferenceIntervalMs
+                ) {
+                    modelSampled = true
+                    val preprocessStart = SystemClock.elapsedRealtime()
+                    val preprocessed = preprocessor.process(proxy, rotation, isFrontCamera)
+                    preprocessMs = SystemClock.elapsedRealtime() - preprocessStart
+                    try {
+                        val inferenceStart = SystemClock.elapsedRealtime()
+                        frameInference.predict(preprocessed.buffer, preprocessed).also {
+                            inferenceMs = SystemClock.elapsedRealtime() - inferenceStart
+                        }
+                    } finally {
+                        preprocessed.originalBitmap?.recycle()
+                    }
+                }
+
+                // Fresh geometry on every processed frame; never cache mutated overlays.
+                val geometryStart = SystemClock.elapsedRealtime()
+                geometryStage?.let { stage ->
+                    modelOutput = stage.apply(modelOutput, proxy, isFrontCamera)
+                }
+                val geometryMs = SystemClock.elapsedRealtime() - geometryStart
+                PipelineResult(
+                    frameIndex = 0,
+                    rotationDegrees = rotation,
+                    isFrontCamera = isFrontCamera,
+                    modelOutput = modelOutput,
+                    timing = FrameTiming(
+                        frameIndex = 0,
+                        preprocessMs = preprocessMs,
+                        inferenceMs = inferenceMs,
+                        parseMs = 0,
+                        totalMs = 0,
+                        modelSampled = modelSampled,
+                        geometryMs = geometryMs
+                    )
+                )
             },
             onComplete = { result ->
                 // ★ 使用闭包而非共享字段，避免覆盖风险
                 onResult(result)
-                onStateChanged?.invoke(scheduler.getState())
+                onStateChanged?.invoke(getState())
             }
         )
     }
@@ -123,11 +150,13 @@ class FramePipeline(
 
     fun stop() {
         scheduler.stop()
+        resetGeneration.incrementAndGet()
         logInfo("管道已停止")
     }
 
     fun release() {
         scheduler.release()
+        resetGeneration.incrementAndGet()
         onStateChanged = null
         logInfo("管道已释放")
     }
@@ -149,12 +178,14 @@ class FramePipeline(
      */
     fun setInference(newInference: IInference) {
         this.inference = newInference
+        resetGeneration.incrementAndGet()
         logInfo("推理器已替换: ${newInference.typeName}")
     }
 
     /** 装配几何引导阶段（null 表示关闭） */
     fun setGeometryStage(stage: com.example.aicamera.guidance.geometry.GeometryGuidanceStage?) {
         this.geometryStage = stage
+        resetGeneration.incrementAndGet()
         logInfo("几何引导阶段已${if (stage != null) "装配" else "移除"}")
     }
 }
@@ -168,6 +199,9 @@ interface IInference {
     /** 推理器标识名（调试/状态面板用） */
     val typeName: String
 
+    /** Minimum model sampling interval; geometry remains independent. Zero processes every frame. */
+    val minInferenceIntervalMs: Long get() = 0L
+
     /**
      * 执行推理。
      *
@@ -176,6 +210,9 @@ interface IInference {
      * @return 推理结果
      */
     fun predict(buffer: ByteBuffer, frame: PreprocessedFrame): Any?
+
+    /** 切换镜头、暂停或开始新会话时清空跨帧状态。无状态推理器无需覆写。 */
+    fun resetSession() = Unit
 }
 
 /**
@@ -184,6 +221,7 @@ interface IInference {
 class FakeInferenceAdapter : IInference {
 
     override val typeName: String = "FakeInference"
+    override val minInferenceIntervalMs: Long = 500L
 
     private val fake = FakeInference()
 
@@ -204,7 +242,11 @@ class FakeInferenceAdapter : IInference {
         buffer.rewind()
         val luminance255 = if (count > 0) sum / count * 255f else 128f
 
-        return fake.predictFromLuminance(luminance255, frame.rotation)
+        return fake.predictFromLuminance(luminance255, frame.rotation).copy(
+            confidence = 0f,
+            compositionProgress = 0f,
+            expectsSubject = false
+        )
     }
 }
 

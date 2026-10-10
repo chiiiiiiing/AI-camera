@@ -62,10 +62,10 @@ class GeometryGuidanceStage @Inject constructor(
         // ── 1. 真实水平/俯仰/偏航观测（含 isUpright/confidence） ──
         // ★ 传感器已做圆周平滑，此处保留 EMA 做二次去抖
         val rawObs = horizonSensor.latestObservation()
-        val rawAngle = rawObs?.rollDegrees
+        val rawAngle = rawObs?.rollDegrees?.takeIf { it.isFinite() }
         val smoothAngle = rawAngle?.let { horizonEma.add(it) }
-        val smoothPitch = rawObs?.pitchDegrees?.let { pitchEma.add(it) }
-        val smoothYaw = rawObs?.yawDegrees?.let { yawEma.add(it) }
+        val smoothPitch = rawObs?.pitchDegrees?.takeIf { it.isFinite() }?.let { pitchEma.add(it) }
+        val smoothYaw = rawObs?.yawDegrees?.takeIf { it.isFinite() }?.let { yawEma.add(it) }
 
         // ── 2. 真实主体框 ──
         val rawBox = faceDetector.detectIfDue(imageProxy, isFrontCamera)
@@ -90,9 +90,14 @@ class GeometryGuidanceStage @Inject constructor(
         val targetCx = targetLine?.floatParam("center_x") ?: 0.5f
         val targetCy = targetLine?.floatParam("center_y") ?: 0.5f
         val targetTol = targetLine?.floatParam("radius") ?: 0.12f
+        val hasTarget = targetLine?.visible == true &&
+            targetLine.floatParam("center_x")?.isFinite() == true &&
+            targetLine.floatParam("center_y")?.isFinite() == true
+        val hasRecommendation = output.confidence.isFinite() && output.confidence > 0f
+        val guidedSubject = smoothBox?.takeIf { hasTarget && hasRecommendation }
 
         // 模板是否期望主体：有人像类占位框即期望主体
-        val expectsSubject = output.guideLines.any { it.type == "subject_box" }
+        val expectsSubject = output.expectsSubject || output.guideLines.any { it.type == "subject_box" }
 
         // ★ 记录偏航目标：首次获得有效偏航时锁定当前朝向
         if (yawTargetDeg == null && smoothYaw != null) {
@@ -101,9 +106,9 @@ class GeometryGuidanceStage @Inject constructor(
 
         // ── 4. 计算指令与进度 ──
         val cue = GuidanceGeometry.guidanceCue(
-            subjectCx = smoothBox?.centerX,
-            subjectCy = smoothBox?.centerY,
-            expectsSubject = expectsSubject,
+            subjectCx = guidedSubject?.centerX,
+            subjectCy = guidedSubject?.centerY,
+            expectsSubject = hasRecommendation && expectsSubject && smoothBox == null,
             targetCx = targetCx,
             targetCy = targetCy,
             targetTolerance = targetTol,
@@ -113,8 +118,8 @@ class GeometryGuidanceStage @Inject constructor(
             yawTargetDeg = yawTargetDeg
         )
         val geometryProgress = GuidanceGeometry.compositionProgress(
-            subjectCx = smoothBox?.centerX,
-            subjectCy = smoothBox?.centerY,
+            subjectCx = guidedSubject?.centerX,
+            subjectCy = guidedSubject?.centerY,
             targetCx = targetCx,
             targetCy = targetCy,
             horizonAngleDeg = smoothAngle,
@@ -124,9 +129,10 @@ class GeometryGuidanceStage @Inject constructor(
         )
         // ★ 指令-进度对齐：SUBJECT_ALIGNED 时提升到 ALIGNED 阈值之上，
         //   GuidanceStateMachine 才能进入 ALIGNED 相位（触发达标震动/绿闪）
-        val boostedProgress = geometryProgress?.let {
-            GuidanceGeometry.progressWithAlignedBoost(cue, it)
-        }
+        val boostedProgress = GuidanceGeometry.verifiedProgress(
+            cue, geometryProgress, expectsSubject, smoothBox != null,
+            hasRecommendation = hasRecommendation && (!expectsSubject || hasTarget)
+        )
 
         // ── 5. 重建辅助线：真实水平角 + 真实主体框 ──
         // ★ 无水平传感器信号时整条移除（修复复审发现：angle ?: 0f 会显示
@@ -147,11 +153,12 @@ class GeometryGuidanceStage @Inject constructor(
                 "subject_box" -> {
                     if (smoothBox != null) {
                         // 真实检测框替换占位框（real=true 标记：分步引导只信真实检测）
-                        val aligned = kotlin.math.hypot(
+                        val aligned = hasRecommendation && hasTarget && kotlin.math.hypot(
                             smoothBox.centerX - targetCx,
                             smoothBox.centerY - targetCy
                         ) <= targetTol
                         line.copy(
+                            visible = true,
                             params = mapOf(
                                 "x" to smoothBox.left,
                                 "y" to smoothBox.top,
@@ -161,15 +168,15 @@ class GeometryGuidanceStage @Inject constructor(
                                 "aligned" to aligned
                             )
                         )
-                    } else line
+                    } else null
                 }
                 else -> line
             }
         }.toMutableList()
 
         // 模板没给主体框但检测到了主体（如风景照里有人）→ 也画出来
-        if (smoothBox != null && !expectsSubject) {
-            val aligned = kotlin.math.hypot(
+        if (smoothBox != null && newLines.none { it.type == "subject_box" }) {
+            val aligned = hasRecommendation && hasTarget && kotlin.math.hypot(
                 smoothBox.centerX - targetCx,
                 smoothBox.centerY - targetCy
             ) <= targetTol
@@ -191,8 +198,8 @@ class GeometryGuidanceStage @Inject constructor(
         return output.copy(
             guideLines = newLines,
             guidanceCue = cue,
-            // 有几何信号用几何进度（含对齐提升）；两者都缺回退模板分
-            compositionProgress = boostedProgress ?: output.compositionProgress,
+            // Template similarity is not geometric evidence of alignment.
+            compositionProgress = boostedProgress,
             // 标注模板主体期望：分步引导序列器据此决定是否需要 SUBJECT 步
             expectsSubject = expectsSubject
         )

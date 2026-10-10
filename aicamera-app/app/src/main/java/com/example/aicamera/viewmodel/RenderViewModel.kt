@@ -247,7 +247,8 @@ class RenderViewModel @Inject constructor() : ViewModel() {
             currentZoomRatio = currentZoomRatio,
             minZoomRatio = minZoomRatio,
             maxZoomRatio = maxZoomRatio,
-            nowMs = System.currentTimeMillis()
+            nowMs = System.currentTimeMillis(),
+            recommendationReady = output.confidence.isFinite() && output.confidence > 0f
         )
     }
 

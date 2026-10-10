@@ -16,6 +16,24 @@ import org.junit.Test
  */
 class GuidanceStepSequencerTest {
 
+    @Test
+    fun `failed model never auto zooms or declares completion`() {
+        val sequencer = GuidanceStepSequencer()
+        repeat(100) { frame ->
+            val result = sequencer.onFrame(
+                GuidanceStepSequencer.Input(
+                    horizonAngleDeg = 0f, subjectHeightFraction = 0.1f,
+                    hasSubject = true, expectsSubject = false, currentZoomRatio = 1f,
+                    minZoomRatio = 1f, maxZoomRatio = 4f, nowMs = frame * 500L,
+                    recommendationReady = false
+                ), GuidanceCue.SUBJECT_ALIGNED, 1f
+            )
+            assertEquals(GuidanceStep.ZOOM, result.step)
+            assertEquals(0f, result.progress, 0f)
+            assertNull(result.zoomTarget)
+        }
+    }
+
     private lateinit var seq: GuidanceStepSequencer
     private var now = 10_000L
 

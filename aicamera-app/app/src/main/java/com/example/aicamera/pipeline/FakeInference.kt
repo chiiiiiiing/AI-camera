@@ -2,6 +2,8 @@ package com.example.aicamera.pipeline
 
 import com.example.aicamera.camera.CameraConfig
 import com.example.aicamera.guidance.GuidanceCue
+import com.example.aicamera.filter.FilterRecommendation
+import com.example.aicamera.zoom.AutoZoomRecommendation
 import kotlin.math.abs
 import kotlin.random.Random
 
@@ -57,13 +59,6 @@ class FakeInference {
 
         estimatedInferenceMs = (50 + random.nextInt(30)).toLong()
 
-        // ★ 稳定进度和引导：基于场景类型给出固定值，不随机跳变
-        val progress = when (scene) {
-            SceneType.BRIGHT -> 0.80f
-            SceneType.NORMAL -> 0.65f
-            SceneType.DARK -> 0.45f
-        }
-
         // ★ 关键修复：不再随机生成左右移动指令
         // GuidanceCue NONE = 告诉 ComposeGuidanceOverlay "当前构图尚可，无需大调整"
         // Overlay 只会显示静态辅助线（三分线+目标区+水平仪），不会显示闪烁的移动箭头
@@ -72,11 +67,13 @@ class FakeInference {
         return FakeInferenceOutput(
             sceneType = scene,
             compositionStrategy = strategy,
-            confidence = 0.85f,
+            // Placeholder overlays are available before the model loads, but cannot authorize
+            // automatic zoom/capture or certify composition readiness.
+            confidence = 0f,
             luminance = luminance,
             guideLines = guideLines,
             guidanceCue = cue,
-            compositionProgress = progress
+            compositionProgress = 0f
         )
     }
 
@@ -169,7 +166,10 @@ data class FakeInferenceOutput(
     /** 构图匹配度 (0.0–1.0)，用于 GuidanceStateMachine */
     val compositionProgress: Float = 0.5f,
     /** ★ 模板是否期望主体（人像类），由 GeometryGuidanceStage 标注，分步引导用 */
-    val expectsSubject: Boolean = false
+    val expectsSubject: Boolean = false,
+    /** Only the real V9 path supplies recommendations; heuristic fallback keeps these null. */
+    val filterRecommendation: FilterRecommendation? = null,
+    val autoZoomRecommendation: AutoZoomRecommendation? = null
 )
 
 data class FakeGuideLine(

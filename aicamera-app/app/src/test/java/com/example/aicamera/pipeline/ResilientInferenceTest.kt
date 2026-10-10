@@ -116,4 +116,68 @@ class ResilientInferenceTest {
         repeat(40) { r.predict(ByteBuffer.allocate(0), frame()) }
         assertFalse("偶发异常（每 4 帧 1 次）不应熔断", r.isDegraded)
     }
+
+    @Test
+    fun `zero confidence grid failures fall back immediately and eventually trip breaker`() {
+        val primary = object : IInference {
+            override val typeName = "V9-ONNX"
+            override fun predict(buffer: ByteBuffer, frame: PreprocessedFrame): Any =
+                (GoodInference().predict(buffer, frame) as FakeInferenceOutput).copy(confidence = 0f)
+        }
+        val r = ResilientInference(primary)
+        repeat(ResilientInference.EMPTY_BREAKER_THRESHOLD) {
+            val output = r.predict(ByteBuffer.allocate(0), frame()) as FakeInferenceOutput
+            assertTrue(output.guideLines.isNotEmpty())
+            assertEquals(0f, output.confidence, 0f)
+            assertEquals(0f, output.compositionProgress, 0f)
+            assertFalse(output.expectsSubject)
+        }
+        assertTrue(r.isDegraded)
+    }
+
+    @Test
+    fun `wrapper forwards sampling and resets without rearming a tripped breaker`() {
+        var primaryResets = 0
+        var fallbackResets = 0
+        val primary = object : IInference {
+            override val typeName = "V9-ONNX"
+            override val minInferenceIntervalMs = 500L
+            override fun resetSession() { primaryResets++ }
+            override fun predict(buffer: ByteBuffer, frame: PreprocessedFrame): Any? = error("broken")
+        }
+        val fallback = object : IInference {
+            override val typeName = "Fallback"
+            override val minInferenceIntervalMs = 20L
+            override fun resetSession() { fallbackResets++ }
+            override fun predict(buffer: ByteBuffer, frame: PreprocessedFrame): Any = "fallback"
+        }
+        val r = ResilientInference(primary, fallback)
+        assertEquals(500L, r.minInferenceIntervalMs)
+        repeat(ResilientInference.ERROR_BREAKER_THRESHOLD - 1) { r.predict(ByteBuffer.allocate(0), frame()) }
+        r.resetSession()
+        r.predict(ByteBuffer.allocate(0), frame())
+        assertFalse(r.isDegraded)
+        repeat(ResilientInference.ERROR_BREAKER_THRESHOLD) { r.predict(ByteBuffer.allocate(0), frame()) }
+        assertTrue(r.isDegraded)
+        assertEquals(20L, r.minInferenceIntervalMs)
+        r.resetSession()
+        assertTrue(r.isDegraded)
+        assertEquals("fallback", r.predict(ByteBuffer.allocate(0), frame()))
+        assertEquals(2, primaryResets)
+        assertEquals(2, fallbackResets)
+    }
+
+    @Test
+    fun `notification failure cannot suppress the fallback or repeat degradation`() {
+        var notices = 0
+        val r = ResilientInference(ThrowingInference(), onDegraded = {
+            notices++
+            error("observer unavailable")
+        })
+        repeat(ResilientInference.ERROR_BREAKER_THRESHOLD + 2) {
+            assertTrue(r.predict(ByteBuffer.allocate(0), frame()) is FakeInferenceOutput)
+        }
+        assertEquals(1, notices)
+        assertTrue(r.isDegraded)
+    }
 }

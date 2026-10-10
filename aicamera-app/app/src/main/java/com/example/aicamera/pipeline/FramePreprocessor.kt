@@ -64,45 +64,46 @@ class FramePreprocessor(
     ): PreprocessedFrame {
         val startTime = SystemClock.elapsedRealtime()
 
-        // Step 1: YUV → Bitmap
-        var bitmap = imageProxy.toBitmap()
+        var bitmap: Bitmap? = null
+        try {
+            // Step 1: YUV → Bitmap
+            bitmap = imageProxy.toBitmap()
 
-        // Step 2: 按 rotationDegrees 转正（v9 协议：模型期望正向图）
-        if (rotation != 0) {
-            bitmap = rotateBitmap(bitmap, rotation)
+            // Step 2: 按 rotationDegrees 转正（v9 协议：模型期望正向图）
+            if (rotation != 0) bitmap = rotateBitmap(requireNotNull(bitmap), rotation)
+
+            // Step 3: 前摄镜像（协议：模型输入与显示画面保持一致）
+            if (isFrontCamera) bitmap = mirrorBitmap(requireNotNull(bitmap))
+
+            // Step 4: Resize → 模型尺寸。current variable owns exactly one bitmap.
+            val current = requireNotNull(bitmap)
+            if (current.width != targetSize || current.height != targetSize) {
+                val resized = Bitmap.createScaledBitmap(current, targetSize, targetSize, true)
+                if (resized !== current) current.recycle()
+                bitmap = resized
+            }
+
+            // Step 5: 像素 → Float ByteBuffer
+            fillFloatBuffer(requireNotNull(bitmap))
+
+            lastPreprocessMs = SystemClock.elapsedRealtime() - startTime
+            return PreprocessedFrame(
+                buffer = reusableBuffer,
+                width = targetSize,
+                height = targetSize,
+                channels = 3,
+                // 帧已转正/镜像，下游无需再做旋转变换
+                rotation = 0,
+                originalWidth = imageProxy.width,
+                originalHeight = imageProxy.height,
+                // Ownership transfers to FramePipeline, whose finally block recycles it.
+                originalBitmap = bitmap
+            )
+        } catch (e: Exception) {
+            // If construction fails, no PreprocessedFrame reaches FramePipeline to own this bitmap.
+            bitmap?.takeIf { !it.isRecycled }?.recycle()
+            throw e
         }
-
-        // Step 3: 前摄镜像（协议：模型输入与显示画面保持一致）
-        if (isFrontCamera) {
-            bitmap = mirrorBitmap(bitmap)
-        }
-
-        // Step 4: Resize → 模型尺寸
-        val resized = if (bitmap.width != targetSize || bitmap.height != targetSize) {
-            Bitmap.createScaledBitmap(bitmap, targetSize, targetSize, true)
-        } else {
-            bitmap
-        }
-
-        // Step 5: 像素 → Float ByteBuffer
-        fillFloatBuffer(resized)
-
-        // Step 6: 只释放中间 bitmap，保留 resized 供下游推理器使用
-        if (resized !== bitmap) bitmap.recycle()
-
-        lastPreprocessMs = SystemClock.elapsedRealtime() - startTime
-
-        return PreprocessedFrame(
-            buffer = reusableBuffer,
-            width = targetSize,
-            height = targetSize,
-            channels = 3,
-            // 帧已转正/镜像，下游无需再做旋转变换
-            rotation = 0,
-            originalWidth = imageProxy.width,
-            originalHeight = imageProxy.height,
-            originalBitmap = resized  // ★ 保留 bitmap 不 recycle，由 FramePipeline 回收
-        )
     }
 
     // ── 像素填充 ──────────────────────────────────────────────
