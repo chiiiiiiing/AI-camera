@@ -12,6 +12,10 @@
 #include "core/template_index.h"
 #include <cstring>
 #include <cstdlib>
+#include <chrono>
+#include <cmath>
+#include <memory>
+#include <new>
 #include <sstream>
 #include <string>
 
@@ -40,7 +44,7 @@ namespace {
 std::string escape_json(const std::string& value) {
     std::string escaped;
     escaped.reserve(value.size());
-    for (char c : value) {
+    for (unsigned char c : value) {
         switch (c) {
             case '"':
                 escaped += "\\\"";
@@ -58,7 +62,14 @@ std::string escape_json(const std::string& value) {
                 escaped += "\\t";
                 break;
             default:
-                escaped.push_back(c);
+                if (c < 0x20) {
+                    static constexpr char hex[] = "0123456789abcdef";
+                    escaped += "\\u00";
+                    escaped.push_back(hex[c >> 4]);
+                    escaped.push_back(hex[c & 0x0f]);
+                } else {
+                    escaped.push_back(static_cast<char>(c));
+                }
                 break;
         }
     }
@@ -70,6 +81,8 @@ void update_status_json(EngineState* state) {
     out << "{"
         << "\"status\":\"" << (state->ready ? "ready" : "not_ready") << "\","
         << "\"version\":\"0.1.0-dev\","
+        << "\"inference_ready\":false,"
+        << "\"pipeline_stage\":\"skeleton\","
         << "\"template_index_ready\":" << (state->template_index.ready() ? "true" : "false") << ","
         << "\"template_index_count\":" << state->template_index.count() << ","
         << "\"template_index_dimension\":" << state->template_index.dimension() << ","
@@ -88,6 +101,7 @@ const char* engine_get_version(void) {
 
 /* ── 初始化 ── */
 InitResult engine_init(const EngineConfig* config, EngineHandle* out_handle) {
+    const auto started = std::chrono::steady_clock::now();
     InitResult result = {};
     if (out_handle == nullptr) {
         result.code = -1;
@@ -95,32 +109,50 @@ InitResult engine_init(const EngineConfig* config, EngineHandle* out_handle) {
         return result;
     }
 
-    auto* state = new EngineState();
-    state->config = config != nullptr ? *config : EngineConfig{};
-    state->model_dir = state->config.model_dir != nullptr ? state->config.model_dir : "";
-    state->config.model_dir = state->model_dir.c_str();
-    state->ready = false;
-
-    if (!state->model_dir.empty()) {
-        const std::string index_dir = state->model_dir + "/template_index.visual-clean";
-        ai_photo::TemplateLoadResult load_result = state->template_index.load(index_dir);
-        state->template_index_status = ai_photo::template_load_code_name(load_result.code);
-        state->template_index_warning = load_result.message;
-    } else {
-        state->template_index_status = "TEMPLATE_INDEX_DIR_MISSING";
-        state->template_index_warning = "model_dir is empty";
+    *out_handle = nullptr;
+    if (config != nullptr && (config->mode < 0 || config->mode > 2 ||
+        config->cpu_threads < 0 || config->cpu_threads > 64 ||
+        (config->enable_profiling != 0 && config->enable_profiling != 1))) {
+        result.code = -2;
+        result.message = "invalid engine configuration";
+        return result;
     }
+    try {
+        auto state = std::make_unique<EngineState>();
+        state->config = config != nullptr ? *config : EngineConfig{};
+        state->model_dir = state->config.model_dir != nullptr ? state->config.model_dir : "";
+        state->config.model_dir = state->model_dir.c_str();
+        state->ready = false;
 
-    result.code = 0;
-    result.message = state->template_index.ready()
-        ? "Engine initialized (template exact fallback loaded)"
-        : "Engine initialized (template index unavailable)";
-    result.loaded_models_mask = state->template_index.ready() ? 1 : 0;  // 阶段 3 后细化 bit 分配
-    result.load_time_ms = 0.0f;
+        if (!state->model_dir.empty()) {
+            const std::string index_dir = state->model_dir + "/template_index.visual-clean";
+            ai_photo::TemplateLoadResult load_result = state->template_index.load(index_dir);
+            state->template_index_status = ai_photo::template_load_code_name(load_result.code);
+            state->template_index_warning = load_result.message;
+        } else {
+            state->template_index_status = "TEMPLATE_INDEX_DIR_MISSING";
+            state->template_index_warning = "model_dir is empty";
+        }
 
-    state->ready = true;
-    update_status_json(state);
-    *out_handle = static_cast<EngineHandle>(state);
+        result.code = 0;
+        result.message = state->template_index.ready()
+            ? "Engine initialized (template exact fallback loaded)"
+            : "Engine initialized (template index unavailable)";
+        // A portable vector index is not an inference model.
+        result.loaded_models_mask = 0;
+
+        state->ready = true;
+        update_status_json(state.get());
+        *out_handle = static_cast<EngineHandle>(state.release());
+    } catch (const std::bad_alloc&) {
+        result.code = -3;
+        result.message = "engine initialization allocation failed";
+    } catch (...) {
+        result.code = -4;
+        result.message = "engine initialization failed";
+    }
+    result.load_time_ms = std::chrono::duration<float, std::milli>(
+        std::chrono::steady_clock::now() - started).count();
     return result;
 }
 
@@ -130,7 +162,6 @@ void engine_shutdown(EngineHandle handle) {
         return;
     }
     auto* state = static_cast<EngineState*>(handle);
-    state->ready = false;
     delete state;
 }
 
@@ -147,7 +178,11 @@ int32_t engine_is_ready(EngineHandle handle) {
 GuidanceOutput engine_process_frame(EngineHandle handle, const FrameInput* input) {
     GuidanceOutput out = {};
 
-    if (handle == nullptr || input == nullptr) {
+    if (handle == nullptr || input == nullptr || !engine_is_ready(handle) ||
+        input->camera.data == nullptr || input->camera.width <= 0 || input->camera.height <= 0 ||
+        (input->camera.format != 0 && input->camera.format != 1) ||
+        (input->camera.rotation != 0 && input->camera.rotation != 90 &&
+         input->camera.rotation != 180 && input->camera.rotation != 270)) {
         out.photo_type = 0;
         out.scene_category = -1;
         out.template_id = -1;
@@ -174,7 +209,7 @@ GuidanceOutput engine_process_frame(EngineHandle handle, const FrameInput* input
     out.camera_action.confidence = 0;
     out.camera_action.label[0] = '\0';
     out.zoom.zoom_action = 0;
-    out.zoom.current_zoom_ratio = input->current_zoom_ratio > 0.0f
+    out.zoom.current_zoom_ratio = std::isfinite(input->current_zoom_ratio) && input->current_zoom_ratio > 0.0f
         ? input->current_zoom_ratio
         : 1.0f;
     out.zoom.target_zoom_ratio = out.zoom.current_zoom_ratio;
@@ -185,30 +220,30 @@ GuidanceOutput engine_process_frame(EngineHandle handle, const FrameInput* input
     out.camera_target.y = 0.5f;
     out.camera_target.radius = 32.0f;
     out.camera_target.offset_magnitude = 0.0f;
-    out.camera_target.color_hint = 0;
+    out.camera_target.color_hint = 2;  // Unknown alignment must not be presented as aligned.
     out.camera_target.hint[0] = '\0';
     out.pose.has_person = 0;
     out.composition.show_thirds = 1;
     out.composition.horizon_y = -1.0f;
     out.alignment_score = 0.0f;
-    out.exposure_score = 0.5f;
-    out.composition_score = 0.5f;
+    out.exposure_score = 0.0f;
+    out.composition_score = 0.0f;
     out.pose_score = 0.0f;
 
     return out;
 }
 
 /* ── 场景重识别 ── */
-void engine_trigger_scene_rescan(EngineHandle handle) {
+void engine_trigger_scene_rescan(EngineHandle /*handle*/) {
     // 阶段 4 实现
 }
 
 /* ── 状态 JSON (调试) ── */
 const char* engine_get_status_json(EngineHandle handle) {
     if (handle == nullptr) {
-        return "{\"status\":\"not_ready\",\"version\":\"0.1.0-dev\",\"template_index_ready\":false}";
+        return "{\"status\":\"not_ready\",\"version\":\"0.1.0-dev\",\"inference_ready\":false,\"pipeline_stage\":\"skeleton\",\"template_index_ready\":false}";
     }
     auto* state = static_cast<EngineState*>(handle);
-    update_status_json(state);
+    // Initialization publishes an immutable snapshot; concurrent readers never mutate it.
     return state->status_json.c_str();
 }

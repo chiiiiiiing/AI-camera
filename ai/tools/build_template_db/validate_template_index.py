@@ -77,19 +77,25 @@ def validate_self_similarity(vectors: list[list[float]], tolerance: float = 1e-5
     return errors
 
 
-def validate_index(index_dir: Path) -> tuple[list[str], dict[str, Any]]:
+def validate_index(index_dir: Path, *, check_self_similarity: bool = True) -> tuple[list[str], dict[str, Any]]:
     keys_path = index_dir / "templates.keys.json"
     metadata_path = index_dir / "templates.metadata.jsonl"
     embeddings_path = index_dir / "templates.embeddings.f32"
     keys = json.loads(keys_path.read_text(encoding="utf-8"))
+    if not isinstance(keys, dict):
+        raise ValueError("templates.keys.json must be an object")
     items = keys.get("items")
     if not isinstance(items, list):
         raise ValueError("templates.keys.json items must be a list")
-    count = int(keys.get("count", len(items)))
-    dimension = int(keys.get("dimension", 0))
-    if dimension <= 0:
+    count = keys.get("count")
+    dimension = keys.get("dimension")
+    if type(count) is not int or count <= 0:
+        raise ValueError("templates.keys.json count must be a positive integer")
+    if type(dimension) is not int or dimension <= 0:
         raise ValueError("templates.keys.json dimension must be positive")
     errors: list[str] = []
+    if keys.get("metric") != "cosine":
+        errors.append("templates.keys.json metric must be cosine")
     if count != len(items):
         errors.append(f"keys count mismatch: count={count}, items={len(items)}")
     metadata = load_jsonl(metadata_path)
@@ -100,15 +106,18 @@ def validate_index(index_dir: Path) -> tuple[list[str], dict[str, Any]]:
     seen_keys: set[int] = set()
     seen_template_ids: set[str] = set()
     for index, item in enumerate(items):
+        if not isinstance(item, dict):
+            errors.append(f"item {index}: must be an object")
+            continue
         key = item.get("key")
         template_id = item.get("template_id")
-        if key != index + 1:
+        if type(key) is not int or key != index + 1:
             errors.append(f"item {index}: key must be {index + 1}, got {key}")
         if isinstance(key, int):
             if key in seen_keys:
                 errors.append(f"duplicate key: {key}")
             seen_keys.add(key)
-        if not isinstance(template_id, str) or not template_id:
+        if not isinstance(template_id, str) or not template_id.strip() or template_id != template_id.strip():
             errors.append(f"item {index}: template_id must be non-empty")
         elif template_id in seen_template_ids:
             errors.append(f"duplicate template_id: {template_id}")
@@ -119,9 +128,14 @@ def validate_index(index_dir: Path) -> tuple[list[str], dict[str, Any]]:
                 f"item {index}: key template_id {template_id} does not match metadata "
                 f"{metadata[index].get('template_id')}"
             )
+        if index < len(metadata):
+            for field in ("photo_id", "photo_type", "scene_category"):
+                if field in item and item[field] != metadata[index].get(field):
+                    errors.append(f"item {index}: {field} does not match metadata")
 
     errors.extend(validate_vectors(vectors, dimension))
-    errors.extend(validate_self_similarity(vectors))
+    if check_self_similarity and not errors:
+        errors.extend(validate_self_similarity(vectors))
     return errors, {
         "count": count,
         "dimension": dimension,

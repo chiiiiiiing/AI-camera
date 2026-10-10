@@ -19,17 +19,17 @@ class V9SceneContextEstimator(
     private val config: V9SceneContextConfig = V9SceneContextConfig()
 ) {
     fun estimate(candidates: List<SearchHit>, stats: FrameColorStats): SceneContext {
-        val usable = candidates.take(config.rankWeights.size)
-            .filter { it.metadata != null && it.cosine.isFinite() }
+        val usable = candidates.take(config.rankWeights.size).withIndex()
+            .filter { it.value.metadata != null && it.value.cosine.isFinite() }
         if (usable.isEmpty()) return SceneContext(lightingQuality = estimateLighting(stats))
 
         val photoVotes = linkedMapOf<String, Float>()
         val sceneVotes = linkedMapOf<String, Float>()
         val compositionVotes = linkedMapOf<String, Float>()
-        usable.forEachIndexed { index, hit ->
-            val meta = hit.metadata ?: return@forEachIndexed
+        usable.forEach { (index, hit) ->
+            val meta = hit.metadata ?: return@forEach
             val weight = (config.rankWeights[index] * hit.cosine.coerceIn(0f, 1f))
-                .takeIf { it.isFinite() && it > 0f } ?: return@forEachIndexed
+                .takeIf { it.isFinite() && it > 0f } ?: return@forEach
             addVote(photoVotes, meta.photoType, weight)
             addVote(sceneVotes, meta.sceneCategory, weight)
             addVote(compositionVotes, meta.compositionType, weight)
@@ -39,7 +39,7 @@ class V9SceneContextEstimator(
         val scene = consensus(sceneVotes, config.minimumSceneShare)
         val composition = consensus(compositionVotes, config.minimumCompositionShare)
         val sceneMetaMatchesPhoto = scene?.value?.let { sceneCategory ->
-            usable.any { hit ->
+            usable.any { (_, hit) ->
                 val meta = hit.metadata
                 meta != null && meta.sceneCategory == sceneCategory && meta.photoType == photo?.value
             }
@@ -48,7 +48,7 @@ class V9SceneContextEstimator(
         return SceneContext(
             photoType = photo?.value,
             sceneCategory = scene?.value?.takeIf { sceneMetaMatchesPhoto },
-            sceneConfidence = scene?.share ?: 0f,
+            sceneConfidence = if (sceneMetaMatchesPhoto) scene?.share ?: 0f else 0f,
             preferredComposition = composition?.value,
             lightingQuality = estimateLighting(stats)
         )
@@ -73,7 +73,7 @@ class V9SceneContextEstimator(
     }
 
     private fun addVote(votes: MutableMap<String, Float>, key: String, weight: Float) {
-        if (key.isBlank() || !weight.isFinite() || weight <= 0f) return
+        if (key.isBlank() || key == "unknown" || !weight.isFinite() || weight <= 0f) return
         votes[key] = (votes[key] ?: 0f) + weight
     }
 

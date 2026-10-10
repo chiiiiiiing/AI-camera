@@ -12,6 +12,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+import validate_embeddings
+
 
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
@@ -59,6 +61,9 @@ def validate_teacher_embedding(record: dict[str, Any], base_dir: Path) -> tuple[
         raise ValueError(
             f"{photo_id}: teacher embedding byte size {actual_size} != expected {expected_size}"
         )
+    errors = validate_embeddings.validate_embedding_values(validate_embeddings.read_f32(path), dimension)
+    if errors:
+        raise ValueError(f"{photo_id}: invalid teacher embedding: {'; '.join(errors)}")
     return path, dimension
 
 
@@ -74,6 +79,7 @@ def distillation_record(record: dict[str, Any], split: str, base_dir: Path) -> d
         "photo_type": record.get("photo_type"),
         "scene_category": record.get("scene_category"),
         "source_path": record.get("source_path"),
+        "source_sha256": record.get("source_sha256"),
         "width": record.get("width"),
         "height": record.get("height"),
         "teacher_embedding": {
@@ -138,6 +144,23 @@ def build_splits(
     if train_ratio + val_ratio >= 1.0:
         raise ValueError("train_ratio + val_ratio must be less than 1")
 
+    if not rows:
+        raise ValueError("metadata contains no training examples")
+    seen: dict[str, set[str]] = {field: set() for field in ("photo_id", "template_id", "source_sha256", "source_path")}
+    for row in rows:
+        for field, values in seen.items():
+            value = row.get(field)
+            if field in ("photo_id", "template_id") and (not isinstance(value, str) or not value.strip()):
+                raise ValueError(f"missing or blank {field}")
+            if not value:
+                continue
+            normalized = str(value).strip()
+            if field == "source_sha256":
+                normalized = normalized.lower()
+            if normalized in values:
+                raise ValueError(f"duplicate {field}: {value}; deduplicate before splitting to prevent leakage")
+            values.add(normalized)
+
     groups: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
         key = (str(row.get("photo_type")), str(row.get("scene_category")))
@@ -166,11 +189,19 @@ def build_dataset(
     rows = load_jsonl(metadata)
     base_dir = Path.cwd()
     split_rows = build_splits(rows, seed, train_ratio, val_ratio)
+    converted_splits = {
+        split_name: [distillation_record(record, split_name, base_dir) for record in records]
+        for split_name, records in split_rows.items()
+    }
+    spaces = {(record["teacher_embedding"]["dimension"], record["teacher_embedding"]["model_id"])
+              for records in converted_splits.values() for record in records}
+    if len(spaces) != 1 or not next(iter(spaces))[1]:
+        raise ValueError("teacher embeddings must share one dimension and non-empty model_id")
+    # Validate every split before touching existing outputs, so bad inputs cannot
+    # leave a mixture of old and new train/val/test manifests.
     output_dir.mkdir(parents=True, exist_ok=True)
-
     counts: dict[str, int] = {}
-    for split_name, records in split_rows.items():
-        converted = [distillation_record(record, split_name, base_dir) for record in records]
+    for split_name, converted in converted_splits.items():
         write_jsonl(output_dir / f"{split_name}.jsonl", converted)
         counts[split_name] = len(converted)
 
@@ -184,6 +215,15 @@ def build_dataset(
         "test_ratio": round(1.0 - train_ratio - val_ratio, 6),
         "total": len(rows),
         "splits": counts,
+        "teacher_dimension": next(iter(spaces))[0],
+        "teacher_model_id": next(iter(spaces))[1],
+        "split_checks": {
+            "unique_photo_ids": True,
+            "unique_template_ids": True,
+            "unique_available_source_hashes": True,
+            "source_hash_coverage": sum(bool(row.get("source_sha256")) for row in rows),
+            "capture_group_disjointness_verified": False,
+        },
     }
     (output_dir / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",

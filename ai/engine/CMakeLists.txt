@@ -5,14 +5,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# ── 编译选项 ──
-if(ANDROID)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -fPIC -fvisibility=hidden")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=armv8.2-a+dotprod")
-else()
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -g")
-endif()
-
 # ═══════════════════════════════════════════
 # 三方库 (Homebrew 安装, 阶段 1 仅用 Catch2 测试)
 # ═══════════════════════════════════════════
@@ -36,7 +28,8 @@ if(nlohmann_json_FOUND)
 endif()
 
 # Catch2 — /opt/homebrew/lib/cmake/Catch2
-find_package(Catch2 QUIET)
+# Require a SKIP()-capable release for tests whose optional local fixtures may be absent.
+find_package(Catch2 3.3 QUIET)
 if(Catch2_FOUND)
     message(STATUS "Found Catch2")
 endif()
@@ -58,6 +51,14 @@ if(ANDROID)
 endif()
 
 add_library(ai_photo_engine SHARED ${ENGINE_SOURCES})
+set_target_properties(ai_photo_engine PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+if(MSVC)
+    target_compile_options(ai_photo_engine PRIVATE /O2 /utf-8)
+else()
+    target_compile_options(ai_photo_engine PRIVATE -O2 -g)
+endif()
+# Let the Android toolchain choose its supported ISA; dotprod is not universal.
+# Keep the public C API visible to dlopen/JNI consumers of the shared library.
 
 target_include_directories(ai_photo_engine PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -76,22 +77,24 @@ endif()
 # 单元测试
 # ═══════════════════════════════════════════
 
-file(GLOB_RECURSE TEST_SOURCES tests/*.cpp)
-if(TEST_SOURCES)
-    add_executable(engine_tests ${TEST_SOURCES})
-    target_link_libraries(engine_tests PRIVATE ai_photo_engine)
-    target_compile_definitions(engine_tests PRIVATE
-        AI_CAMERA_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/.."
-    )
+include(CTest)
+if(BUILD_TESTING AND NOT ANDROID)
+    find_package(Threads REQUIRED)
+    add_executable(engine_regression_tests tests/test_engine_regressions.cpp)
+    target_link_libraries(engine_regression_tests PRIVATE ai_photo_engine Threads::Threads)
+    add_test(NAME engine_regression_tests COMMAND engine_regression_tests)
 
-    if(Catch2_FOUND)
+    if(Catch2_FOUND AND nlohmann_json_FOUND)
+        add_executable(engine_tests tests/test_engine_basic.cpp)
+        target_link_libraries(engine_tests PRIVATE ai_photo_engine)
+        target_compile_definitions(engine_tests PRIVATE
+            AI_CAMERA_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/../.."
+        )
         target_link_libraries(engine_tests PRIVATE Catch2::Catch2WithMain)
+        add_test(NAME engine_tests COMMAND engine_tests)
     else()
-        message(WARNING "Catch2 not found — tests will not link")
+        message(STATUS "Optional fixture tests require Catch2 >= 3.3 and nlohmann_json; portable regression tests remain enabled")
     endif()
-
-    include(CTest)
-    add_test(NAME engine_tests COMMAND engine_tests)
 endif()
 
 # ═══════════════════════════════════════════
@@ -101,5 +104,6 @@ endif()
 install(TARGETS ai_photo_engine
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
+    RUNTIME DESTINATION bin
 )
 install(DIRECTORY include/ DESTINATION include)

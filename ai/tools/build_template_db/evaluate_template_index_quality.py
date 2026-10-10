@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import math
 import random
 import sys
 from datetime import datetime, timezone
@@ -88,7 +90,11 @@ def nested(record: dict[str, Any], group: str, field: str) -> Any:
 def comparable(value: Any) -> bool:
     if isinstance(value, str):
         return value.strip().lower() not in UNKNOWN_VALUES
-    return value not in UNKNOWN_VALUES
+    return isinstance(value, (bool, int, float)) and math.isfinite(value)
+
+
+def same_known_label(left: Any, right: Any) -> bool:
+    return comparable(left) and comparable(right) and left == right
 
 
 def field_match_score(
@@ -150,7 +156,8 @@ def attach_keys(keys: dict[str, Any], metadata: list[dict[str, Any]]) -> list[di
 
 def same_scene_available(records: list[dict[str, Any]], index: int) -> bool:
     scene = records[index].get("scene_category")
-    return any(other.get("scene_category") == scene for other_i, other in enumerate(records) if other_i != index)
+    return any(same_known_label(other.get("scene_category"), scene)
+               for other_i, other in enumerate(records) if other_i != index)
 
 
 def evaluate_neighbors(
@@ -169,8 +176,8 @@ def evaluate_neighbors(
             top_neighbors.append(
                 {
                     **item,
-                    "same_photo_type": candidate.get("photo_type") == record.get("photo_type"),
-                    "same_scene_category": candidate.get("scene_category") == record.get("scene_category"),
+                    "same_photo_type": same_known_label(candidate.get("photo_type"), record.get("photo_type")),
+                    "same_scene_category": same_known_label(candidate.get("scene_category"), record.get("scene_category")),
                     "composition_score": comp["score"],
                     "composition_matched": comp["matched"],
                     "composition_available": comp["available"],
@@ -261,6 +268,11 @@ def summarize(records: list[dict[str, Any]], evaluations: list[dict[str, Any]], 
                     - float(evaluation["neighbors"][1]["similarity"])
                 )
         metrics[f"top{k}"] = {
+            "query_count": len(same_scene_hits),
+            "same_scene_eligible_query_count": len(same_scene_hits_eligible),
+            "composition_evaluable_query_count": len(composition_hits),
+            "lighting_evaluable_query_count": len(lighting_hits),
+            "queries_with_k_neighbors": sum(len(evaluation["neighbors"]) >= k for evaluation in evaluations),
             "same_photo_type_hit_rate_pct": pct(hit_rate(same_type_hits)),
             "same_scene_hit_rate_pct": pct(hit_rate(same_scene_hits)),
             "same_scene_hit_rate_eligible_pct": pct(hit_rate(same_scene_hits_eligible)),
@@ -287,11 +299,11 @@ def problem_samples(evaluations: list[dict[str, Any]], limit: int = 12) -> list[
         if not top1["same_photo_type"]:
             reason = "top1_photo_type_mismatch"
             severity = 5
-        elif evaluation["same_scene_available"] and not top1["same_scene_category"]:
-            reason = "top1_scene_mismatch"
-            severity = 4
         elif evaluation["same_scene_available"] and not any(item["same_scene_category"] for item in neighbors[:5]):
             reason = "no_same_scene_in_top5"
+            severity = 4
+        elif evaluation["same_scene_available"] and not top1["same_scene_category"]:
+            reason = "top1_scene_mismatch"
             severity = 4
         elif top1["composition_score"] is not None and top1["composition_score"] < 0.40:
             reason = "top1_composition_weak_match"
@@ -378,6 +390,8 @@ def usearch_check(
     evaluations: list[dict[str, Any]],
     sample_size: int,
 ) -> dict[str, Any]:
+    if sample_size <= 0 or not evaluations:
+        return {"status": "skipped", "reason": "no queries requested for ANN validation", "checked": 0}
     idx_path = index_dir / "templates.usearch.idx"
     if not idx_path.exists():
         return {"status": "skipped", "reason": "templates.usearch.idx not found"}
@@ -393,6 +407,9 @@ def usearch_check(
     index_by_key = {key: i for i, key in enumerate(key_by_index)}
     search_index = Index(ndim=dimension, metric="cos", dtype="f32")
     search_index.load(str(idx_path))
+    if int(search_index.size) != len(vectors):
+        return {"status": "mismatch", "checked": 0, "size": int(search_index.size),
+                "reason": "ANN index size does not match portable bundle"}
     mismatches: list[dict[str, Any]] = []
     checked = 0
     for evaluation in evaluations[:sample_size]:
@@ -452,6 +469,7 @@ def recommendations(metrics: dict[str, Any], problems: list[dict[str, Any]]) -> 
         recs.append("光线字段匹配偏弱，建议将 lighting/time_of_day 作为二级 rerank 或过滤条件。")
     if any(problem["reason"] == "top1_photo_type_mismatch" for problem in problems):
         recs.append("发现跨 photo_type top1，需要端侧查询时按当前场景类型做候选过滤。")
+    recs.append("这是库内 leave-one-out 诊断；未验证训练集隔离，不能代替独立查询集、按拍摄组隔离的泛化验收。")
     recs.append("后续更换 embedding 模型或 student 维度时，用同一脚本做 teacher/student A/B 报告。")
     return recs
 
@@ -466,6 +484,7 @@ def write_markdown_report(report: dict[str, Any], output: Path) -> None:
     lines.append(f"- 索引目录：`{report['index_dir']}`")
     lines.append(f"- 样本数：{summary['count']}，维度：{summary['dimension']}")
     lines.append(f"- USearch 检查：{report['usearch_check']['status']}")
+    lines.append("- 评估口径：库内 leave-one-out，排除自身；未验证训练集隔离，不代表新照片泛化性能。")
     lines.append("")
     lines.append("## 核心指标")
     lines.append("")
@@ -540,6 +559,10 @@ def write_markdown_report(report: dict[str, Any], output: Path) -> None:
 
 
 def build_report(index_dir: Path, top_k: int, sample_size: int, seed: int) -> dict[str, Any]:
+    if top_k <= 0:
+        raise ValueError("top_k must be positive")
+    if sample_size < 0:
+        raise ValueError("sample_size must be non-negative")
     keys, metadata, vectors = load_index(index_dir)
     records = attach_keys(keys, metadata)
     evaluations = evaluate_neighbors(records, vectors, max(top_k, 5))
@@ -549,9 +572,22 @@ def build_report(index_dir: Path, top_k: int, sample_size: int, seed: int) -> di
     samples = select_sample_queries(evaluations, sample_size, seed)
     usearch = usearch_check(index_dir, keys, vectors, evaluations, min(sample_size, len(evaluations)))
     report = {
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "index_dir": str(index_dir),
+        "evaluation_protocol": {
+            "query_source": "index_embeddings",
+            "gallery_source": "same_index",
+            "self_match_excluded": True,
+            "training_split_disjointness_verified": False,
+            "near_duplicates_excluded": False,
+            "metric_scope": "leave_one_out_diagnostic_not_held_out_generalization",
+        },
+        "input_artifacts": {
+            name: {"sha256": hashlib.sha256((index_dir / name).read_bytes()).hexdigest(),
+                   "bytes": (index_dir / name).stat().st_size}
+            for name in ("templates.keys.json", "templates.metadata.jsonl", "templates.embeddings.f32")
+        },
         "summary": {
             "count": int(keys.get("count")),
             "dimension": int(keys.get("dimension")),

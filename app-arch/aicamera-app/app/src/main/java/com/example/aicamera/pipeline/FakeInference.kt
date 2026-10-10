@@ -173,7 +173,9 @@ data class FakeInferenceOutput(
     /** 仅真实 V9 输出推荐；FakeInference 保持 null，避免伪装成 AI 推荐。 */
     val filterRecommendation: FilterRecommendation? = null,
     /** 仅真实 V9 输出建议；FakeInference 保持 null，且该建议不直接控制镜头。 */
-    val autoZoomRecommendation: AutoZoomRecommendation? = null
+    val autoZoomRecommendation: AutoZoomRecommendation? = null,
+    /** Whether this composition needs a detected subject; independent of rendered boxes. */
+    val expectsSubject: Boolean = false
 )
 
 data class FakeGuideLine(

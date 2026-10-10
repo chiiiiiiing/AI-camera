@@ -5,11 +5,13 @@ on:
     paths:
       - 'app-arch/aicamera-app/**'
       - 'ai/tools/validate_android_v9_assets.py'
+      - 'ai/tools/build_template_db/validate_template_index.py'
       - '.github/workflows/android-v9-engine-ci.yml'
   pull_request:
     paths:
       - 'app-arch/aicamera-app/**'
       - 'ai/tools/validate_android_v9_assets.py'
+      - 'ai/tools/build_template_db/validate_template_index.py'
       - '.github/workflows/android-v9-engine-ci.yml'
 
 jobs:

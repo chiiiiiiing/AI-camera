@@ -59,20 +59,21 @@ object GuidanceGeometry {
         horizonAngleDeg: Float? = null
     ): GuidanceCue {
         // 1. 水平倾斜优先（构图先要端平）
-        val angle = horizonAngleDeg
+        val angle = horizonAngleDeg?.takeIf { it.isFinite() }
         if (angle != null && angle > ROLL_THRESHOLD_DEG) return GuidanceCue.ROLL_COUNTERCLOCKWISE
         if (angle != null && angle < -ROLL_THRESHOLD_DEG) return GuidanceCue.ROLL_CLOCKWISE
 
         // 2. 模板期望主体但没检测到 → 引导用户放入主体
-        val hasSubject = subjectCx != null && subjectCy != null
+        val hasSubject = subjectCx != null && subjectCy != null &&
+            subjectCx.isFinite() && subjectCy.isFinite()
         if (!hasSubject) {
             return if (expectsSubject) GuidanceCue.SUBJECT_TARGET else GuidanceCue.NONE
         }
 
         // 3. 主体 vs 目标区差值（与 docs/10 的映射一致）
-        val tolerance = targetTolerance.coerceAtLeast(MIN_TOLERANCE)
-        val dx = subjectCx!! - targetCx
-        val dy = subjectCy!! - targetCy
+        val tolerance = targetTolerance.takeIf { it.isFinite() }?.coerceIn(MIN_TOLERANCE, 0.5f) ?: 0.12f
+        val dx = subjectCx!! - (targetCx.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0.5f)
+        val dy = subjectCy!! - (targetCy.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0.5f)
 
         if (abs(dx) <= tolerance && abs(dy) <= tolerance) {
             return GuidanceCue.SUBJECT_ALIGNED
@@ -88,7 +89,7 @@ object GuidanceGeometry {
      * 计算构图进度 (0.0–1.0)。
      *
      * 位置得分与水平得分按权重归一化混合；两类信号都缺失时返回 null
-     * （调用方应回退到模板检索分）。
+     * （调用方应显示尚未验证，不能把模板检索相似度当作构图达标）。
      */
     fun compositionProgress(
         subjectCx: Float?,
@@ -100,14 +101,16 @@ object GuidanceGeometry {
         var score = 0f
         var weight = 0f
 
-        if (subjectCx != null && subjectCy != null) {
+        if (subjectCx != null && subjectCy != null && subjectCx.isFinite() &&
+            subjectCy.isFinite() && targetCx.isFinite() && targetCy.isFinite()
+        ) {
             val dist = hypot(subjectCx - targetCx, subjectCy - targetCy)
             val posScore = (1f - dist / POSITION_REF_DIST).coerceIn(0f, 1f)
             score += POSITION_WEIGHT * posScore
             weight += POSITION_WEIGHT
         }
 
-        if (horizonAngleDeg != null) {
+        if (horizonAngleDeg != null && horizonAngleDeg.isFinite()) {
             val hScore = (1f - abs(horizonAngleDeg) / HORIZON_REF_DEG).coerceIn(0f, 1f)
             score += HORIZON_WEIGHT * hScore
             weight += HORIZON_WEIGHT
@@ -118,6 +121,25 @@ object GuidanceGeometry {
 
     /** 主体对齐时的进度下限（保证 GuidanceStateMachine 能达到 ALIGNED 相位） */
     const val ALIGNED_PROGRESS_FLOOR = 0.95f
+
+    /** A missing required subject cannot be aligned merely because the phone is level. */
+    fun verifiedProgress(
+        cue: GuidanceCue,
+        progress: Float?,
+        expectsSubject: Boolean,
+        hasSubject: Boolean,
+        hasRecommendation: Boolean = true
+    ): Float {
+        if (!hasRecommendation) return 0f
+        if (expectsSubject && !hasSubject) return 0f
+        if (progress == null || !progress.isFinite()) return 0f
+        val safe = progress.coerceIn(0f, 1f)
+        return when (cue) {
+            GuidanceCue.SUBJECT_ALIGNED -> progressWithAlignedBoost(cue, safe)
+            GuidanceCue.NONE -> safe
+            else -> safe.coerceAtMost(0.9f)
+        }
+    }
 
     /**
      * 进度与指令对齐（纯函数，便于单测）。

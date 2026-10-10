@@ -14,7 +14,7 @@ extern "C" {
  * 1. 纯 C 接口, JNI 边界零开销
  * 2. 不透明句柄封装所有内部状态
  * 3. 零拷贝: YUV 帧通过 DirectByteBuffer 指针传递
- * 4. 线程安全: 可多线程并发调用
+ * 4. 同一有效句柄支持并发读取/处理; shutdown 必须等待所有调用结束
  * ═══════════════════════════════════════════════════════════ */
 
 /* ── 不透明句柄 ── */
@@ -24,13 +24,13 @@ typedef void* EngineHandle;
 typedef struct {
     int32_t mode;              /* 0=极简, 1=轻量, 2=标准 */
     const char* model_dir;     /* 模型文件路径 */
-    int32_t cpu_threads;       /* CPU 线程数 (2-4) */
+    int32_t cpu_threads;       /* 0=默认, 1-64=请求线程数; 建议 2-4 */
     int32_t enable_profiling;  /* 0=关闭, 1=性能日志 */
 } EngineConfig;
 
 /* ── 初始化结果 ── */
 typedef struct {
-    int32_t code;              /* 0=成功 */
+    int32_t code;              /* 0=成功, -1=空输出指针, -2=配置无效, -3=内存不足, -4=初始化异常 */
     const char* message;       /* 错误信息 */
     int32_t loaded_models_mask;/* bitmask: 已加载模型 */
     float load_time_ms;        /* 初始化耗时 */
@@ -59,7 +59,7 @@ typedef struct {
 /* ── 单帧输入 ── */
 typedef struct {
     CameraFrame camera;
-    SensorData  sensor;        /* 可为 NULL */
+    SensorData  sensor;        /* 无传感器数据时传入零值结构体 */
     float       focal_length_35mm_eq;
     float       current_zoom_ratio;   /* 当前相机倍率, 用于自动变焦闭环 */
 } FrameInput;
@@ -170,13 +170,15 @@ void       engine_shutdown(EngineHandle handle);
 int32_t    engine_is_ready(EngineHandle handle);
 const char* engine_get_version(void);
 
-/* 核心处理: 每帧调用, 需 < 20ms (热路径) */
+/* 核心处理: 每帧调用, 目标 < 20ms。当前骨架未接入推理, 不输出实际场景或评分。
+ * engine_is_ready 仅表示句柄初始化成功; 推理能力查看状态 JSON 的 inference_ready。
+ */
 GuidanceOutput engine_process_frame(EngineHandle handle, const FrameInput* input);
 
 /* 强制场景重新识别 (用户手动触发) */
 void engine_trigger_scene_rescan(EngineHandle handle);
 
-/* 获取引擎内部状态 (调试用) */
+/* 获取引擎内部状态 (调试用); 返回只读快照, 生命周期截至 engine_shutdown。 */
 const char* engine_get_status_json(EngineHandle handle);
 
 #ifdef __cplusplus

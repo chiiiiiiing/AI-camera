@@ -1,12 +1,14 @@
 #include "core/template_index.h"
 
 #include <algorithm>
+#include <charconv>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <regex>
 #include <sstream>
+#include <unordered_set>
 
 namespace ai_photo {
 namespace {
@@ -22,23 +24,25 @@ std::string read_text_file(const std::filesystem::path& path) {
 }
 
 bool extract_int(const std::string& text, const std::string& field, int32_t* out) {
-    const std::regex pattern("\"" + field + "\"\\s*:\\s*([0-9]+)");
+    const std::regex pattern("\"" + field + "\"\\s*:\\s*([0-9]+)\\s*[,}]");
     std::smatch match;
     if (!std::regex_search(text, match, pattern)) {
         return false;
     }
-    *out = static_cast<int32_t>(std::stol(match[1].str()));
-    return true;
+    const std::string digits = match[1].str();
+    const auto result = std::from_chars(digits.data(), digits.data() + digits.size(), *out);
+    return result.ec == std::errc{} && result.ptr == digits.data() + digits.size();
 }
 
 bool extract_uint64(const std::string& text, const std::string& field, uint64_t* out) {
-    const std::regex pattern("\"" + field + "\"\\s*:\\s*([0-9]+)");
+    const std::regex pattern("\"" + field + "\"\\s*:\\s*([0-9]+)\\s*[,}]");
     std::smatch match;
     if (!std::regex_search(text, match, pattern)) {
         return false;
     }
-    *out = static_cast<uint64_t>(std::stoull(match[1].str()));
-    return true;
+    const std::string digits = match[1].str();
+    const auto result = std::from_chars(digits.data(), digits.data() + digits.size(), *out);
+    return result.ec == std::errc{} && result.ptr == digits.data() + digits.size();
 }
 
 std::string unescape_json_string(const std::string& value) {
@@ -179,6 +183,11 @@ TemplateLoadResult load_keys(
     if (dimension != kTemplateEmbeddingDimension) {
         return {TemplateLoadCode::kDimensionMismatch, "template dimension is not 256"};
     }
+    int32_t schema_version = 0;
+    if (!extract_int(content, "schema_version", &schema_version) || schema_version != 1 ||
+        extract_string(content, "metric") != "cosine") {
+        return {TemplateLoadCode::kManifestInvalid, "template index requires schema_version 1 and cosine metric"};
+    }
     const std::string items_array = extract_object_array(content, "items");
     const std::vector<std::string> item_blocks = split_top_level_objects(items_array);
     if (count <= 0 || static_cast<int32_t>(item_blocks.size()) != count) {
@@ -186,6 +195,7 @@ TemplateLoadResult load_keys(
     }
 
     std::vector<TemplateKey> keys;
+    std::unordered_set<std::string> template_ids;
     keys.reserve(item_blocks.size());
     for (size_t index = 0; index < item_blocks.size(); ++index) {
         const std::string& item = item_blocks[index];
@@ -205,6 +215,9 @@ TemplateLoadResult load_keys(
             key.scene_category.empty()
         ) {
             return {TemplateLoadCode::kManifestInvalid, "template keys are not continuous or complete"};
+        }
+        if (!template_ids.insert(key.template_id).second) {
+            return {TemplateLoadCode::kManifestInvalid, "duplicate template_id in template keys"};
         }
         keys.push_back(key);
     }
@@ -245,20 +258,24 @@ TemplateLoadResult load_metadata(
     std::string line;
     size_t line_index = 0;
     while (std::getline(input, line)) {
-        if (line.empty()) {
+        if (line.find_first_not_of(" \t\r\n") == std::string::npos) {
             continue;
         }
         if (line_index >= keys.size()) {
             return {TemplateLoadCode::kKeyMetadataMismatch, "metadata has more rows than keys"};
         }
         const std::string template_id = extract_string(line, "template_id");
-        if (template_id != keys[line_index].template_id) {
-            return {TemplateLoadCode::kKeyMetadataMismatch, "metadata template_id does not match keys order"};
+        const auto& key = keys[line_index];
+        if (template_id != key.template_id ||
+            extract_string(line, "photo_id") != key.photo_id ||
+            extract_string(line, "photo_type") != key.photo_type ||
+            extract_string(line, "scene_category") != key.scene_category) {
+            return {TemplateLoadCode::kKeyMetadataMismatch, "metadata identity or filters do not match keys order"};
         }
         metadata.push_back(parse_metadata_line(line, keys[line_index].key));
         ++line_index;
     }
-    if (metadata.size() != keys.size()) {
+    if (input.bad() || metadata.size() != keys.size()) {
         return {TemplateLoadCode::kKeyMetadataMismatch, "metadata row count does not match keys"};
     }
     *out_metadata = std::move(metadata);
@@ -299,6 +316,11 @@ TemplateLoadResult load_embeddings(
         const double norm = std::sqrt(norm_sq);
         if (std::fabs(norm - 1.0) > 1e-3) {
             return {TemplateLoadCode::kManifestInvalid, "embedding row is not L2-normalized"};
+        }
+        // Export rounding is tolerated, but search must use unit vectors.
+        for (int32_t col = 0; col < dimension; ++col) {
+            values[static_cast<size_t>(row) * dimension + col] = static_cast<float>(
+                values[static_cast<size_t>(row) * dimension + col] / norm);
         }
     }
     *out_embeddings = std::move(values);
@@ -343,7 +365,8 @@ void TemplateIndex::reset() {
 TemplateLoadResult TemplateIndex::load(const std::string& index_dir) {
     reset();
     const std::filesystem::path root(index_dir);
-    if (index_dir.empty() || !std::filesystem::exists(root)) {
+    std::error_code path_error;
+    if (index_dir.empty() || !std::filesystem::is_directory(root, path_error)) {
         warning_ = "template index directory missing";
         return {TemplateLoadCode::kIndexDirMissing, warning_};
     }
@@ -395,11 +418,28 @@ TemplateLoadResult TemplateIndex::load(const std::string& index_dir) {
 }
 
 std::vector<TemplateMatch> TemplateIndex::search(const TemplateQuery& query) const {
-    if (!ready_ || query.embedding == nullptr || query.dimension != dimension_ || query.top_k <= 0) {
+    if (!ready_ || query.embedding == nullptr || query.dimension != dimension_ || query.top_k <= 0 ||
+        !std::isfinite(query.min_similarity) || query.min_similarity < -1.0f || query.min_similarity > 1.0f) {
         return {};
     }
+    double query_norm_sq = 0.0;
+    for (int32_t col = 0; col < dimension_; ++col) {
+        const double value = query.embedding[col];
+        if (!std::isfinite(value)) {
+            return {};
+        }
+        query_norm_sq += value * value;
+    }
+    if (query_norm_sq == 0.0) {
+        return {};
+    }
+    const double inverse_norm = 1.0 / std::sqrt(query_norm_sq);
+    const size_t limit = std::min(keys_.size(), static_cast<size_t>(query.top_k));
+    const auto better = [](const TemplateMatch& lhs, const TemplateMatch& rhs) {
+        return lhs.similarity != rhs.similarity ? lhs.similarity > rhs.similarity : lhs.key < rhs.key;
+    };
     std::vector<TemplateMatch> matches;
-    matches.reserve(keys_.size());
+    matches.reserve(limit);
     for (size_t row = 0; row < keys_.size(); ++row) {
         const TemplateKey& key = keys_[row];
         if (
@@ -408,33 +448,32 @@ std::vector<TemplateMatch> TemplateIndex::search(const TemplateQuery& query) con
         ) {
             continue;
         }
-        float similarity = 0.0f;
+        double dot = 0.0;
         const float* candidate = embeddings_.data() + row * dimension_;
         for (int32_t col = 0; col < dimension_; ++col) {
-            similarity += query.embedding[col] * candidate[col];
+            dot += static_cast<double>(query.embedding[col]) * candidate[col];
         }
+        const float similarity = static_cast<float>(std::clamp(dot * inverse_norm, -1.0, 1.0));
         if (similarity < query.min_similarity) {
             continue;
         }
-        matches.push_back(
-            TemplateMatch{
+        const TemplateMatch match{
                 key.key,
                 1.0f - similarity,
                 similarity,
                 &keys_[row],
                 &metadata_[row],
-            }
-        );
-    }
-    std::stable_sort(matches.begin(), matches.end(), [](const TemplateMatch& lhs, const TemplateMatch& rhs) {
-        if (lhs.similarity == rhs.similarity) {
-            return lhs.key < rhs.key;
+            };
+        if (matches.size() < limit) {
+            matches.push_back(match);
+            std::push_heap(matches.begin(), matches.end(), better);
+        } else if (better(match, matches.front())) {
+            std::pop_heap(matches.begin(), matches.end(), better);
+            matches.back() = match;
+            std::push_heap(matches.begin(), matches.end(), better);
         }
-        return lhs.similarity > rhs.similarity;
-    });
-    if (static_cast<int32_t>(matches.size()) > query.top_k) {
-        matches.resize(static_cast<size_t>(query.top_k));
     }
+    std::sort_heap(matches.begin(), matches.end(), better);
     return matches;
 }
 

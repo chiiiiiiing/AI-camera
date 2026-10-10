@@ -89,6 +89,40 @@ class EvaluateTemplateIndexQualityTests(unittest.TestCase):
         self.assertEqual(report["metrics"]["top3"]["same_scene_hit_rate_eligible_pct"], 100.0)
         self.assertEqual(len(report["sample_queries"]), 2)
         self.assertIn(report["usearch_check"]["status"], {"skipped", "passed"})
+        self.assertFalse(report["evaluation_protocol"]["training_split_disjointness_verified"])
+        self.assertEqual(len(report["input_artifacts"]["templates.embeddings.f32"]["sha256"]), 64)
+        self.assertEqual(report["metrics"]["top5"]["queries_with_k_neighbors"], 0)
+
+    def test_unknown_labels_do_not_count_as_hits(self):
+        records = [{"template_id": "a"}, {"template_id": "b", "scene_category": "unknown"},
+                   {"template_id": "c", "scene_category": "unknown"}]
+        evaluations = evaluate_template_index_quality.evaluate_neighbors(records, [[1, 0]] * 3, 5)
+        for evaluation in evaluations:
+            self.assertFalse(evaluation["same_scene_available"])
+            for neighbor in evaluation["neighbors"]:
+                self.assertFalse(neighbor["same_scene_category"])
+                self.assertFalse(neighbor["same_photo_type"])
+
+    def test_empty_ann_sample_is_skipped_not_passed(self):
+        result = evaluate_template_index_quality.usearch_check(Path("unused"), {}, [], [], 0)
+        self.assertEqual(result["status"], "skipped")
+        self.assertEqual(result["checked"], 0)
+
+    def test_invalid_report_parameters_fail(self):
+        for top_k, sample_size in ((0, 1), (-1, 1), (1, -1)):
+            with self.subTest(top_k=top_k, sample_size=sample_size), self.assertRaises(ValueError):
+                evaluate_template_index_quality.build_report(Path("unused"), top_k, sample_size, 1)
+
+    def test_report_hash_changes_with_input_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_index(root)
+            first = evaluate_template_index_quality.build_report(root, 5, 0, 1)
+            path = root / "templates.metadata.jsonl"
+            path.write_text(path.read_text() + "\n")
+            second = evaluate_template_index_quality.build_report(root, 5, 0, 1)
+        self.assertNotEqual(first["input_artifacts"][path.name]["sha256"],
+                            second["input_artifacts"][path.name]["sha256"])
 
     def test_problem_samples_prioritize_cross_type_top1(self):
         query = {"key": 1, "photo_type": "landscape", "scene_category": "natural_landscape"}

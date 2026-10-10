@@ -108,6 +108,7 @@
         "dimension": {"type": "integer", "minimum": 1},
         "path": {"type": "string", "minLength": 1},
         "model_id": {"type": "string", "minLength": 1},
+        "model_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "role": {"enum": ["prototype", "teacher", "student"]}
       }
     }

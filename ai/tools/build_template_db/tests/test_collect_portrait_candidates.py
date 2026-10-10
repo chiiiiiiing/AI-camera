@@ -34,9 +34,9 @@ class PortraitConfigTests(unittest.TestCase):
         parser = portrait_collector.build_parser()
         args = parser.parse_args(["--dry-run"])
 
-        self.assertTrue(str(args.config).endswith("config/portrait_search_queries.json"))
-        self.assertTrue(str(args.output_dir).endswith("raw_photos/portrait_candidates"))
-        self.assertTrue(str(args.manifest).endswith("raw_photos/portrait_candidates/manifest.jsonl"))
+        self.assertTrue(args.config.as_posix().endswith("config/portrait_search_queries.json"))
+        self.assertTrue(args.output_dir.as_posix().endswith("raw_photos/portrait_candidates"))
+        self.assertTrue(args.manifest.as_posix().endswith("raw_photos/portrait_candidates/manifest.jsonl"))
         self.assertIsNone(args.category)
         self.assertEqual(args.limit_per_query, 5)
 

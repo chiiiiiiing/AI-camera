@@ -43,6 +43,35 @@ def metadata_record(root: Path, index: int, photo_type: str, scene_category: str
 
 
 class BuildDistillationDatasetTests(unittest.TestCase):
+    def test_rejects_duplicate_ids_and_source_images_before_splitting(self):
+        for field in ("photo_id", "template_id", "source_sha256", "source_path"):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                rows = [metadata_record(root, index, "landscape", "natural_landscape") for index in (1, 2)]
+                rows[0][field] = rows[1][field] = "same-source"
+                with self.assertRaisesRegex(ValueError, f"duplicate {field}"):
+                    build_distillation_dataset.build_splits(rows, 7, 0.8, 0.1)
+
+    def test_rejects_invalid_teacher_before_creating_outputs(self):
+        for corruption in ("nan", "unnormalized", "model", "dimension"):
+            with self.subTest(corruption=corruption), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                rows = [metadata_record(root, index, "landscape", "natural_landscape") for index in (1, 2)]
+                row = rows[1]
+                if corruption in ("nan", "unnormalized"):
+                    values = [float("nan"), 0, 0, 1] if corruption == "nan" else [2, 0, 0, 0]
+                    Path(row["embedding"]["path"]).write_bytes(struct.pack("<4f", *values))
+                elif corruption == "model":
+                    row["embedding"]["model_id"] = "incompatible-teacher"
+                else:
+                    row["embedding"]["dimension"] = 1
+                    Path(row["embedding"]["path"]).write_bytes(struct.pack("<f", 1.0))
+                metadata = root / "metadata.jsonl"
+                metadata.write_text("\n".join(json.dumps(value) for value in rows), encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    build_distillation_dataset.build_dataset(metadata, root / "distill")
+                self.assertFalse((root / "distill").exists())
+
     def test_builds_stratified_distillation_splits(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

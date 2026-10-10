@@ -13,6 +13,35 @@ import org.junit.Test
  * ROLL 优先 → SUBJECT_TARGET（期望主体但无检测）→ 容差内 ALIGNED → 四向 MOVE。
  */
 class GuidanceGeometryTest {
+    @Test
+    fun `model fallback cannot become aligned from a level phone`() {
+        assertEquals(0f, GuidanceGeometry.verifiedProgress(
+            GuidanceCue.NONE, 1f, false, false, hasRecommendation = false
+        ), 0f)
+        assertEquals(0f, GuidanceGeometry.verifiedProgress(
+            GuidanceCue.SUBJECT_ALIGNED, 1f, true, true, hasRecommendation = false
+        ), 0f)
+    }
+
+    @Test
+    fun `level phone with missing portrait cannot complete composition`() {
+        val progress = GuidanceGeometry.compositionProgress(null, null, horizonAngleDeg = 0f)
+        assertEquals(0f, GuidanceGeometry.verifiedProgress(GuidanceCue.SUBJECT_TARGET, progress, true, false), 0f)
+    }
+
+    @Test
+    fun `missing and corrupt signals do not certify alignment`() {
+        assertEquals(0f, GuidanceGeometry.verifiedProgress(GuidanceCue.NONE, null, false, false), 0f)
+        assertEquals(0f, GuidanceGeometry.verifiedProgress(GuidanceCue.SUBJECT_ALIGNED, Float.NaN, true, true), 0f)
+        assertNull(GuidanceGeometry.compositionProgress(Float.NaN, 0.5f, horizonAngleDeg = Float.NaN))
+        assertEquals(GuidanceCue.SUBJECT_TARGET, GuidanceGeometry.guidanceCue(Float.NaN, 0.5f, true))
+    }
+
+    @Test
+    fun `an outstanding move instruction cannot reach aligned threshold`() {
+        assertTrue(GuidanceGeometry.verifiedProgress(GuidanceCue.MOVE_LEFT, 0.99f, true, true) < 0.92f)
+        assertTrue(GuidanceGeometry.verifiedProgress(GuidanceCue.SUBJECT_ALIGNED, 0.75f, true, true) >= 0.92f)
+    }
 
     // ── ROLL 指令 ─────────────────────────────────────────────
 
@@ -170,7 +199,7 @@ class GuidanceGeometryTest {
     }
 
     @Test
-    fun `no signals at all returns null (caller falls back to template score)`() {
+    fun `no signals at all returns null for unverified composition`() {
         val p = GuidanceGeometry.compositionProgress(
             subjectCx = null, subjectCy = null,
             horizonAngleDeg = null

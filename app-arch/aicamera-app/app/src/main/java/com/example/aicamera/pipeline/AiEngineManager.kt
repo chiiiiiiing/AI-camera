@@ -10,7 +10,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
 import java.io.Closeable
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -85,54 +86,51 @@ class AiEngineManager @Inject constructor(
         _state.value = State(Status.COPYING)
 
         scope.launch {
-            // ── Phase 1: 复制资产 ──
-            val modelDir = AiModelAssets.ensureModelFiles(context)
-            if (modelDir == null) {
-                fail("AI 资产复制失败")
-                return@launch
-            }
-
-            // ── Phase 2: 完整性校验 ──
-            if (!AiModelAssets.verifyModelIntegrity(modelDir)) {
-                AiModelAssets.invalidateModelFiles(context)
-                fail("模型 sha256 校验失败，文件可能损坏")
-                return@launch
-            }
-
-            // ── Phase 3: 加载模型与索引 ──
-            _state.value = State(Status.LOADING)
-            val modelPath = AiModelAssets.getModelPath(context)
-            val indexDir = AiModelAssets.getIndexDir(context)
-            if (modelPath == null || indexDir == null) {
-                fail("模型或索引路径缺失 (model=${modelPath != null}, index=${indexDir != null})")
-                return@launch
-            }
-
             var runtime: V9EmbeddingRuntime? = null
             try {
+                // Include disk I/O and hash checks in the failure boundary: a permission or I/O
+                // error must leave COPYING and allow a later start() retry.
+                val modelDir = AiModelAssets.ensureModelFiles(context)
+                    ?: throw IllegalStateException("AI 资产复制或完整性校验失败")
+                coroutineContext.ensureActive()
+                synchronized(this@AiEngineManager) {
+                    if (closed) return@launch
+                    _state.value = State(Status.LOADING)
+                }
+                val modelPath = AiModelAssets.getModelPath(context)
+                    ?: throw IllegalStateException("模型路径缺失: $modelDir")
+                val indexDir = AiModelAssets.getIndexDir(context)
+                    ?: throw IllegalStateException("模板索引路径缺失")
                 runtime = V9EmbeddingRuntime(modelPath)
+                coroutineContext.ensureActive()
                 val index = V9TemplateIndex(indexDir)
                 if (!index.load()) {
-                    runtime.close()
                     AiModelAssets.invalidateModelFiles(context)
-                    fail("模板索引加载失败")
-                    return@launch
+                    throw IllegalStateException("模板索引加载失败")
                 }
-                if (closed) {
-                    runtime.close()
-                    return@launch
+                coroutineContext.ensureActive()
+                // Publication and close share the same lock, so a completed background load
+                // can never resurrect an engine after close() has returned.
+                synchronized(this@AiEngineManager) {
+                    if (closed) return@launch
+                    v9Inference = V9Inference(requireNotNull(runtime), index)
+                    runtime = null // ownership transferred to v9Inference
+                    _state.value = State(Status.READY, templateCount = index.templateCount)
                 }
-                v9Inference = V9Inference(runtime, index)
-                _state.value = State(Status.READY, templateCount = index.templateCount)
                 Log.i(TAG, "V9 推理引擎就绪: ${index.templateCount} 条模板")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                try { runtime?.close() } catch (_: Exception) {}
                 fail("模型加载异常: ${e.message}")
+            } finally {
+                try { runtime?.close() } catch (_: Exception) {}
             }
         }
     }
 
+    @Synchronized
     private fun fail(message: String) {
+        if (closed) return
         Log.w(TAG, "$message — 保持 FakeInference 兜底")
         _state.value = State(Status.FAILED, error = message)
     }
@@ -144,6 +142,7 @@ class AiEngineManager @Inject constructor(
         engineJob.cancel()
         try { v9Inference?.close() } catch (_: Exception) {}
         v9Inference = null
+        _state.value = State(Status.IDLE)
     }
 
     companion object {

@@ -11,3 +11,5 @@ captures/
 docs/screenshots/
 *.jks
 *.keystore
+__pycache__/
+*.py[cod]

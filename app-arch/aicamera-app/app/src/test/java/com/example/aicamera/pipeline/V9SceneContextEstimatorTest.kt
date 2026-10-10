@@ -39,6 +39,30 @@ class V9SceneContextEstimatorTest {
         assertNull(context.photoType)
         assertNull(context.sceneCategory)
         assertEquals("soft", context.lightingQuality)
+        assertEquals(0f, context.sceneConfidence, 0f)
+    }
+
+    @Test
+    fun `unknown metadata cannot become scene evidence`() {
+        val context = estimator.estimate(
+            listOf(hit("unknown", 0.9f, "unknown", "unknown", "unknown")), mixedLight
+        )
+        assertNull(context.photoType)
+        assertNull(context.sceneCategory)
+        assertNull(context.preferredComposition)
+        assertEquals(0f, context.sceneConfidence, 0f)
+    }
+
+    @Test
+    fun `skipping missing metadata does not promote a lower rank vote`() {
+        val context = V9SceneContextEstimator(V9SceneContextConfig(rankWeights = listOf(1f, 0.01f, 0.01f)))
+            .estimate(listOf(
+                SearchHit("missing", 0.9f),
+                hit("portrait", 0.9f, "portrait", "closeup_portrait", "centered_subject"),
+                hit("food", 0.9f, "still_life", "food_still_life", "rule_of_thirds")
+            ), mixedLight)
+        assertNull(context.photoType)
+        assertNull(context.sceneCategory)
     }
 
     private fun hit(

@@ -45,6 +45,7 @@ class FrameScheduler {
     private val recentPreprocessTimes = ArrayDeque<Long>(20)
     private val recentInferenceTimes = ArrayDeque<Long>(20)
     private val recentCompletionTimes = ArrayDeque<Long>(20)
+    private val recentModelCompletionTimes = ArrayDeque<Long>(20)
 
     fun schedule(
         imageProxy: ImageProxy,
@@ -98,12 +99,13 @@ class FrameScheduler {
         val startTime = SystemClock.elapsedRealtime()
 
         try {
+            if (!isCurrentSession(frameGeneration)) return
             val result = onProcess(imageProxy)
             val totalMs = SystemClock.elapsedRealtime() - startTime
 
             val finalResult = result.copy(
                 frameIndex = frameIdx,
-                timing = result.timing.copy(totalMs = totalMs)
+                timing = result.timing.copy(frameIndex = frameIdx, totalMs = totalMs)
             )
 
             if (!isCurrentSession(frameGeneration)) return
@@ -180,7 +182,10 @@ class FrameScheduler {
                 averageInferenceMs = recentInferenceTimes.averageOrZero(),
                 averagePipelineMs = recentPipelineTimes.averageOrZero(),
                 lastPipelineMs = recentPipelineTimes.lastOrNull() ?: 0L,
-                effectiveFps = effectiveFpsFromCompletionTimes(recentCompletionTimes)
+                effectiveFps = effectiveFpsFromCompletionTimes(recentCompletionTimes),
+                modelFps = effectiveFpsFromCompletionTimes(recentModelCompletionTimes),
+                inferenceP50Ms = latencyPercentile(recentInferenceTimes, 0.5),
+                inferenceP90Ms = latencyPercentile(recentInferenceTimes, 0.9)
             )
         }
 
@@ -197,7 +202,10 @@ class FrameScheduler {
             inferenceType = "pipeline",
             // ★ 新增统计
             dropRate = if (total > 0) dropped.toFloat() / total else 0f,
-            effectiveFps = snapshot.effectiveFps
+            effectiveFps = if (isRunning) snapshot.effectiveFps else 0f,
+            modelFps = if (isRunning) snapshot.modelFps else 0f,
+            inferenceP50Ms = snapshot.inferenceP50Ms,
+            inferenceP90Ms = snapshot.inferenceP90Ms
         )
     }
 
@@ -205,11 +213,15 @@ class FrameScheduler {
 
     private fun recordTiming(timing: FrameTiming, completionTimeMs: Long) {
         synchronized(statsLock) {
-            recentPreprocessTimes.addLast(timing.preprocessMs)
-            if (recentPreprocessTimes.size > 20) recentPreprocessTimes.removeFirst()
-
-            recentInferenceTimes.addLast(timing.inferenceMs)
-            if (recentInferenceTimes.size > 20) recentInferenceTimes.removeFirst()
+            // Cached model outputs are cheap geometry frames, not zero-latency inferences.
+            if (timing.modelSampled) {
+                recentPreprocessTimes.addLast(timing.preprocessMs)
+                if (recentPreprocessTimes.size > 20) recentPreprocessTimes.removeFirst()
+                recentInferenceTimes.addLast(timing.inferenceMs)
+                if (recentInferenceTimes.size > 20) recentInferenceTimes.removeFirst()
+                recentModelCompletionTimes.addLast(completionTimeMs)
+                if (recentModelCompletionTimes.size > 20) recentModelCompletionTimes.removeFirst()
+            }
 
             recentPipelineTimes.addLast(timing.totalMs)
             if (recentPipelineTimes.size > 20) recentPipelineTimes.removeFirst()
@@ -228,6 +240,7 @@ class FrameScheduler {
             recentPreprocessTimes.clear()
             recentInferenceTimes.clear()
             recentCompletionTimes.clear()
+            recentModelCompletionTimes.clear()
         }
     }
 
@@ -246,7 +259,10 @@ class FrameScheduler {
         val averageInferenceMs: Float,
         val averagePipelineMs: Float,
         val lastPipelineMs: Long,
-        val effectiveFps: Float
+        val effectiveFps: Float,
+        val modelFps: Float,
+        val inferenceP50Ms: Long,
+        val inferenceP90Ms: Long
     )
 }
 
@@ -264,6 +280,14 @@ internal fun effectiveFpsFromCompletionTimes(completionTimesMs: Collection<Long>
     if (elapsedMs <= 0L) return 0f
     return (((completionTimesMs.size - 1) * 1_000.0) / elapsedMs).toFloat()
         .takeIf { it.isFinite() && it >= 0f } ?: 0f
+}
+
+/** Nearest-rank percentile over the rolling sample window. */
+internal fun latencyPercentile(samplesMs: Collection<Long>, fraction: Double): Long {
+    require(fraction > 0.0 && fraction <= 1.0)
+    if (samplesMs.isEmpty()) return 0
+    val sorted = samplesMs.sorted()
+    return sorted[kotlin.math.ceil(sorted.size * fraction).toInt() - 1]
 }
 
 private fun logInfo(msg: String) = Log.i(CameraConfig.TAG, "[Scheduler] $msg")

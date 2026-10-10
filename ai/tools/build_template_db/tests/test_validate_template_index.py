@@ -33,6 +33,35 @@ def write_valid_index(root: Path) -> None:
 
 
 class ValidateTemplateIndexTests(unittest.TestCase):
+    def test_rejects_invalid_counts_dimensions_and_metric(self):
+        for field, value in (("count", 0), ("count", -1), ("count", 2.5), ("dimension", True), ("metric", "l2")):
+            with self.subTest(field=field, value=value), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                write_valid_index(root)
+                path = root / "templates.keys.json"
+                keys = json.loads(path.read_text())
+                keys[field] = value
+                path.write_text(json.dumps(keys))
+                if field == "metric":
+                    errors, _ = validate_template_index.validate_index(root)
+                    self.assertTrue(any("metric" in error for error in errors))
+                else:
+                    with self.assertRaises(ValueError):
+                        validate_template_index.validate_index(root)
+
+    def test_rejects_non_object_keys_boolean_keys_and_conflicting_labels(self):
+        for item in (None, {"key": True, "template_id": "template_1"},
+                     {"key": 1, "template_id": "template_1", "photo_type": "portrait"}):
+            with self.subTest(item=item), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                write_valid_index(root)
+                path = root / "templates.keys.json"
+                keys = json.loads(path.read_text())
+                keys["items"][0] = item
+                path.write_text(json.dumps(keys))
+                errors, _ = validate_template_index.validate_index(root)
+                self.assertTrue(errors)
+
     def test_valid_index_passes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

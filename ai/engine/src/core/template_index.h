@@ -56,16 +56,17 @@ struct TemplateMatch {
 };
 
 struct TemplateQuery {
-    const float* embedding = nullptr;
+    const float* embedding = nullptr;  // Finite nonzero vector; search normalizes internally.
     int32_t dimension = 0;
     int32_t top_k = 0;
     const char* photo_type_filter = nullptr;
     const char* scene_filter = nullptr;
-    float min_similarity = -1.0f;
+    float min_similarity = -1.0f;  // Inclusive cosine threshold in [-1, 1].
 };
 
 class TemplateIndex {
 public:
+    // Loading requires exclusive ownership. Matches reference this index until reload/destruction.
     TemplateLoadResult load(const std::string& index_dir);
     std::vector<TemplateMatch> search(const TemplateQuery& query) const;
 
