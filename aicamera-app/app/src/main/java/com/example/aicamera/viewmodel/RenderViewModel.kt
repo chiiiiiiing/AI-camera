@@ -83,6 +83,9 @@ class RenderViewModel @Inject constructor() : ViewModel() {
     /** ★ 防止重复 connect */
     private var collectJob: Job? = null
 
+    /** Scheduler frame counters restart on resume; controller observations must keep increasing. */
+    private var observationFrameId: Long = 0
+
     fun connect(pipelineResults: SharedFlow<PipelineResult>) {
         if (collectJob?.isActive == true) return
 
@@ -135,6 +138,20 @@ class RenderViewModel @Inject constructor() : ViewModel() {
 
                     // ★ 同步驱动统一会话控制器（替代双工作流）
                     sessionController.observe(buildFrameObservation(fakeOutput, result))
+                } else {
+                    // A pipeline failure/unknown schema must revoke readiness immediately,
+                    // including when no later frame arrives to clear ALIGNED hysteresis.
+                    resetGuidanceSteps()
+                    _guidanceState.value = GuidanceState()
+                    _stepHint.value = "AI 暂未就绪，可直接拍摄"
+                    _renderInput.value = input
+                    // Reuse the controller's zero-confidence fallback with no invented subject,
+                    // target or sensor readings. Keep Capturing/Saved handling in the controller.
+                    sessionController.observe(CompositionSessionController.FrameObservation(
+                        frameId = nextObservationFrameId(result),
+                        timestampMs = System.currentTimeMillis(),
+                        modelConfidence = 0f
+                    ))
                 }
             }
         }
@@ -293,6 +310,11 @@ class RenderViewModel @Inject constructor() : ViewModel() {
         )
     }
 
+    private fun nextObservationFrameId(result: PipelineResult): Long {
+        observationFrameId = maxOf(observationFrameId + 1, result.frameIndex)
+        return observationFrameId
+    }
+
     /** 从管线输出构建统一会话控制器的帧观测 */
     private fun buildFrameObservation(
         output: FakeInferenceOutput,
@@ -340,7 +362,7 @@ class RenderViewModel @Inject constructor() : ViewModel() {
         }
 
         return CompositionSessionController.FrameObservation(
-            frameId = result.frameIndex,
+            frameId = nextObservationFrameId(result),
             timestampMs = System.currentTimeMillis(),
             rollDegrees = roll,
             pitchDegrees = pitch,
