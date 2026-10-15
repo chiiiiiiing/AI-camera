@@ -42,6 +42,8 @@ jobs:
           python -m unittest discover -s tests -p 'test_evaluate_template_index_quality.py'
           python -m unittest discover -s tests -p 'test_validate_android_v9_assets.py'
           python -m unittest discover -s tests -p 'test_validate_core_recommendation_assets.py'
+          python -m unittest discover -s tests -p 'test_validate_multiscene_assets.py'
+          python -m unittest discover -s tests -p 'test_build_multiscene_references.py'
           python -m unittest discover -s tests -p 'test_run_core_recommendation.py'
           python -m unittest discover -s tests -p 'test_build_reference_structures.py'
           python -m unittest discover -s tests -p 'test_generate_onnx_embeddings.py'
@@ -77,3 +79,4 @@ jobs:
           python -m unittest discover -s tests -p 'test_evaluate_frozen_retrieval.py'
           python -m unittest discover -s tests -p 'test_prepare_quality_teacher.py'
           python -m unittest discover -s tests -p 'test_train_guidance_quality.py'
+          python -m unittest discover -s tests -p 'test_multiscene_detector.py'

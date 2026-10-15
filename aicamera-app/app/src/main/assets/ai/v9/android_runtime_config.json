@@ -52,7 +52,7 @@
       "photo_type_mismatch": -0.08,
       "scene_mismatch_high_confidence": -0.04
     },
-    "notes": "Top32 semantic recall, at most Top8 measured-structure compatibility; single-face targets only. Similarity, geometry and raw preference scores are separate evidence."
+    "notes": "Top32 semantic recall, at most Top8 measured face/object compatibility and 3x3 scene layout. Only fresh, unambiguous observed geometry can support one-step framing actions. Layout similarity is not aesthetic quality or a measured horizon."
   },
   "camera_preview": {
     "embedding_interval_ms_min": 500,
@@ -75,7 +75,9 @@
     "single_frame_embedding_p50_ms_target": 80,
     "single_frame_embedding_p90_ms_target": 150,
     "requires_real_device_validation": true,
-    "deployment_model_bytes": 4900248
+    "deployment_model_bytes": 4900248,
+    "auxiliary_detector_bytes": 3800954,
+    "combined_model_bytes": 8701202
   },
   "offline_quality": {
     "purpose": "index_diagnostic_not_release_gate",
@@ -110,6 +112,26 @@
     "ready_min_independent_observations": 3,
     "ready_min_span_ms": 750,
     "quality_enabled": false,
+    "human_aesthetic_improvement_verified": false,
+    "physical_device_performance_verified": false
+  },
+  "multi_scene_recommendation": {
+    "schema_version": 1,
+    "enabled": true,
+    "detector": {
+      "file": "object_detector.onnx",
+      "sha256": "4b82da9944b88577175ee23a459dce2e26e6e4be573def65b1055dc2d9720186"
+    },
+    "references": {
+      "file": "multi_scene_references.json",
+      "sha256": "47953800b26a1f4cc79e39c912b1d8912611c29fc7cea77ac52e50f700c14f2a"
+    },
+    "detector_manifest": {
+      "file": "object_detector_manifest.json",
+      "sha256": "fa819a0bb315b7ed05653ef22fe514cb2b24b3404f0dda4bdb3f7d4d8e8ffbeb"
+    },
+    "detector_budget_bytes": 4194304,
+    "reference_limit": 8,
     "human_aesthetic_improvement_verified": false,
     "physical_device_performance_verified": false
   }

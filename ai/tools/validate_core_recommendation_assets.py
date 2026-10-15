@@ -167,6 +167,10 @@ def validate(asset_root):
     config = read_json(asset_root / "android_runtime_config.json")
     core = config.get("core_recommendation")
     if core is None:
+        from validate_multiscene_assets import FILES
+        require("multi_scene_recommendation" not in config
+                and not any((asset_root / name).exists() for name in FILES.values()),
+                "multiscene assets require the core recommendation profile")
         require(not (asset_root / "reference_structures.json").exists()
                 and not (asset_root / "quality_policy.json").exists(), "unbound guidance assets")
         return {"core_profile": False}
@@ -181,6 +185,8 @@ def validate(asset_root):
     model_sha = sha256(asset_root / config["runtime"]["model_file"])
     result = validate_structures(asset_root / "reference_structures.json", {r["template_id"]: r for r in metadata})
     result.update(validate_quality(asset_root / "quality_policy.json", asset_root, model_sha))
+    from validate_multiscene_assets import validate as validate_multiscene
+    result.update(validate_multiscene(asset_root, config, {r["template_id"]: r for r in metadata}))
     return {"core_profile": True, **result}
 
 

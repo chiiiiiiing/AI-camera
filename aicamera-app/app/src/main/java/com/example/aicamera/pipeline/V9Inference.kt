@@ -55,12 +55,13 @@ class V9Inference(
 
     private val templateStabilizer = V9TemplateStabilizer()
     private val structureMatcher = V9StructureMatcher()
+    private val multiScene = MultiSceneAnalyzer(index.assetDirectory(), index::getMetadata)
     private val qualityHead = index.qualityHead()
     private val cropEvaluator = QualityCropEvaluator()
     private var structure: com.example.aicamera.guidance.StructureObservation? = null
     private var slowUntilMs = 0L
     override fun updateStructure(observation: com.example.aicamera.guidance.StructureObservation?) { structure = observation }
-    override fun requestReplan() { structureMatcher.replan(); templateStabilizer.reset(); cropEvaluator.reset() }
+    override fun requestReplan() { structureMatcher.replan(); multiScene.replan(); templateStabilizer.reset(); cropEvaluator.reset() }
 
 
     // ── IInference 实现 ───────────────────────────────────────
@@ -94,12 +95,13 @@ class V9Inference(
                 null
             }
 
-            val semantic = index.rerank(
-                candidates,
-                stats?.let { sceneContextEstimator.estimate(candidates, it) } ?: SceneContext(), limit = 32
-            )
+            val sceneContext = stats?.let { sceneContextEstimator.estimate(candidates, it) } ?: SceneContext()
+            val semantic = index.rerank(candidates, sceneContext, limit = 32)
             val now = android.os.SystemClock.elapsedRealtime()
-            val reranked = structureMatcher.rank(semantic, structure, now)
+            val sceneResult = multiScene.analyze(sourceBitmap, sceneContext, semantic, structure?.viewportVersion ?: -1L,
+                frame.displayAspectRatio ?: 1f, now, frame.sampledAtMs.takeIf { it > 0 } ?: started)
+            val isPortrait = sceneResult.observation.family == com.example.aicamera.guidance.SceneFamily.PORTRAIT
+            val reranked = if (isPortrait) structureMatcher.rank(sceneResult.hits, structure, now) else sceneResult.hits.take(8)
             if (reranked.isEmpty()) {
                 resetSession()
                 return createEmptyResult(
@@ -153,7 +155,8 @@ class V9Inference(
             val selectedHit = templateStabilizer.select(reranked)
             val meta = selectedHit.metadata ?: index.getMetadata(selectedHit.templateId)
             return if (meta != null) {
-                val target = structureMatcher.target(reranked + semantic.filter { candidate -> reranked.none { it.templateId == candidate.templateId } }, structure, now)
+                val target = if (isPortrait) structureMatcher.target(reranked + semantic.filter { candidate -> reranked.none { it.templateId == candidate.templateId } }, structure, now)
+                    else { structureMatcher.reset(); null }
                 val face = structure?.singleFace(now)
                 val features = QualityHead.features(sourceBitmap, face)
                 val head = qualityHead?.takeIf { meta.sceneCategory in it.scenes || meta.photoType in it.scenes }
@@ -168,7 +171,19 @@ class V9Inference(
                     target?.let { lines.add(FakeGuideLine("target_zone", true, mapOf(
                         "center_x" to it.center.x, "center_y" to it.center.y, "radius" to it.tolerance,
                         "anchor_kind" to "face", "coordinate_aspect_ratio" to (frame.displayAspectRatio ?: 1f)))) }
+                    sceneResult.target?.let { objectTarget ->
+                        lines.add(FakeGuideLine("target_zone",true,mapOf("center_x" to objectTarget.center.x,
+                            "center_y" to objectTarget.center.y,"radius" to objectTarget.tolerance,"anchor_kind" to "object",
+                            "coordinate_aspect_ratio" to (frame.displayAspectRatio ?: 1f))))
+                    }
+                    sceneResult.observation.objectObservation?.let { observed ->
+                        val b=observed.box
+                        lines.add(FakeGuideLine("subject_box",true,mapOf("x" to b.left,"y" to b.top,"width" to b.width,
+                            "height" to b.height,"real" to true,"anchor_kind" to "object","class_id" to observed.classId,"aligned" to false)))
+                    }
                     output.copy(guideLines = lines, compositionTarget = target, structureObservation = structure,
+                        sceneAnalysis = sceneResult.observation, objectTarget = sceneResult.target,
+                        expectsSubject = isPortrait,
                         qualityScore = qualityScore, qualityCrop = crop,
                         qualityAcceptable = features[2] < .98f && features[3] < .98f)
                 }
@@ -211,19 +226,12 @@ class V9Inference(
     ): FakeInferenceOutput {
         // Legacy composition labels were generated from scene classes. Only image-reviewed
         // geometry can supply a target; scene labels cannot locate a face or a horizon.
-        val strategy = CompositionStrategy.RULE_OF_THIRDS
+        val strategy = CompositionStrategy.ADAPTIVE
         val scene = sceneCategoryToSceneType(meta.sceneCategory)
 
         val guideLines = mutableListOf<FakeGuideLine>()
 
-        // 1. 三分线（几乎所有模板都适用）
-        guideLines.add(
-            FakeGuideLine(
-                type = "rule_of_thirds_grid", visible = true,
-                params = mapOf("vertical_lines" to listOf(0.333f, 0.667f),
-                    "horizontal_lines" to listOf(0.333f, 0.667f))
-            )
-        )
+        // The user's grid setting is independent; the model does not impose a thirds composition.
 
         // 2. 目标区域 — 根据构图类型选位置
         V9ReferencePolicy.faceTarget(meta, score, frameAspectRatio)?.let { anchor ->
@@ -274,14 +282,10 @@ class V9Inference(
     ): FakeInferenceOutput {
         return FakeInferenceOutput(
             sceneType = SceneType.NORMAL,
-            compositionStrategy = CompositionStrategy.RULE_OF_THIRDS,
+            compositionStrategy = CompositionStrategy.ADAPTIVE,
             confidence = 0f,
             luminance = 128f,
-            guideLines = listOf(
-                FakeGuideLine("rule_of_thirds_grid", true,
-                    mapOf("vertical_lines" to listOf(0.333f, 0.667f),
-                        "horizontal_lines" to listOf(0.333f, 0.667f)))
-            ),
+            guideLines = emptyList(),
             guidanceCue = GuidanceCue.NONE,
             compositionProgress = 0f
         ).withV9FilterRecommendation(filterRecommendation)
@@ -314,6 +318,7 @@ class V9Inference(
     override fun close() {
         resetSession()
         runtime.close()
+        multiScene.close()
         Log.i(CameraConfig.TAG, "[V9Inference] 已释放")
     }
 
@@ -321,6 +326,7 @@ class V9Inference(
     override fun resetSession() {
         templateStabilizer.reset()
         structureMatcher.reset()
+        multiScene.reset()
         cropEvaluator.reset()
         structure = null
         filterStabilizer.reset()

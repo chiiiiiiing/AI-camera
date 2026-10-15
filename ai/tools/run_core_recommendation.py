@@ -60,7 +60,8 @@ def package(assets, data, quality_policy, quality_directory, candidate):
     candidate.mkdir(parents=True, exist_ok=True)
     # Copy the small formal bundle, never private photos, teacher weights or checkpoints.
     for filename in ("student_model.onnx", "android_runtime_config.json", "android_onnx_runtime_manifest.json",
-                     "model_evaluation.json", "model_selection.json"):
+                     "model_evaluation.json", "model_selection.json", "object_detector.onnx",
+                     "object_detector_manifest.json", "multi_scene_references.json", "LICENSE.object_detector.txt"):
         source = assets / filename
         if source.exists():
             shutil.copy2(source, candidate / filename)
@@ -74,8 +75,9 @@ def package(assets, data, quality_policy, quality_directory, candidate):
         (candidate / "quality_head.json").unlink()
     config = read(candidate / "android_runtime_config.json")
     config["postprocess"].update(search_top_k=32, structure_top_k=8)
-    config["ranking"]["notes"] = ("Top32 semantic recall, at most Top8 measured-structure compatibility; "
-        "single-face targets only. Similarity, geometry and raw preference scores are separate evidence.")
+    if "multi_scene_recommendation" not in config:
+        config["ranking"]["notes"] = ("Top32 semantic recall, at most Top8 measured-structure compatibility; "
+            "single-face targets only. Similarity, geometry and raw preference scores are separate evidence.")
     config["core_recommendation"] = {"schema_version": 1,
         "structures": {"file": "reference_structures.json", "sha256": sha256(candidate / "reference_structures.json")},
         "quality": {"file": "quality_policy.json", "sha256": sha256(candidate / "quality_policy.json")},

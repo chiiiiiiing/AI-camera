@@ -519,8 +519,8 @@ fun AlignmentFlashOverlay(
 fun GuidanceMessage(state: GuidanceState, isDemo: Boolean = false, stepHint: String? = null) {
     val text = when {
         state.phase == GuidancePhase.WRONG_DIRECTION -> "方向相反，稍微回一点"
-        state.cue == GuidanceCue.SUBJECT_TARGET -> "将人物移入轮廓"
-        state.cue == GuidanceCue.SUBJECT_ALIGNED -> "保持，人物构图已对齐"
+        state.cue == GuidanceCue.SUBJECT_TARGET -> "按标记微调取景"
+        state.cue == GuidanceCue.SUBJECT_ALIGNED -> "保持，目标构图已对齐"
         state.phase == GuidancePhase.ALIGNED -> "保持，构图已对齐"
         state.cue == GuidanceCue.MOVE_LEFT -> "← 向左移动"
         state.cue == GuidanceCue.MOVE_RIGHT -> "→ 向右移动"

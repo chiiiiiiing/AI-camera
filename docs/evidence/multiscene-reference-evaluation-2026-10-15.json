@@ -1,0 +1,3046 @@
+{
+  "schema_version": 1,
+  "scope": "Local reference structure and fixed diagnostic transformations; not human aesthetic or independent detection accuracy.",
+  "raw_coverage": {
+    "reference_count": 406,
+    "source_clusters": 343,
+    "scenes": {
+      "closeup_portrait": {
+        "reference_count": 63,
+        "source_clusters": 52,
+        "eligible_object_references": 0,
+        "eligible_object_clusters": 0,
+        "image_coverage": 0.0,
+        "cluster_coverage": 0.0,
+        "eligible_labels": {},
+        "rejection_reasons": {
+          "scene_not_supported_for_object_target": 63,
+          "primary_class_not_supported": 57,
+          "person_context": 56,
+          "primary_touches_frame_boundary": 41,
+          "no_confident_supported_size_object": 6,
+          "multiple_competing_objects": 24,
+          "primary_too_large": 1
+        }
+      },
+      "food_still_life": {
+        "reference_count": 54,
+        "source_clusters": 53,
+        "eligible_object_references": 12,
+        "eligible_object_clusters": 12,
+        "image_coverage": 0.2222222222222222,
+        "cluster_coverage": 0.22641509433962265,
+        "eligible_labels": {
+          "cup": 5,
+          "sandwich": 1,
+          "bowl": 1,
+          "cake": 1,
+          "bottle": 2,
+          "broccoli": 1,
+          "pizza": 1
+        },
+        "rejection_reasons": {
+          "synthetic_reference": 1,
+          "primary_class_not_supported": 10,
+          "primary_touches_frame_boundary": 13,
+          "no_confident_supported_size_object": 22,
+          "multiple_competing_objects": 14,
+          "person_context": 5
+        }
+      },
+      "lifestyle_still_life": {
+        "reference_count": 76,
+        "source_clusters": 46,
+        "eligible_object_references": 3,
+        "eligible_object_clusters": 3,
+        "image_coverage": 0.039473684210526314,
+        "cluster_coverage": 0.06521739130434782,
+        "eligible_labels": {
+          "donut": 1,
+          "cake": 1,
+          "pizza": 1
+        },
+        "rejection_reasons": {
+          "primary_touches_frame_boundary": 11,
+          "no_confident_supported_size_object": 52,
+          "primary_class_not_supported": 17,
+          "person_context": 7,
+          "multiple_competing_objects": 7
+        }
+      },
+      "natural_landscape": {
+        "reference_count": 187,
+        "source_clusters": 171,
+        "eligible_object_references": 0,
+        "eligible_object_clusters": 0,
+        "image_coverage": 0.0,
+        "cluster_coverage": 0.0,
+        "eligible_labels": {},
+        "rejection_reasons": {
+          "scene_not_supported_for_object_target": 187,
+          "no_confident_supported_size_object": 163,
+          "primary_class_not_supported": 23,
+          "primary_touches_frame_boundary": 16,
+          "person_context": 12,
+          "multiple_competing_objects": 4
+        }
+      },
+      "plant_still_life": {
+        "reference_count": 3,
+        "source_clusters": 3,
+        "eligible_object_references": 0,
+        "eligible_object_clusters": 0,
+        "image_coverage": 0.0,
+        "cluster_coverage": 0.0,
+        "eligible_labels": {},
+        "rejection_reasons": {
+          "scene_not_supported_for_object_target": 3,
+          "primary_class_not_supported": 3,
+          "primary_touches_frame_boundary": 2,
+          "person_context": 1
+        }
+      },
+      "urban_landscape": {
+        "reference_count": 23,
+        "source_clusters": 18,
+        "eligible_object_references": 0,
+        "eligible_object_clusters": 0,
+        "image_coverage": 0.0,
+        "cluster_coverage": 0.0,
+        "eligible_labels": {},
+        "rejection_reasons": {
+          "scene_not_supported_for_object_target": 23,
+          "primary_class_not_supported": 1,
+          "no_confident_supported_size_object": 22
+        }
+      }
+    },
+    "coverage_is_not_detection_accuracy": true,
+    "coverage_is_not_aesthetic_improvement": true,
+    "plant_scope": "Only three existing plant reference clusters; insufficient for dedicated scene claims.",
+    "source_manifest_sha256": "933c63388a14e4b2d545725145042a9f2023354241279a3bda8497b6934836fb",
+    "model_sha256": "4b82da9944b88577175ee23a459dce2e26e6e4be573def65b1055dc2d9720186",
+    "object_policy": "single_complete_coco_still_life_v1",
+    "layout_algorithm": "rgb224_rec601_grid3_forward_edges_v1",
+    "detector_local_cpu_ms": {
+      "p50": 154.96894999523647,
+      "p90": 173.3261999906972,
+      "samples": 406,
+      "includes_pre_and_postprocess": true,
+      "is_phone_benchmark": false
+    }
+  },
+  "reviewed_coverage": {
+    "reference_count": 406,
+    "source_clusters": 343,
+    "scenes": {
+      "closeup_portrait": {
+        "reference_count": 63,
+        "source_clusters": 52,
+        "eligible_object_references": 0,
+        "eligible_object_clusters": 0,
+        "image_coverage": 0.0,
+        "cluster_coverage": 0.0,
+        "eligible_labels": {},
+        "rejection_reasons": {
+          "scene_not_supported_for_object_target": 63,
+          "primary_class_not_supported": 57,
+          "person_context": 56,
+          "primary_touches_frame_boundary": 41,
+          "no_confident_supported_size_object": 6,
+          "multiple_competing_objects": 24,
+          "primary_too_large": 1
+        }
+      },
+      "food_still_life": {
+        "reference_count": 54,
+        "source_clusters": 53,
+        "eligible_object_references": 3,
+        "eligible_object_clusters": 3,
+        "image_coverage": 0.05555555555555555,
+        "cluster_coverage": 0.05660377358490566,
+        "eligible_labels": {
+          "cup": 2,
+          "pizza": 1
+        },
+        "rejection_reasons": {
+          "synthetic_reference": 1,
+          "primary_class_not_supported": 10,
+          "primary_touches_frame_boundary": 13,
+          "no_confident_supported_size_object": 22,
+          "object_visual_review_excluded": 9,
+          "undetected_competing_subjects": 7,
+          "multiple_competing_objects": 14,
+          "wrong_object_class": 1,
+          "uncertain_complete_object_region": 1,
+          "ambiguous_primary_subject": 3,
+          "person_context": 5,
+          "partial_subject_region": 2
+        }
+      },
+      "lifestyle_still_life": {
+        "reference_count": 76,
+        "source_clusters": 46,
+        "eligible_object_references": 0,
+        "eligible_object_clusters": 0,
+        "image_coverage": 0.0,
+        "cluster_coverage": 0.0,
+        "eligible_labels": {},
+        "rejection_reasons": {
+          "primary_touches_frame_boundary": 11,
+          "object_visual_review_excluded": 3,
+          "wrong_object_class": 3,
+          "undetected_competing_subjects": 2,
+          "no_confident_supported_size_object": 52,
+          "primary_class_not_supported": 17,
+          "person_context": 7,
+          "multiple_competing_objects": 7
+        }
+      },
+      "natural_landscape": {
+        "reference_count": 187,
+        "source_clusters": 171,
+        "eligible_object_references": 0,
+        "eligible_object_clusters": 0,
+        "image_coverage": 0.0,
+        "cluster_coverage": 0.0,
+        "eligible_labels": {},
+        "rejection_reasons": {
+          "scene_not_supported_for_object_target": 187,
+          "no_confident_supported_size_object": 163,
+          "primary_class_not_supported": 23,
+          "primary_touches_frame_boundary": 16,
+          "person_context": 12,
+          "multiple_competing_objects": 4
+        }
+      },
+      "plant_still_life": {
+        "reference_count": 3,
+        "source_clusters": 3,
+        "eligible_object_references": 0,
+        "eligible_object_clusters": 0,
+        "image_coverage": 0.0,
+        "cluster_coverage": 0.0,
+        "eligible_labels": {},
+        "rejection_reasons": {
+          "scene_not_supported_for_object_target": 3,
+          "primary_class_not_supported": 3,
+          "primary_touches_frame_boundary": 2,
+          "person_context": 1
+        }
+      },
+      "urban_landscape": {
+        "reference_count": 23,
+        "source_clusters": 18,
+        "eligible_object_references": 0,
+        "eligible_object_clusters": 0,
+        "image_coverage": 0.0,
+        "cluster_coverage": 0.0,
+        "eligible_labels": {},
+        "rejection_reasons": {
+          "scene_not_supported_for_object_target": 23,
+          "primary_class_not_supported": 1,
+          "no_confident_supported_size_object": 22
+        }
+      }
+    },
+    "coverage_is_not_detection_accuracy": true,
+    "coverage_is_not_aesthetic_improvement": true,
+    "plant_scope": "Only three existing plant reference clusters; insufficient for dedicated scene claims.",
+    "source_manifest_sha256": "933c63388a14e4b2d545725145042a9f2023354241279a3bda8497b6934836fb",
+    "model_sha256": "4b82da9944b88577175ee23a459dce2e26e6e4be573def65b1055dc2d9720186",
+    "object_policy": "single_complete_coco_still_life_v1",
+    "layout_algorithm": "rgb224_rec601_grid3_forward_edges_v1",
+    "object_review_policy": "hash_bound_ai_visual_object_review_v1",
+    "object_review_counts": {
+      "excluded": 12,
+      "accepted": 3
+    },
+    "reuse_sidecar_sha256": "f80a686d5cc7349df8483d760c4f426b2ac8334c3124443e3e0b39265073f709",
+    "detector_local_cpu_ms": {
+      "p50": null,
+      "p90": null,
+      "samples": 0,
+      "cached_observations": true,
+      "includes_pre_and_postprocess": true,
+      "is_phone_benchmark": false
+    }
+  },
+  "raw_automatic_evaluation": {
+    "diagnostic_only": true,
+    "no_old_test_or_aesthetic_acceptance_used": true,
+    "grouped_mirror_consistency": {
+      "source_clusters": 15,
+      "consistent_clusters": 11,
+      "rate": 0.7333333333333333,
+      "not_ground_truth_accuracy": true
+    },
+    "crop_protection": {
+      "candidate_count": 60,
+      "rejected_candidate_count": 22,
+      "accepted_crop_truncation_violations": 0,
+      "only_measured_box_guarantee": true
+    },
+    "style_counterexamples": [
+      {
+        "template_id": "new_batch_00060",
+        "source_cluster_id": "source_cluster:f74906328a16cc806d59e84ed15d45ce2d046abe4e1f0c73d35da7577780ad74",
+        "scene_category": "closeup_portrait",
+        "mean_luma": 0.7344647,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.3524593,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00061",
+        "source_cluster_id": "source_cluster:f74906328a16cc806d59e84ed15d45ce2d046abe4e1f0c73d35da7577780ad74",
+        "scene_category": "closeup_portrait",
+        "mean_luma": 0.8414549,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.5568001,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00386",
+        "source_cluster_id": "source_cluster:0723252f2394b1638b56557f8725b96176a4b612c9f8eaa047529ceeb1e72506",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.1651411,
+        "dark_fraction": 0.0002392,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00486",
+        "source_cluster_id": "source_cluster:750dbc2c5556348f82849bab356fabd112cf4494782b34758e4bc6e3ab0608a5",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.2205665,
+        "dark_fraction": 0.0068559,
+        "light_fraction": 0.000857,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00487",
+        "source_cluster_id": "source_cluster:750dbc2c5556348f82849bab356fabd112cf4494782b34758e4bc6e3ab0608a5",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.1784036,
+        "dark_fraction": 0.0004185,
+        "light_fraction": 0.0007773,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00530",
+        "source_cluster_id": "source_cluster:e5e6f946b95b855073b67eb81652fcc7204bb16d58d4557b8ab5bb272db78dd3",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.8146619,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.0085698,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00531",
+        "source_cluster_id": "source_cluster:e5e6f946b95b855073b67eb81652fcc7204bb16d58d4557b8ab5bb272db78dd3",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.7659938,
+        "dark_fraction": 3.99e-05,
+        "light_fraction": 0.3436902,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00532",
+        "source_cluster_id": "source_cluster:e5e6f946b95b855073b67eb81652fcc7204bb16d58d4557b8ab5bb272db78dd3",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.847722,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.2886838,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00536",
+        "source_cluster_id": "source_cluster:e5e6f946b95b855073b67eb81652fcc7204bb16d58d4557b8ab5bb272db78dd3",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.7979863,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.2558594,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00546",
+        "source_cluster_id": "source_cluster:333d04e11a20fc059a8bdea6ebceee3430feaa818c7b55e30959b363c302118a",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.7953505,
+        "dark_fraction": 0.0004584,
+        "light_fraction": 0.0058195,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00593",
+        "source_cluster_id": "source_cluster:c27b3923455852a4142de7191ce6324e496fbead53e0dbe1cc631f3487e7223f",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.7859575,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00596",
+        "source_cluster_id": "source_cluster:c27b3923455852a4142de7191ce6324e496fbead53e0dbe1cc631f3487e7223f",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.8474078,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00598",
+        "source_cluster_id": "source_cluster:51d1d354a19d22a088c5a344f8c27d412b9073e8d05c348a5eb271cb3189b15c",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.8304252,
+        "dark_fraction": 0.0,
+        "light_fraction": 3.99e-05,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00601",
+        "source_cluster_id": "source_cluster:51d1d354a19d22a088c5a344f8c27d412b9073e8d05c348a5eb271cb3189b15c",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.8935123,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.0361926,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00602",
+        "source_cluster_id": "source_cluster:51d1d354a19d22a088c5a344f8c27d412b9073e8d05c348a5eb271cb3189b15c",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.8935075,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.0321668,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00656",
+        "source_cluster_id": "source_cluster:a55fddf5806771c4ad987c9eafcffb474c9db0680b70b5530719aa2f0bfa9db3",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.2491454,
+        "dark_fraction": 0.0299546,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00668",
+        "source_cluster_id": "source_cluster:2be44903cb76a8762e98f0413ed48d7df97048083644734e7d3297e79601fae7",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.1837916,
+        "dark_fraction": 0.0042451,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00759",
+        "source_cluster_id": "source_cluster:b8a4e627eecf6e6b71634c949ac70aee57310ad9a819ffa4af3ee11ae5e492c9",
+        "scene_category": "closeup_portrait",
+        "mean_luma": 0.7937121,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.0034877,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00775",
+        "source_cluster_id": "source_cluster:9e8ba1b3f767850b9280f7e7391cff915f9847f86b672eddc94e2d3a4aee99d2",
+        "scene_category": "closeup_portrait",
+        "mean_luma": 0.2450296,
+        "dark_fraction": 0.0277025,
+        "light_fraction": 0.0004783,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00780",
+        "source_cluster_id": "source_cluster:91997572489b59d9e4ef0fa3fb88bb213bd9af97d1236f5ffb0e7199d4ef9d0a",
+        "scene_category": "closeup_portrait",
+        "mean_luma": 0.7880135,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.2921317,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00786",
+        "source_cluster_id": "source_cluster:c72b904e6d1506c04f965343bc723967b240253242c9bbd2b1454b186425cfe9",
+        "scene_category": "closeup_portrait",
+        "mean_luma": 0.1608299,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00818",
+        "source_cluster_id": "source_cluster:8eb34b3ab13f9a61aefac50679b7f5978b29c99ffdf5b510d0a5f6cfb5f3027f",
+        "scene_category": "closeup_portrait",
+        "mean_luma": 0.1759163,
+        "dark_fraction": 0.4099171,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00820",
+        "source_cluster_id": "source_cluster:4eb1b651fb5273e0ae02ed91e0b920735ec49b80d85e9cd52dab183b704daafd",
+        "scene_category": "closeup_portrait",
+        "mean_luma": 0.1955483,
+        "dark_fraction": 0.1925423,
+        "light_fraction": 0.0004982,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00822",
+        "source_cluster_id": "source_cluster:605ba36d52eac79ec79c723d1c5d060889bf5ebc92485e835dc6a5a144dda9c8",
+        "scene_category": "closeup_portrait",
+        "mean_luma": 0.7763733,
+        "dark_fraction": 0.0001993,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00831",
+        "source_cluster_id": "source_cluster:94fec781e573e5d05447f737441b5015770b6bb4e338d9a1e2a6a4d6e41828e3",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.1982261,
+        "dark_fraction": 0.0763712,
+        "light_fraction": 0.0002591,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00845",
+        "source_cluster_id": "source_cluster:fe1cd13a334614e2fb5619b241d3cd0fbe3fa73173bfcfb108aec9ba1ec0d0eb",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.1778454,
+        "dark_fraction": 0.0326451,
+        "light_fraction": 0.002551,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00856",
+        "source_cluster_id": "source_cluster:d21db3480123592378c73a12a959367a7c616687f873ebebe645fb5cb8297dbd",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.1867698,
+        "dark_fraction": 0.0407765,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00862",
+        "source_cluster_id": "source_cluster:27ad93187ad6c2226f3b7e9a0cf9ceb6df57f70e35aee723c33bbfadfbb98214",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.2557629,
+        "dark_fraction": 0.5371094,
+        "light_fraction": 0.0013353,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00873",
+        "source_cluster_id": "source_cluster:8305b6d848def4c95a24fd5bc7b568cd26d112db5831d3f197d4c7db921818c5",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.1332774,
+        "dark_fraction": 0.0325255,
+        "light_fraction": 9.96e-05,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00878",
+        "source_cluster_id": "source_cluster:be872125b6be90a9a5331f53f4dbc60ade1e4953f2066b69ddcde18b468314f6",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.2076352,
+        "dark_fraction": 0.0010164,
+        "light_fraction": 0.0002192,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00882",
+        "source_cluster_id": "source_cluster:7cc2c2336962f8ed592648cd6fafd0b8a5624460204ee993578ea705b1b64c44",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.245505,
+        "dark_fraction": 0.0011759,
+        "light_fraction": 0.0003986,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00883",
+        "source_cluster_id": "source_cluster:d407d13e05431faac8139fa30a90f03df09029fb2f8b22d62c6de1e4bea247da",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.1626281,
+        "dark_fraction": 3.99e-05,
+        "light_fraction": 5.98e-05,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00891",
+        "source_cluster_id": "source_cluster:a039ab7c4076bf01d0fe0704b9d51e528a4e2fd3fd7567993aeb0d13b436d974",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.162738,
+        "dark_fraction": 0.0148477,
+        "light_fraction": 0.0011759,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00918",
+        "source_cluster_id": "source_cluster:a12f10638ee5b1bd89ac457ecb4f32e96eb513095633bd288f9204abd93a650e",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.2112511,
+        "dark_fraction": 0.0635762,
+        "light_fraction": 0.0001594,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00951",
+        "source_cluster_id": "source_cluster:ee9b0c19472b839b73712d08cf7cfec68db145bfd60452efef2bd3733fefd9da",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.2253453,
+        "dark_fraction": 0.0029297,
+        "light_fraction": 0.0003388,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00952",
+        "source_cluster_id": "source_cluster:1ba1656142b5bb80f2192bc1acd2cdd817040120f48463f49ba96a473c1c2773",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.1648154,
+        "dark_fraction": 0.0003587,
+        "light_fraction": 5.98e-05,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00953",
+        "source_cluster_id": "source_cluster:6159e74a64c0e1049fe8e12ca6e0c89181274b57f8bf0ae0774a5708fea8224a",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.1660159,
+        "dark_fraction": 0.0454799,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00960",
+        "source_cluster_id": "source_cluster:bbfb8d9f5e12d2628e77978e3267d03b6b95b2c9745038ae162361dd462ff52c",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.242501,
+        "dark_fraction": 0.0153858,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00996",
+        "source_cluster_id": "source_cluster:e394d7f753f1664e1781a12feef52953ea1e4c72f767c1586800b0752e5f48a7",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.1668268,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01014",
+        "source_cluster_id": "source_cluster:950e41ea060f94121299917434c98cf1df860aacef1b61b661c720d63a2c2bcc",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.1167732,
+        "dark_fraction": 0.4635882,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01018",
+        "source_cluster_id": "source_cluster:33c6059d0987b7eaf5297ebb7d9b9e1c41a5cce774f796a71013f71844e7289a",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.1644891,
+        "dark_fraction": 0.1832549,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01019",
+        "source_cluster_id": "source_cluster:41625f070f3e7ccffa5e21ec492249f0400522c3569ed0b3e827dda77aaccee3",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.1619428,
+        "dark_fraction": 0.1018415,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01066",
+        "source_cluster_id": "source_cluster:bc6f448eac463588daf99ba6773c7b8b720350b003e51b49566984d03bea5801",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.8186345,
+        "dark_fraction": 1.99e-05,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01067",
+        "source_cluster_id": "source_cluster:a47e7e64df486f10bad23c0d2c17ba383e28532d233134f690dd15ccb74e1b5f",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.835657,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.0006178,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01069",
+        "source_cluster_id": "source_cluster:70f537e45ea52c36ea37d06b8c29c387f1a8a9be35482a6b92c401f4290b6280",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.7711254,
+        "dark_fraction": 0.0007573,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01071",
+        "source_cluster_id": "source_cluster:8b2df82ec2194b6249ccba4c7229a539a12bf0eb5e9e84c723ab367edc4c3e52",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.1561635,
+        "dark_fraction": 0.0001196,
+        "light_fraction": 0.0803571,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01072",
+        "source_cluster_id": "source_cluster:67ba12c3b567743769631641c41842308db3239719e6339ad8af96a17137ca83",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.1965686,
+        "dark_fraction": 9.96e-05,
+        "light_fraction": 0.0803173,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01073",
+        "source_cluster_id": "source_cluster:2a9d23971e4e82e32824a3ed8992e19071299a4314b6e91d61c85cc124c5dac5",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.2498867,
+        "dark_fraction": 0.0069356,
+        "light_fraction": 0.0580357,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01074",
+        "source_cluster_id": "source_cluster:213abc211995890d52585e14bec2e11713caac739ff0f7888de2cf4719c7f1c4",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.1657664,
+        "dark_fraction": 5.98e-05,
+        "light_fraction": 0.0803571,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01076",
+        "source_cluster_id": "source_cluster:fba545c7f0b634991896f554f19113d51128dac5f6e39c9dbe0e7349b76f3f57",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.1870786,
+        "dark_fraction": 9.96e-05,
+        "light_fraction": 0.0580357,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01077",
+        "source_cluster_id": "source_cluster:28abd0e3a5c8595000c01e182db5dd34a7f96b6d37590237f80373567ee922ca",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.1821176,
+        "dark_fraction": 0.0115992,
+        "light_fraction": 0.0580357,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01079",
+        "source_cluster_id": "source_cluster:552ebc3c936e9769747f420b60c9571c917e4c82140999b5a7e01ea6adf38dcc",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.1840663,
+        "dark_fraction": 0.0016342,
+        "light_fraction": 0.0803571,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01081",
+        "source_cluster_id": "source_cluster:0095f21fea8818f1799c1c76087c3e73b38d1751f0c40dfaa7d8c3fd0e01d361",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.191547,
+        "dark_fraction": 0.0001594,
+        "light_fraction": 0.0803571,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01140",
+        "source_cluster_id": "source_cluster:c68c1c09896c7e46d317d04f34d3d07b783e58a062333e200e1dd4bb32e8f736",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.2553976,
+        "dark_fraction": 0.1548748,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01149",
+        "source_cluster_id": "source_cluster:5d4a6606b3a7d85ef4904f2d96eeeb036dcf785e82a3eea64ff84616d551bbd6",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.3405853,
+        "dark_fraction": 0.1853874,
+        "light_fraction": 0.0167411,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01188",
+        "source_cluster_id": "source_cluster:48a37a565ccc156249889ba5ada407789ee75e01ab336403d0e33ab3848c79f9",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.7532145,
+        "dark_fraction": 0.0100845,
+        "light_fraction": 0.376415,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01196",
+        "source_cluster_id": "source_cluster:5267d95d9306100fcdd94d5128f0d49cb82d2d2731fca899105d611e4010f823",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.4169112,
+        "dark_fraction": 0.176997,
+        "light_fraction": 0.0452208,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01199",
+        "source_cluster_id": "source_cluster:f2e6c8da015aa0cb7fd030342a3414e5768063904f781c238599243d978985e2",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.2480176,
+        "dark_fraction": 0.2734973,
+        "light_fraction": 0.0001794,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01204",
+        "source_cluster_id": "source_cluster:a7f0ecaa60dbc7a4960c776554eeb04873c2cd97820e2fd3abb375d41c4191cb",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.524184,
+        "dark_fraction": 0.1689254,
+        "light_fraction": 0.0066566,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01205",
+        "source_cluster_id": "source_cluster:0f3433537d90b8bc8b1d3f0f43c902e30a71ecd5c07a010ffd3aff2e4a60a6c8",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.6169252,
+        "dark_fraction": 0.0160435,
+        "light_fraction": 0.1892738,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01206",
+        "source_cluster_id": "source_cluster:5bfaaf6f154185c88b1af270c1a1ab9cf4c93fbef8f5401124b98a9e75f8a8c3",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.4957825,
+        "dark_fraction": 0.078703,
+        "light_fraction": 0.1761001,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01208",
+        "source_cluster_id": "source_cluster:1e8773a6d498735169c6630c3ebb4affc1f06b8a1c1d5868da00299e7a05c682",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.2031078,
+        "dark_fraction": 0.1678093,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01225",
+        "source_cluster_id": "source_cluster:59a006d11402c440f589c14443bb8b18e2f172606fa064bd963b7ef748eecdd8",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.5160491,
+        "dark_fraction": 0.1646006,
+        "light_fraction": 0.0088289,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01242",
+        "source_cluster_id": "source_cluster:16cd869c3035377bb9197a4db5b19fea36c39b7e573ec78e403e2bf704c06962",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.2416414,
+        "dark_fraction": 0.0235172,
+        "light_fraction": 0.0001993,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01248",
+        "source_cluster_id": "source_cluster:21a4f99311bbbddac6f820f10c56595acc5d334a285c71494174faf69f07b6ef",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.2094961,
+        "dark_fraction": 0.2048988,
+        "light_fraction": 0.0015346,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01269",
+        "source_cluster_id": "source_cluster:bec5bf20f44a240ed2fb7b27ad7729173ccc8de8340c46bd45896a7928d97c28",
+        "scene_category": "urban_landscape",
+        "mean_luma": 0.210386,
+        "dark_fraction": 0.0292172,
+        "light_fraction": 0.0113999,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01278",
+        "source_cluster_id": "source_cluster:5dd038c445ef12d1cacfa04c8f225d87c39845fbf081625a83efe6a6e470b25d",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.4259623,
+        "dark_fraction": 0.1863042,
+        "light_fraction": 3.99e-05,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01281",
+        "source_cluster_id": "source_cluster:edb275d7bcadf1e499d272265f414f3c79fd853ecd9a9150acf66ebc5d7c01e4",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.7707438,
+        "dark_fraction": 0.0047832,
+        "light_fraction": 0.1440729,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01291",
+        "source_cluster_id": "source_cluster:28da12320d35ae5ba500025fbdece54038832f5f61c61e5adb4992ed89833a19",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.8730119,
+        "dark_fraction": 0.0017538,
+        "light_fraction": 0.4105548,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01319",
+        "source_cluster_id": "source_cluster:107f935d5ce4c99d343a0e65b576556e8205860c7181d93793e9445e54219317",
+        "scene_category": "urban_landscape",
+        "mean_luma": 0.5816845,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.1684869,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01321",
+        "source_cluster_id": "source_cluster:8bacbd6d50d66cf1b4f0de3dbba3189c814aad2736b77c91f561b1680d064c08",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.2189976,
+        "dark_fraction": 0.1611727,
+        "light_fraction": 9.96e-05,
+        "no_global_style_rejection": true
+      }
+    ],
+    "source_cluster_diagnostics": [
+      {
+        "template_id": "new_batch_00486",
+        "source_cluster_id": "source_cluster:750dbc2c5556348f82849bab356fabd112cf4494782b34758e4bc6e3ab0608a5",
+        "scene_category": "lifestyle_still_life",
+        "mirror_same_class_iou": 0.0,
+        "mirror_consistent_at_iou_0_5": false,
+        "crops": [
+          {
+            "crop": [
+              0.0,
+              0.0,
+              1.0,
+              1.0
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0000000000000002
+          },
+          {
+            "crop": [
+              0.1,
+              0.1,
+              0.9,
+              0.9
+            ],
+            "safe": false,
+            "primary_retained_fraction": 0.900241210675121
+          },
+          {
+            "crop": [
+              0.0,
+              0.0,
+              0.8,
+              0.8
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0000000000000002
+          },
+          {
+            "crop": [
+              0.2,
+              0.2,
+              1.0,
+              1.0
+            ],
+            "safe": false,
+            "primary_retained_fraction": 0.4730928573533803
+          }
+        ]
+      },
+      {
+        "template_id": "new_batch_00572",
+        "source_cluster_id": "source_cluster:1b94bc1fb3df2fc46c8f58134e7db392a2ae4be43e3a0d1477585540c23e6aa8",
+        "scene_category": "lifestyle_still_life",
+        "mirror_same_class_iou": 0.0,
+        "mirror_consistent_at_iou_0_5": false,
+        "crops": [
+          {
+            "crop": [
+              0.0,
+              0.0,
+              1.0,
+              1.0
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0000000000000002
+          },
+          {
+            "crop": [
+              0.1,
+              0.1,
+              0.9,
+              0.9
+            ],
+            "safe": false,
+            "primary_retained_fraction": 0.8343126777256668
+          },
+          {
+            "crop": [
+              0.0,
+              0.0,
+              0.8,
+              0.8
+            ],
+            "safe": false,
+            "primary_retained_fraction": 0.4137224297835097
+          },
+          {
+            "crop": [
+              0.2,
+              0.2,
+              1.0,
+              1.0
+            ],
+            "safe": false,
+            "primary_retained_fraction": 0.8893585989615072
+          }
+        ]
+      },
+      {
+        "template_id": "new_batch_00583",
+        "source_cluster_id": "source_cluster:6a7e14cdab8ae4d1d3a49fe427e69e27a38067a109d191f18488cf68a9d47b85",
+        "scene_category": "lifestyle_still_life",
+        "mirror_same_class_iou": 0.8996309195353898,
+        "mirror_consistent_at_iou_0_5": true,
+        "crops": [
+          {
+            "crop": [
+              0.0,
+              0.0,
+              1.0,
+              1.0
+            ],
+            "safe": true,
+            "primary_retained_fraction": 0.9999999999999998
+          },
+          {
+            "crop": [
+              0.1,
+              0.1,
+              0.9,
+              0.9
+            ],
+            "safe": false,
+            "primary_retained_fraction": 0.8194269592654921
+          },
+          {
+            "crop": [
+              0.0,
+              0.0,
+              0.8,
+              0.8
+            ],
+            "safe": false,
+            "primary_retained_fraction": 0.5868342004448805
+          },
+          {
+            "crop": [
+              0.2,
+              0.2,
+              1.0,
+              1.0
+            ],
+            "safe": true,
+            "primary_retained_fraction": 0.9999999999999998
+          }
+        ]
+      },
+      {
+        "template_id": "new_batch_00982",
+        "source_cluster_id": "source_cluster:0ac6aaf4d8c30d5bdf26a3b657af9f57d6e7f3225038c4e8be8b3aa779ba81fb",
+        "scene_category": "food_still_life",
+        "mirror_same_class_iou": 0.9504215845882116,
+        "mirror_consistent_at_iou_0_5": true,
+        "crops": [
+          {
+            "crop": [
+              0.0,
+              0.0,
+              1.0,
+              1.0
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0000000000000002
+          },
+          {
+            "crop": [
+              0.1,
+              0.1,
+              0.9,
+              0.9
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0000000000000002
+          },
+          {
+            "crop": [
+              0.0,
+              0.0,
+              0.8,
+              0.8
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0000000000000002
+          },
+          {
+            "crop": [
+              0.2,
+              0.2,
+              1.0,
+              1.0
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0000000000000002
+          }
+        ]
+      },
+      {
+        "template_id": "new_batch_01003",
+        "source_cluster_id": "source_cluster:923ce18184598e20a9f9be6c9d2924f9594bfa72e7978a511704de66ecb22f64",
+        "scene_category": "food_still_life",
+        "mirror_same_class_iou": 0.6671969199761013,
+        "mirror_consistent_at_iou_0_5": true,
+        "crops": [
+          {
+            "crop": [
+              0.0,
+              0.0,
+              1.0,
+              1.0
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0
+          },
+          {
+            "crop": [
+              0.1,
+              0.1,
+              0.9,
+              0.9
+            ],
+            "safe": false,
+            "primary_retained_fraction": 0.8939071991241111
+          },
+          {
+            "crop": [
+              0.0,
+              0.0,
+              0.8,
+              0.8
+            ],
+            "safe": false,
+            "primary_retained_fraction": 0.797520789691874
+          },
+          {
+            "crop": [
+              0.2,
+              0.2,
+              1.0,
+              1.0
+            ],
+            "safe": false,
+            "primary_retained_fraction": 0.7809249124052816
+          }
+        ]
+      },
+      {
+        "template_id": "new_batch_01010",
+        "source_cluster_id": "source_cluster:99f05481e3e13917d6918a1a7bb37e784e3a8f4d01031989517a3a489c691483",
+        "scene_category": "food_still_life",
+        "mirror_same_class_iou": 0.9204309939181305,
+        "mirror_consistent_at_iou_0_5": true,
+        "crops": [
+          {
+            "crop": [
+              0.0,
+              0.0,
+              1.0,
+              1.0
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0000000000000002
+          },
+          {
+            "crop": [
+              0.1,
+              0.1,
+              0.9,
+              0.9
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0000000000000002
+          },
+          {
+            "crop": [
+              0.0,
+              0.0,
+              0.8,
+              0.8
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0000000000000002
+          },
+          {
+            "crop": [
+              0.2,
+              0.2,
+              1.0,
+              1.0
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0000000000000002
+          }
+        ]
+      },
+      {
+        "template_id": "new_batch_01011",
+        "source_cluster_id": "source_cluster:98c82014c980a364c1245336117171a7c8b5955f627d9a9decf2680fb6d2b0b4",
+        "scene_category": "food_still_life",
+        "mirror_same_class_iou": 0.9392819736670053,
+        "mirror_consistent_at_iou_0_5": true,
+        "crops": [
+          {
+            "crop": [
+              0.0,
+              0.0,
+              1.0,
+              1.0
+            ],
+            "safe": true,
+            "primary_retained_fraction": 0.9999999999999999
+          },
+          {
+            "crop": [
+              0.1,
+              0.1,
+              0.9,
+              0.9
+            ],
+            "safe": false,
+            "primary_retained_fraction": 0.6683396879136408
+          },
+          {
+            "crop": [
+              0.0,
+              0.0,
+              0.8,
+              0.8
+            ],
+            "safe": true,
+            "primary_retained_fraction": 0.9999999999999999
+          },
+          {
+            "crop": [
+              0.2,
+              0.2,
+              1.0,
+              1.0
+            ],
+            "safe": false,
+            "primary_retained_fraction": 0.009150859318556814
+          }
+        ]
+      },
+      {
+        "template_id": "new_batch_01017",
+        "source_cluster_id": "source_cluster:2a815b559b8c178d49e027e5ad014bc6eb91b0ad6fb93889acb2a57e37e2d8ec",
+        "scene_category": "food_still_life",
+        "mirror_same_class_iou": 0.9463012358675977,
+        "mirror_consistent_at_iou_0_5": true,
+        "crops": [
+          {
+            "crop": [
+              0.0,
+              0.0,
+              1.0,
+              1.0
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0
+          },
+          {
+            "crop": [
+              0.1,
+              0.1,
+              0.9,
+              0.9
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0
+          },
+          {
+            "crop": [
+              0.0,
+              0.0,
+              0.8,
+              0.8
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0
+          },
+          {
+            "crop": [
+              0.2,
+              0.2,
+              1.0,
+              1.0
+            ],
+            "safe": false,
+            "primary_retained_fraction": 0.9744081386308873
+          }
+        ]
+      },
+      {
+        "template_id": "new_batch_01190",
+        "source_cluster_id": "source_cluster:a7a0f9f3b22e7d71618524da5a171cb2fd008362e3ce19c2332cedbf1e5e753e",
+        "scene_category": "food_still_life",
+        "mirror_same_class_iou": 0.8697607174631345,
+        "mirror_consistent_at_iou_0_5": true,
+        "crops": [
+          {
+            "crop": [
+              0.0,
+              0.0,
+              1.0,
+              1.0
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0
+          },
+          {
+            "crop": [
+              0.1,
+              0.1,
+              0.9,
+              0.9
+            ],
+            "safe": false,
+            "primary_retained_fraction": 1.0
+          },
+          {
+            "crop": [
+              0.0,
+              0.0,
+              0.8,
+              0.8
+            ],
+            "safe": false,
+            "primary_retained_fraction": 1.0
+          },
+          {
+            "crop": [
+              0.2,
+              0.2,
+              1.0,
+              1.0
+            ],
+            "safe": false,
+            "primary_retained_fraction": 1.0
+          }
+        ]
+      },
+      {
+        "template_id": "new_batch_01194",
+        "source_cluster_id": "source_cluster:f60521dbc5b7990987ae99b0ea6bcfca5c0f7e65548d0175c8065181f0aa4e29",
+        "scene_category": "food_still_life",
+        "mirror_same_class_iou": 0.0,
+        "mirror_consistent_at_iou_0_5": false,
+        "crops": [
+          {
+            "crop": [
+              0.0,
+              0.0,
+              1.0,
+              1.0
+            ],
+            "safe": true,
+            "primary_retained_fraction": 0.9999999999999999
+          },
+          {
+            "crop": [
+              0.1,
+              0.1,
+              0.9,
+              0.9
+            ],
+            "safe": true,
+            "primary_retained_fraction": 0.9999999999999999
+          },
+          {
+            "crop": [
+              0.0,
+              0.0,
+              0.8,
+              0.8
+            ],
+            "safe": true,
+            "primary_retained_fraction": 0.9999999999999999
+          },
+          {
+            "crop": [
+              0.2,
+              0.2,
+              1.0,
+              1.0
+            ],
+            "safe": true,
+            "primary_retained_fraction": 0.9999999999999999
+          }
+        ]
+      },
+      {
+        "template_id": "new_batch_01203",
+        "source_cluster_id": "source_cluster:68fcdcb014135f6da273c08a69d0a1a2448cef231232ff63a01c4691fb08655f",
+        "scene_category": "food_still_life",
+        "mirror_same_class_iou": 0.9750245147697528,
+        "mirror_consistent_at_iou_0_5": true,
+        "crops": [
+          {
+            "crop": [
+              0.0,
+              0.0,
+              1.0,
+              1.0
+            ],
+            "safe": true,
+            "primary_retained_fraction": 0.9999999999999998
+          },
+          {
+            "crop": [
+              0.1,
+              0.1,
+              0.9,
+              0.9
+            ],
+            "safe": true,
+            "primary_retained_fraction": 0.9999999999999998
+          },
+          {
+            "crop": [
+              0.0,
+              0.0,
+              0.8,
+              0.8
+            ],
+            "safe": false,
+            "primary_retained_fraction": 0.7462565574907651
+          },
+          {
+            "crop": [
+              0.2,
+              0.2,
+              1.0,
+              1.0
+            ],
+            "safe": true,
+            "primary_retained_fraction": 0.9999999999999998
+          }
+        ]
+      },
+      {
+        "template_id": "new_batch_01206",
+        "source_cluster_id": "source_cluster:5bfaaf6f154185c88b1af270c1a1ab9cf4c93fbef8f5401124b98a9e75f8a8c3",
+        "scene_category": "food_still_life",
+        "mirror_same_class_iou": 0.0,
+        "mirror_consistent_at_iou_0_5": false,
+        "crops": [
+          {
+            "crop": [
+              0.0,
+              0.0,
+              1.0,
+              1.0
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0
+          },
+          {
+            "crop": [
+              0.1,
+              0.1,
+              0.9,
+              0.9
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0
+          },
+          {
+            "crop": [
+              0.0,
+              0.0,
+              0.8,
+              0.8
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0
+          },
+          {
+            "crop": [
+              0.2,
+              0.2,
+              1.0,
+              1.0
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0
+          }
+        ]
+      },
+      {
+        "template_id": "new_batch_01207",
+        "source_cluster_id": "source_cluster:af75818142d1b5f3b76c824bfd270eda9ae81361299445f1f680386e677f8671",
+        "scene_category": "food_still_life",
+        "mirror_same_class_iou": 0.9937159637297551,
+        "mirror_consistent_at_iou_0_5": true,
+        "crops": [
+          {
+            "crop": [
+              0.0,
+              0.0,
+              1.0,
+              1.0
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0
+          },
+          {
+            "crop": [
+              0.1,
+              0.1,
+              0.9,
+              0.9
+            ],
+            "safe": false,
+            "primary_retained_fraction": 0.9698742354425265
+          },
+          {
+            "crop": [
+              0.0,
+              0.0,
+              0.8,
+              0.8
+            ],
+            "safe": false,
+            "primary_retained_fraction": 0.8118321956576903
+          },
+          {
+            "crop": [
+              0.2,
+              0.2,
+              1.0,
+              1.0
+            ],
+            "safe": false,
+            "primary_retained_fraction": 0.7622253419635758
+          }
+        ]
+      },
+      {
+        "template_id": "new_batch_01291",
+        "source_cluster_id": "source_cluster:28da12320d35ae5ba500025fbdece54038832f5f61c61e5adb4992ed89833a19",
+        "scene_category": "food_still_life",
+        "mirror_same_class_iou": 0.741375768713512,
+        "mirror_consistent_at_iou_0_5": true,
+        "crops": [
+          {
+            "crop": [
+              0.0,
+              0.0,
+              1.0,
+              1.0
+            ],
+            "safe": true,
+            "primary_retained_fraction": 0.9999999999999999
+          },
+          {
+            "crop": [
+              0.1,
+              0.1,
+              0.9,
+              0.9
+            ],
+            "safe": true,
+            "primary_retained_fraction": 0.9999999999999999
+          },
+          {
+            "crop": [
+              0.0,
+              0.0,
+              0.8,
+              0.8
+            ],
+            "safe": true,
+            "primary_retained_fraction": 0.9999999999999999
+          },
+          {
+            "crop": [
+              0.2,
+              0.2,
+              1.0,
+              1.0
+            ],
+            "safe": false,
+            "primary_retained_fraction": 0.845426053653517
+          }
+        ]
+      },
+      {
+        "template_id": "new_batch_01321",
+        "source_cluster_id": "source_cluster:8bacbd6d50d66cf1b4f0de3dbba3189c814aad2736b77c91f561b1680d064c08",
+        "scene_category": "food_still_life",
+        "mirror_same_class_iou": 0.8652935328072834,
+        "mirror_consistent_at_iou_0_5": true,
+        "crops": [
+          {
+            "crop": [
+              0.0,
+              0.0,
+              1.0,
+              1.0
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0000000000000002
+          },
+          {
+            "crop": [
+              0.1,
+              0.1,
+              0.9,
+              0.9
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0000000000000002
+          },
+          {
+            "crop": [
+              0.0,
+              0.0,
+              0.8,
+              0.8
+            ],
+            "safe": false,
+            "primary_retained_fraction": 0.802252825305239
+          },
+          {
+            "crop": [
+              0.2,
+              0.2,
+              1.0,
+              1.0
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0000000000000002
+          }
+        ]
+      }
+    ],
+    "limits": [
+      "No human object boxes, horizon labels, or beauty preferences available.",
+      "Mirror consistency can agree on a wrong object; it is not mAP.",
+      "Layout describes coarse appearance and does not identify a horizon.",
+      "Local measurements do not establish phone latency or perceptual improvement."
+    ],
+    "live_uncertainty_replay": {
+      "input_kind": "existing_reference_images_as_observations",
+      "policy": "score_035_to_050_area035_iou_below060_v1",
+      "reference_count": 15,
+      "passes": 4,
+      "rejected": 11,
+      "not_query_coverage_or_accuracy": true,
+      "does_not_test_same_source_excluded_retrieval_or_full_ready_workflow": true,
+      "records": [
+        {
+          "template_id": "new_batch_00486",
+          "source_cluster_id": "source_cluster:750dbc2c5556348f82849bab356fabd112cf4494782b34758e4bc6e3ab0608a5",
+          "passes_uncertain_competitor_veto": false,
+          "uncertain_competitors": [
+            {
+              "class_id": 54,
+              "label": "donut",
+              "confidence": 0.4981129,
+              "bbox": [
+                0.2254242,
+                0.350065,
+                0.2552545,
+                0.1563907
+              ],
+              "clipped": false
+            },
+            {
+              "class_id": 54,
+              "label": "donut",
+              "confidence": 0.4765763,
+              "bbox": [
+                0.3329061,
+                0.5394062,
+                0.2816708,
+                0.1801257
+              ],
+              "clipped": false
+            }
+          ]
+        },
+        {
+          "template_id": "new_batch_00572",
+          "source_cluster_id": "source_cluster:1b94bc1fb3df2fc46c8f58134e7db392a2ae4be43e3a0d1477585540c23e6aa8",
+          "passes_uncertain_competitor_veto": true,
+          "uncertain_competitors": []
+        },
+        {
+          "template_id": "new_batch_00583",
+          "source_cluster_id": "source_cluster:6a7e14cdab8ae4d1d3a49fe427e69e27a38067a109d191f18488cf68a9d47b85",
+          "passes_uncertain_competitor_veto": true,
+          "uncertain_competitors": []
+        },
+        {
+          "template_id": "new_batch_00982",
+          "source_cluster_id": "source_cluster:0ac6aaf4d8c30d5bdf26a3b657af9f57d6e7f3225038c4e8be8b3aa779ba81fb",
+          "passes_uncertain_competitor_veto": false,
+          "uncertain_competitors": [
+            {
+              "class_id": 60,
+              "label": "dining table",
+              "confidence": 0.4762847,
+              "bbox": [
+                0.0041307,
+                0.3922707,
+                0.7642108,
+                0.6031691
+              ],
+              "clipped": true
+            },
+            {
+              "class_id": 73,
+              "label": "book",
+              "confidence": 0.4645531,
+              "bbox": [
+                0.0,
+                0.5385898,
+                0.4607853,
+                0.3447387
+              ],
+              "clipped": true
+            },
+            {
+              "class_id": 58,
+              "label": "potted plant",
+              "confidence": 0.431748,
+              "bbox": [
+                0.0,
+                0.0007037,
+                0.3262895,
+                0.5437124
+              ],
+              "clipped": true
+            },
+            {
+              "class_id": 60,
+              "label": "dining table",
+              "confidence": 0.369297,
+              "bbox": [
+                0.1782533,
+                0.2632118,
+                0.8038348,
+                0.7233699
+              ],
+              "clipped": true
+            }
+          ]
+        },
+        {
+          "template_id": "new_batch_01003",
+          "source_cluster_id": "source_cluster:923ce18184598e20a9f9be6c9d2924f9594bfa72e7978a511704de66ecb22f64",
+          "passes_uncertain_competitor_veto": false,
+          "uncertain_competitors": [
+            {
+              "class_id": 48,
+              "label": "sandwich",
+              "confidence": 0.4040961,
+              "bbox": [
+                0.2550631,
+                0.3372293,
+                0.5298878,
+                0.4580032
+              ],
+              "clipped": false
+            }
+          ]
+        },
+        {
+          "template_id": "new_batch_01010",
+          "source_cluster_id": "source_cluster:99f05481e3e13917d6918a1a7bb37e784e3a8f4d01031989517a3a489c691483",
+          "passes_uncertain_competitor_veto": false,
+          "uncertain_competitors": [
+            {
+              "class_id": 41,
+              "label": "cup",
+              "confidence": 0.3872016,
+              "bbox": [
+                0.026321,
+                0.0307924,
+                0.7345803,
+                0.7144513
+              ],
+              "clipped": false
+            },
+            {
+              "class_id": 41,
+              "label": "cup",
+              "confidence": 0.3573973,
+              "bbox": [
+                0.2164444,
+                0.0723749,
+                0.7488048,
+                0.6666639
+              ],
+              "clipped": false
+            },
+            {
+              "class_id": 0,
+              "label": "person",
+              "confidence": 0.356811,
+              "bbox": [
+                0.2523031,
+                0.2915379,
+                0.7438514,
+                0.7084621
+              ],
+              "clipped": true
+            }
+          ]
+        },
+        {
+          "template_id": "new_batch_01011",
+          "source_cluster_id": "source_cluster:98c82014c980a364c1245336117171a7c8b5955f627d9a9decf2680fb6d2b0b4",
+          "passes_uncertain_competitor_veto": false,
+          "uncertain_competitors": [
+            {
+              "class_id": 55,
+              "label": "cake",
+              "confidence": 0.4326607,
+              "bbox": [
+                0.2439922,
+                0.2109656,
+                0.1998308,
+                0.1110595
+              ],
+              "clipped": false
+            },
+            {
+              "class_id": 55,
+              "label": "cake",
+              "confidence": 0.4195697,
+              "bbox": [
+                0.2360904,
+                0.2702177,
+                0.261593,
+                0.1368429
+              ],
+              "clipped": false
+            },
+            {
+              "class_id": 55,
+              "label": "cake",
+              "confidence": 0.3917491,
+              "bbox": [
+                0.2979236,
+                0.271335,
+                0.145721,
+                0.0976432
+              ],
+              "clipped": false
+            }
+          ]
+        },
+        {
+          "template_id": "new_batch_01017",
+          "source_cluster_id": "source_cluster:2a815b559b8c178d49e027e5ad014bc6eb91b0ad6fb93889acb2a57e37e2d8ec",
+          "passes_uncertain_competitor_veto": false,
+          "uncertain_competitors": [
+            {
+              "class_id": 60,
+              "label": "dining table",
+              "confidence": 0.4738766,
+              "bbox": [
+                0.0327868,
+                0.2139066,
+                0.7826158,
+                0.7860934
+              ],
+              "clipped": true
+            }
+          ]
+        },
+        {
+          "template_id": "new_batch_01190",
+          "source_cluster_id": "source_cluster:a7a0f9f3b22e7d71618524da5a171cb2fd008362e3ce19c2332cedbf1e5e753e",
+          "passes_uncertain_competitor_veto": false,
+          "uncertain_competitors": [
+            {
+              "class_id": 45,
+              "label": "bowl",
+              "confidence": 0.4219533,
+              "bbox": [
+                0.2034426,
+                0.1528972,
+                0.6492913,
+                0.6317913
+              ],
+              "clipped": false
+            },
+            {
+              "class_id": 45,
+              "label": "bowl",
+              "confidence": 0.3987822,
+              "bbox": [
+                0.0,
+                0.2825272,
+                0.242832,
+                0.4371964
+              ],
+              "clipped": true
+            },
+            {
+              "class_id": 60,
+              "label": "dining table",
+              "confidence": 0.3953702,
+              "bbox": [
+                0.0053948,
+                0.0275162,
+                0.7751906,
+                0.6707455
+              ],
+              "clipped": true
+            },
+            {
+              "class_id": 60,
+              "label": "dining table",
+              "confidence": 0.3732288,
+              "bbox": [
+                0.2397938,
+                0.1790025,
+                0.7587607,
+                0.7934044
+              ],
+              "clipped": true
+            }
+          ]
+        },
+        {
+          "template_id": "new_batch_01194",
+          "source_cluster_id": "source_cluster:f60521dbc5b7990987ae99b0ea6bcfca5c0f7e65548d0175c8065181f0aa4e29",
+          "passes_uncertain_competitor_veto": false,
+          "uncertain_competitors": [
+            {
+              "class_id": 55,
+              "label": "cake",
+              "confidence": 0.4493668,
+              "bbox": [
+                0.7069705,
+                0.452077,
+                0.2849243,
+                0.309616
+              ],
+              "clipped": true
+            },
+            {
+              "class_id": 55,
+              "label": "cake",
+              "confidence": 0.4373743,
+              "bbox": [
+                0.4882143,
+                0.2659479,
+                0.3795792,
+                0.2646476
+              ],
+              "clipped": false
+            },
+            {
+              "class_id": 55,
+              "label": "cake",
+              "confidence": 0.3829886,
+              "bbox": [
+                0.4343232,
+                0.2636422,
+                0.4575221,
+                0.4906242
+              ],
+              "clipped": false
+            }
+          ]
+        },
+        {
+          "template_id": "new_batch_01203",
+          "source_cluster_id": "source_cluster:68fcdcb014135f6da273c08a69d0a1a2448cef231232ff63a01c4691fb08655f",
+          "passes_uncertain_competitor_veto": false,
+          "uncertain_competitors": [
+            {
+              "class_id": 45,
+              "label": "bowl",
+              "confidence": 0.4905349,
+              "bbox": [
+                0.0433759,
+                0.4799805,
+                0.3910815,
+                0.247858
+              ],
+              "clipped": false
+            },
+            {
+              "class_id": 41,
+              "label": "cup",
+              "confidence": 0.3692324,
+              "bbox": [
+                0.3852698,
+                0.3855583,
+                0.1712307,
+                0.1578194
+              ],
+              "clipped": false
+            }
+          ]
+        },
+        {
+          "template_id": "new_batch_01206",
+          "source_cluster_id": "source_cluster:5bfaaf6f154185c88b1af270c1a1ab9cf4c93fbef8f5401124b98a9e75f8a8c3",
+          "passes_uncertain_competitor_veto": false,
+          "uncertain_competitors": [
+            {
+              "class_id": 60,
+              "label": "dining table",
+              "confidence": 0.394326,
+              "bbox": [
+                0.0215205,
+                0.0200709,
+                0.7812567,
+                0.7695377
+              ],
+              "clipped": false
+            },
+            {
+              "class_id": 60,
+              "label": "dining table",
+              "confidence": 0.3789012,
+              "bbox": [
+                0.0057843,
+                0.2150715,
+                0.7795516,
+                0.7825521
+              ],
+              "clipped": true
+            },
+            {
+              "class_id": 45,
+              "label": "bowl",
+              "confidence": 0.374545,
+              "bbox": [
+                0.2375605,
+                0.3171894,
+                0.1322325,
+                0.1595654
+              ],
+              "clipped": false
+            },
+            {
+              "class_id": 41,
+              "label": "cup",
+              "confidence": 0.3693307,
+              "bbox": [
+                0.7622749,
+                0.0001407,
+                0.2168015,
+                0.2510314
+              ],
+              "clipped": true
+            },
+            {
+              "class_id": 51,
+              "label": "carrot",
+              "confidence": 0.3592989,
+              "bbox": [
+                0.557632,
+                0.0688607,
+                0.1470907,
+                0.0781088
+              ],
+              "clipped": false
+            },
+            {
+              "class_id": 41,
+              "label": "cup",
+              "confidence": 0.3579651,
+              "bbox": [
+                0.7609851,
+                0.0061776,
+                0.2355502,
+                0.3933936
+              ],
+              "clipped": true
+            }
+          ]
+        },
+        {
+          "template_id": "new_batch_01207",
+          "source_cluster_id": "source_cluster:af75818142d1b5f3b76c824bfd270eda9ae81361299445f1f680386e677f8671",
+          "passes_uncertain_competitor_veto": true,
+          "uncertain_competitors": []
+        },
+        {
+          "template_id": "new_batch_01291",
+          "source_cluster_id": "source_cluster:28da12320d35ae5ba500025fbdece54038832f5f61c61e5adb4992ed89833a19",
+          "passes_uncertain_competitor_veto": true,
+          "uncertain_competitors": []
+        },
+        {
+          "template_id": "new_batch_01321",
+          "source_cluster_id": "source_cluster:8bacbd6d50d66cf1b4f0de3dbba3189c814aad2736b77c91f561b1680d064c08",
+          "passes_uncertain_competitor_veto": false,
+          "uncertain_competitors": [
+            {
+              "class_id": 72,
+              "label": "refrigerator",
+              "confidence": 0.4636964,
+              "bbox": [
+                0.3657119,
+                0.0485003,
+                0.6308162,
+                0.8112065
+              ],
+              "clipped": true
+            },
+            {
+              "class_id": 72,
+              "label": "refrigerator",
+              "confidence": 0.4254753,
+              "bbox": [
+                0.2296525,
+                0.2418832,
+                0.7332323,
+                0.7581168
+              ],
+              "clipped": true
+            },
+            {
+              "class_id": 39,
+              "label": "bottle",
+              "confidence": 0.3828031,
+              "bbox": [
+                0.3009543,
+                0.5419148,
+                0.0745535,
+                0.2190762
+              ],
+              "clipped": false
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "reviewed_automatic_evaluation": {
+    "diagnostic_only": true,
+    "no_old_test_or_aesthetic_acceptance_used": true,
+    "grouped_mirror_consistency": {
+      "source_clusters": 3,
+      "consistent_clusters": 3,
+      "rate": 1.0,
+      "not_ground_truth_accuracy": true
+    },
+    "crop_protection": {
+      "candidate_count": 12,
+      "rejected_candidate_count": 4,
+      "accepted_crop_truncation_violations": 0,
+      "only_measured_box_guarantee": true
+    },
+    "style_counterexamples": [
+      {
+        "template_id": "new_batch_00060",
+        "source_cluster_id": "source_cluster:f74906328a16cc806d59e84ed15d45ce2d046abe4e1f0c73d35da7577780ad74",
+        "scene_category": "closeup_portrait",
+        "mean_luma": 0.7344647,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.3524593,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00061",
+        "source_cluster_id": "source_cluster:f74906328a16cc806d59e84ed15d45ce2d046abe4e1f0c73d35da7577780ad74",
+        "scene_category": "closeup_portrait",
+        "mean_luma": 0.8414549,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.5568001,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00386",
+        "source_cluster_id": "source_cluster:0723252f2394b1638b56557f8725b96176a4b612c9f8eaa047529ceeb1e72506",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.1651411,
+        "dark_fraction": 0.0002392,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00486",
+        "source_cluster_id": "source_cluster:750dbc2c5556348f82849bab356fabd112cf4494782b34758e4bc6e3ab0608a5",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.2205665,
+        "dark_fraction": 0.0068559,
+        "light_fraction": 0.000857,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00487",
+        "source_cluster_id": "source_cluster:750dbc2c5556348f82849bab356fabd112cf4494782b34758e4bc6e3ab0608a5",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.1784036,
+        "dark_fraction": 0.0004185,
+        "light_fraction": 0.0007773,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00530",
+        "source_cluster_id": "source_cluster:e5e6f946b95b855073b67eb81652fcc7204bb16d58d4557b8ab5bb272db78dd3",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.8146619,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.0085698,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00531",
+        "source_cluster_id": "source_cluster:e5e6f946b95b855073b67eb81652fcc7204bb16d58d4557b8ab5bb272db78dd3",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.7659938,
+        "dark_fraction": 3.99e-05,
+        "light_fraction": 0.3436902,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00532",
+        "source_cluster_id": "source_cluster:e5e6f946b95b855073b67eb81652fcc7204bb16d58d4557b8ab5bb272db78dd3",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.847722,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.2886838,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00536",
+        "source_cluster_id": "source_cluster:e5e6f946b95b855073b67eb81652fcc7204bb16d58d4557b8ab5bb272db78dd3",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.7979863,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.2558594,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00546",
+        "source_cluster_id": "source_cluster:333d04e11a20fc059a8bdea6ebceee3430feaa818c7b55e30959b363c302118a",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.7953505,
+        "dark_fraction": 0.0004584,
+        "light_fraction": 0.0058195,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00593",
+        "source_cluster_id": "source_cluster:c27b3923455852a4142de7191ce6324e496fbead53e0dbe1cc631f3487e7223f",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.7859575,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00596",
+        "source_cluster_id": "source_cluster:c27b3923455852a4142de7191ce6324e496fbead53e0dbe1cc631f3487e7223f",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.8474078,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00598",
+        "source_cluster_id": "source_cluster:51d1d354a19d22a088c5a344f8c27d412b9073e8d05c348a5eb271cb3189b15c",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.8304252,
+        "dark_fraction": 0.0,
+        "light_fraction": 3.99e-05,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00601",
+        "source_cluster_id": "source_cluster:51d1d354a19d22a088c5a344f8c27d412b9073e8d05c348a5eb271cb3189b15c",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.8935123,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.0361926,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00602",
+        "source_cluster_id": "source_cluster:51d1d354a19d22a088c5a344f8c27d412b9073e8d05c348a5eb271cb3189b15c",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.8935075,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.0321668,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00656",
+        "source_cluster_id": "source_cluster:a55fddf5806771c4ad987c9eafcffb474c9db0680b70b5530719aa2f0bfa9db3",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.2491454,
+        "dark_fraction": 0.0299546,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00668",
+        "source_cluster_id": "source_cluster:2be44903cb76a8762e98f0413ed48d7df97048083644734e7d3297e79601fae7",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.1837916,
+        "dark_fraction": 0.0042451,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00759",
+        "source_cluster_id": "source_cluster:b8a4e627eecf6e6b71634c949ac70aee57310ad9a819ffa4af3ee11ae5e492c9",
+        "scene_category": "closeup_portrait",
+        "mean_luma": 0.7937121,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.0034877,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00775",
+        "source_cluster_id": "source_cluster:9e8ba1b3f767850b9280f7e7391cff915f9847f86b672eddc94e2d3a4aee99d2",
+        "scene_category": "closeup_portrait",
+        "mean_luma": 0.2450296,
+        "dark_fraction": 0.0277025,
+        "light_fraction": 0.0004783,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00780",
+        "source_cluster_id": "source_cluster:91997572489b59d9e4ef0fa3fb88bb213bd9af97d1236f5ffb0e7199d4ef9d0a",
+        "scene_category": "closeup_portrait",
+        "mean_luma": 0.7880135,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.2921317,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00786",
+        "source_cluster_id": "source_cluster:c72b904e6d1506c04f965343bc723967b240253242c9bbd2b1454b186425cfe9",
+        "scene_category": "closeup_portrait",
+        "mean_luma": 0.1608299,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00818",
+        "source_cluster_id": "source_cluster:8eb34b3ab13f9a61aefac50679b7f5978b29c99ffdf5b510d0a5f6cfb5f3027f",
+        "scene_category": "closeup_portrait",
+        "mean_luma": 0.1759163,
+        "dark_fraction": 0.4099171,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00820",
+        "source_cluster_id": "source_cluster:4eb1b651fb5273e0ae02ed91e0b920735ec49b80d85e9cd52dab183b704daafd",
+        "scene_category": "closeup_portrait",
+        "mean_luma": 0.1955483,
+        "dark_fraction": 0.1925423,
+        "light_fraction": 0.0004982,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00822",
+        "source_cluster_id": "source_cluster:605ba36d52eac79ec79c723d1c5d060889bf5ebc92485e835dc6a5a144dda9c8",
+        "scene_category": "closeup_portrait",
+        "mean_luma": 0.7763733,
+        "dark_fraction": 0.0001993,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00831",
+        "source_cluster_id": "source_cluster:94fec781e573e5d05447f737441b5015770b6bb4e338d9a1e2a6a4d6e41828e3",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.1982261,
+        "dark_fraction": 0.0763712,
+        "light_fraction": 0.0002591,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00845",
+        "source_cluster_id": "source_cluster:fe1cd13a334614e2fb5619b241d3cd0fbe3fa73173bfcfb108aec9ba1ec0d0eb",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.1778454,
+        "dark_fraction": 0.0326451,
+        "light_fraction": 0.002551,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00856",
+        "source_cluster_id": "source_cluster:d21db3480123592378c73a12a959367a7c616687f873ebebe645fb5cb8297dbd",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.1867698,
+        "dark_fraction": 0.0407765,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00862",
+        "source_cluster_id": "source_cluster:27ad93187ad6c2226f3b7e9a0cf9ceb6df57f70e35aee723c33bbfadfbb98214",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.2557629,
+        "dark_fraction": 0.5371094,
+        "light_fraction": 0.0013353,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00873",
+        "source_cluster_id": "source_cluster:8305b6d848def4c95a24fd5bc7b568cd26d112db5831d3f197d4c7db921818c5",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.1332774,
+        "dark_fraction": 0.0325255,
+        "light_fraction": 9.96e-05,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00878",
+        "source_cluster_id": "source_cluster:be872125b6be90a9a5331f53f4dbc60ade1e4953f2066b69ddcde18b468314f6",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.2076352,
+        "dark_fraction": 0.0010164,
+        "light_fraction": 0.0002192,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00882",
+        "source_cluster_id": "source_cluster:7cc2c2336962f8ed592648cd6fafd0b8a5624460204ee993578ea705b1b64c44",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.245505,
+        "dark_fraction": 0.0011759,
+        "light_fraction": 0.0003986,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00883",
+        "source_cluster_id": "source_cluster:d407d13e05431faac8139fa30a90f03df09029fb2f8b22d62c6de1e4bea247da",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.1626281,
+        "dark_fraction": 3.99e-05,
+        "light_fraction": 5.98e-05,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00891",
+        "source_cluster_id": "source_cluster:a039ab7c4076bf01d0fe0704b9d51e528a4e2fd3fd7567993aeb0d13b436d974",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.162738,
+        "dark_fraction": 0.0148477,
+        "light_fraction": 0.0011759,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00918",
+        "source_cluster_id": "source_cluster:a12f10638ee5b1bd89ac457ecb4f32e96eb513095633bd288f9204abd93a650e",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.2112511,
+        "dark_fraction": 0.0635762,
+        "light_fraction": 0.0001594,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00951",
+        "source_cluster_id": "source_cluster:ee9b0c19472b839b73712d08cf7cfec68db145bfd60452efef2bd3733fefd9da",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.2253453,
+        "dark_fraction": 0.0029297,
+        "light_fraction": 0.0003388,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00952",
+        "source_cluster_id": "source_cluster:1ba1656142b5bb80f2192bc1acd2cdd817040120f48463f49ba96a473c1c2773",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.1648154,
+        "dark_fraction": 0.0003587,
+        "light_fraction": 5.98e-05,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00953",
+        "source_cluster_id": "source_cluster:6159e74a64c0e1049fe8e12ca6e0c89181274b57f8bf0ae0774a5708fea8224a",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.1660159,
+        "dark_fraction": 0.0454799,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00960",
+        "source_cluster_id": "source_cluster:bbfb8d9f5e12d2628e77978e3267d03b6b95b2c9745038ae162361dd462ff52c",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.242501,
+        "dark_fraction": 0.0153858,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_00996",
+        "source_cluster_id": "source_cluster:e394d7f753f1664e1781a12feef52953ea1e4c72f767c1586800b0752e5f48a7",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.1668268,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01014",
+        "source_cluster_id": "source_cluster:950e41ea060f94121299917434c98cf1df860aacef1b61b661c720d63a2c2bcc",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.1167732,
+        "dark_fraction": 0.4635882,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01018",
+        "source_cluster_id": "source_cluster:33c6059d0987b7eaf5297ebb7d9b9e1c41a5cce774f796a71013f71844e7289a",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.1644891,
+        "dark_fraction": 0.1832549,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01019",
+        "source_cluster_id": "source_cluster:41625f070f3e7ccffa5e21ec492249f0400522c3569ed0b3e827dda77aaccee3",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.1619428,
+        "dark_fraction": 0.1018415,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01066",
+        "source_cluster_id": "source_cluster:bc6f448eac463588daf99ba6773c7b8b720350b003e51b49566984d03bea5801",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.8186345,
+        "dark_fraction": 1.99e-05,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01067",
+        "source_cluster_id": "source_cluster:a47e7e64df486f10bad23c0d2c17ba383e28532d233134f690dd15ccb74e1b5f",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.835657,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.0006178,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01069",
+        "source_cluster_id": "source_cluster:70f537e45ea52c36ea37d06b8c29c387f1a8a9be35482a6b92c401f4290b6280",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.7711254,
+        "dark_fraction": 0.0007573,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01071",
+        "source_cluster_id": "source_cluster:8b2df82ec2194b6249ccba4c7229a539a12bf0eb5e9e84c723ab367edc4c3e52",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.1561635,
+        "dark_fraction": 0.0001196,
+        "light_fraction": 0.0803571,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01072",
+        "source_cluster_id": "source_cluster:67ba12c3b567743769631641c41842308db3239719e6339ad8af96a17137ca83",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.1965686,
+        "dark_fraction": 9.96e-05,
+        "light_fraction": 0.0803173,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01073",
+        "source_cluster_id": "source_cluster:2a9d23971e4e82e32824a3ed8992e19071299a4314b6e91d61c85cc124c5dac5",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.2498867,
+        "dark_fraction": 0.0069356,
+        "light_fraction": 0.0580357,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01074",
+        "source_cluster_id": "source_cluster:213abc211995890d52585e14bec2e11713caac739ff0f7888de2cf4719c7f1c4",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.1657664,
+        "dark_fraction": 5.98e-05,
+        "light_fraction": 0.0803571,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01076",
+        "source_cluster_id": "source_cluster:fba545c7f0b634991896f554f19113d51128dac5f6e39c9dbe0e7349b76f3f57",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.1870786,
+        "dark_fraction": 9.96e-05,
+        "light_fraction": 0.0580357,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01077",
+        "source_cluster_id": "source_cluster:28abd0e3a5c8595000c01e182db5dd34a7f96b6d37590237f80373567ee922ca",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.1821176,
+        "dark_fraction": 0.0115992,
+        "light_fraction": 0.0580357,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01079",
+        "source_cluster_id": "source_cluster:552ebc3c936e9769747f420b60c9571c917e4c82140999b5a7e01ea6adf38dcc",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.1840663,
+        "dark_fraction": 0.0016342,
+        "light_fraction": 0.0803571,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01081",
+        "source_cluster_id": "source_cluster:0095f21fea8818f1799c1c76087c3e73b38d1751f0c40dfaa7d8c3fd0e01d361",
+        "scene_category": "lifestyle_still_life",
+        "mean_luma": 0.191547,
+        "dark_fraction": 0.0001594,
+        "light_fraction": 0.0803571,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01140",
+        "source_cluster_id": "source_cluster:c68c1c09896c7e46d317d04f34d3d07b783e58a062333e200e1dd4bb32e8f736",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.2553976,
+        "dark_fraction": 0.1548748,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01149",
+        "source_cluster_id": "source_cluster:5d4a6606b3a7d85ef4904f2d96eeeb036dcf785e82a3eea64ff84616d551bbd6",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.3405853,
+        "dark_fraction": 0.1853874,
+        "light_fraction": 0.0167411,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01188",
+        "source_cluster_id": "source_cluster:48a37a565ccc156249889ba5ada407789ee75e01ab336403d0e33ab3848c79f9",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.7532145,
+        "dark_fraction": 0.0100845,
+        "light_fraction": 0.376415,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01196",
+        "source_cluster_id": "source_cluster:5267d95d9306100fcdd94d5128f0d49cb82d2d2731fca899105d611e4010f823",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.4169112,
+        "dark_fraction": 0.176997,
+        "light_fraction": 0.0452208,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01199",
+        "source_cluster_id": "source_cluster:f2e6c8da015aa0cb7fd030342a3414e5768063904f781c238599243d978985e2",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.2480176,
+        "dark_fraction": 0.2734973,
+        "light_fraction": 0.0001794,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01204",
+        "source_cluster_id": "source_cluster:a7f0ecaa60dbc7a4960c776554eeb04873c2cd97820e2fd3abb375d41c4191cb",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.524184,
+        "dark_fraction": 0.1689254,
+        "light_fraction": 0.0066566,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01205",
+        "source_cluster_id": "source_cluster:0f3433537d90b8bc8b1d3f0f43c902e30a71ecd5c07a010ffd3aff2e4a60a6c8",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.6169252,
+        "dark_fraction": 0.0160435,
+        "light_fraction": 0.1892738,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01206",
+        "source_cluster_id": "source_cluster:5bfaaf6f154185c88b1af270c1a1ab9cf4c93fbef8f5401124b98a9e75f8a8c3",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.4957825,
+        "dark_fraction": 0.078703,
+        "light_fraction": 0.1761001,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01208",
+        "source_cluster_id": "source_cluster:1e8773a6d498735169c6630c3ebb4affc1f06b8a1c1d5868da00299e7a05c682",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.2031078,
+        "dark_fraction": 0.1678093,
+        "light_fraction": 0.0,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01225",
+        "source_cluster_id": "source_cluster:59a006d11402c440f589c14443bb8b18e2f172606fa064bd963b7ef748eecdd8",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.5160491,
+        "dark_fraction": 0.1646006,
+        "light_fraction": 0.0088289,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01242",
+        "source_cluster_id": "source_cluster:16cd869c3035377bb9197a4db5b19fea36c39b7e573ec78e403e2bf704c06962",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.2416414,
+        "dark_fraction": 0.0235172,
+        "light_fraction": 0.0001993,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01248",
+        "source_cluster_id": "source_cluster:21a4f99311bbbddac6f820f10c56595acc5d334a285c71494174faf69f07b6ef",
+        "scene_category": "natural_landscape",
+        "mean_luma": 0.2094961,
+        "dark_fraction": 0.2048988,
+        "light_fraction": 0.0015346,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01269",
+        "source_cluster_id": "source_cluster:bec5bf20f44a240ed2fb7b27ad7729173ccc8de8340c46bd45896a7928d97c28",
+        "scene_category": "urban_landscape",
+        "mean_luma": 0.210386,
+        "dark_fraction": 0.0292172,
+        "light_fraction": 0.0113999,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01278",
+        "source_cluster_id": "source_cluster:5dd038c445ef12d1cacfa04c8f225d87c39845fbf081625a83efe6a6e470b25d",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.4259623,
+        "dark_fraction": 0.1863042,
+        "light_fraction": 3.99e-05,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01281",
+        "source_cluster_id": "source_cluster:edb275d7bcadf1e499d272265f414f3c79fd853ecd9a9150acf66ebc5d7c01e4",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.7707438,
+        "dark_fraction": 0.0047832,
+        "light_fraction": 0.1440729,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01291",
+        "source_cluster_id": "source_cluster:28da12320d35ae5ba500025fbdece54038832f5f61c61e5adb4992ed89833a19",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.8730119,
+        "dark_fraction": 0.0017538,
+        "light_fraction": 0.4105548,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01319",
+        "source_cluster_id": "source_cluster:107f935d5ce4c99d343a0e65b576556e8205860c7181d93793e9445e54219317",
+        "scene_category": "urban_landscape",
+        "mean_luma": 0.5816845,
+        "dark_fraction": 0.0,
+        "light_fraction": 0.1684869,
+        "no_global_style_rejection": true
+      },
+      {
+        "template_id": "new_batch_01321",
+        "source_cluster_id": "source_cluster:8bacbd6d50d66cf1b4f0de3dbba3189c814aad2736b77c91f561b1680d064c08",
+        "scene_category": "food_still_life",
+        "mean_luma": 0.2189976,
+        "dark_fraction": 0.1611727,
+        "light_fraction": 9.96e-05,
+        "no_global_style_rejection": true
+      }
+    ],
+    "source_cluster_diagnostics": [
+      {
+        "template_id": "new_batch_01010",
+        "source_cluster_id": "source_cluster:99f05481e3e13917d6918a1a7bb37e784e3a8f4d01031989517a3a489c691483",
+        "scene_category": "food_still_life",
+        "mirror_same_class_iou": 0.9204309939181305,
+        "mirror_consistent_at_iou_0_5": true,
+        "crops": [
+          {
+            "crop": [
+              0.0,
+              0.0,
+              1.0,
+              1.0
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0000000000000002
+          },
+          {
+            "crop": [
+              0.1,
+              0.1,
+              0.9,
+              0.9
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0000000000000002
+          },
+          {
+            "crop": [
+              0.0,
+              0.0,
+              0.8,
+              0.8
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0000000000000002
+          },
+          {
+            "crop": [
+              0.2,
+              0.2,
+              1.0,
+              1.0
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0000000000000002
+          }
+        ]
+      },
+      {
+        "template_id": "new_batch_01207",
+        "source_cluster_id": "source_cluster:af75818142d1b5f3b76c824bfd270eda9ae81361299445f1f680386e677f8671",
+        "scene_category": "food_still_life",
+        "mirror_same_class_iou": 0.9937159637297551,
+        "mirror_consistent_at_iou_0_5": true,
+        "crops": [
+          {
+            "crop": [
+              0.0,
+              0.0,
+              1.0,
+              1.0
+            ],
+            "safe": true,
+            "primary_retained_fraction": 1.0
+          },
+          {
+            "crop": [
+              0.1,
+              0.1,
+              0.9,
+              0.9
+            ],
+            "safe": false,
+            "primary_retained_fraction": 0.9698742354425265
+          },
+          {
+            "crop": [
+              0.0,
+              0.0,
+              0.8,
+              0.8
+            ],
+            "safe": false,
+            "primary_retained_fraction": 0.8118321956576903
+          },
+          {
+            "crop": [
+              0.2,
+              0.2,
+              1.0,
+              1.0
+            ],
+            "safe": false,
+            "primary_retained_fraction": 0.7622253419635758
+          }
+        ]
+      },
+      {
+        "template_id": "new_batch_01291",
+        "source_cluster_id": "source_cluster:28da12320d35ae5ba500025fbdece54038832f5f61c61e5adb4992ed89833a19",
+        "scene_category": "food_still_life",
+        "mirror_same_class_iou": 0.741375768713512,
+        "mirror_consistent_at_iou_0_5": true,
+        "crops": [
+          {
+            "crop": [
+              0.0,
+              0.0,
+              1.0,
+              1.0
+            ],
+            "safe": true,
+            "primary_retained_fraction": 0.9999999999999999
+          },
+          {
+            "crop": [
+              0.1,
+              0.1,
+              0.9,
+              0.9
+            ],
+            "safe": true,
+            "primary_retained_fraction": 0.9999999999999999
+          },
+          {
+            "crop": [
+              0.0,
+              0.0,
+              0.8,
+              0.8
+            ],
+            "safe": true,
+            "primary_retained_fraction": 0.9999999999999999
+          },
+          {
+            "crop": [
+              0.2,
+              0.2,
+              1.0,
+              1.0
+            ],
+            "safe": false,
+            "primary_retained_fraction": 0.845426053653517
+          }
+        ]
+      }
+    ],
+    "limits": [
+      "No human object boxes, horizon labels, or beauty preferences available.",
+      "Mirror consistency can agree on a wrong object; it is not mAP.",
+      "Layout describes coarse appearance and does not identify a horizon.",
+      "Local measurements do not establish phone latency or perceptual improvement."
+    ],
+    "live_uncertainty_replay": {
+      "input_kind": "existing_reference_images_as_observations",
+      "policy": "score_035_to_050_area035_iou_below060_v1",
+      "reference_count": 3,
+      "passes": 2,
+      "rejected": 1,
+      "not_query_coverage_or_accuracy": true,
+      "does_not_test_same_source_excluded_retrieval_or_full_ready_workflow": true,
+      "records": [
+        {
+          "template_id": "new_batch_01010",
+          "source_cluster_id": "source_cluster:99f05481e3e13917d6918a1a7bb37e784e3a8f4d01031989517a3a489c691483",
+          "passes_uncertain_competitor_veto": false,
+          "uncertain_competitors": [
+            {
+              "class_id": 41,
+              "label": "cup",
+              "confidence": 0.3872016,
+              "bbox": [
+                0.026321,
+                0.0307924,
+                0.7345803,
+                0.7144513
+              ],
+              "clipped": false
+            },
+            {
+              "class_id": 41,
+              "label": "cup",
+              "confidence": 0.3573973,
+              "bbox": [
+                0.2164444,
+                0.0723749,
+                0.7488048,
+                0.6666639
+              ],
+              "clipped": false
+            },
+            {
+              "class_id": 0,
+              "label": "person",
+              "confidence": 0.356811,
+              "bbox": [
+                0.2523031,
+                0.2915379,
+                0.7438514,
+                0.7084621
+              ],
+              "clipped": true
+            }
+          ]
+        },
+        {
+          "template_id": "new_batch_01207",
+          "source_cluster_id": "source_cluster:af75818142d1b5f3b76c824bfd270eda9ae81361299445f1f680386e677f8671",
+          "passes_uncertain_competitor_veto": true,
+          "uncertain_competitors": []
+        },
+        {
+          "template_id": "new_batch_01291",
+          "source_cluster_id": "source_cluster:28da12320d35ae5ba500025fbdece54038832f5f61c61e5adb4992ed89833a19",
+          "passes_uncertain_competitor_veto": true,
+          "uncertain_competitors": []
+        }
+      ]
+    }
+  },
+  "ai_review_not_user_annotation": true,
+  "existing_retrieval_and_aesthetic_acceptance_sets_untouched": true,
+  "all_reference_images_remain_local": true
+}

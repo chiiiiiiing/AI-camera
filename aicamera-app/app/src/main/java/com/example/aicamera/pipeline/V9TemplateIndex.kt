@@ -262,6 +262,9 @@ class V9TemplateIndex(
 
     fun qualityHead(): QualityHead? = QualityHead.load(indexDir.parentFile)
 
+    /** Optional scene models and hash-bound reference sidecars share this bundle. */
+    fun assetDirectory(): File = indexDir.parentFile
+
     fun getMetadata(templateId: String): TemplateMeta? = metadata[templateId]
 
     private fun insertTopHit(best: MutableList<ScoredIndex>, candidate: ScoredIndex, topK: Int) {

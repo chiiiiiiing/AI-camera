@@ -80,6 +80,7 @@ class FramePipeline(
         scheduler.schedule(
             imageProxy = imageProxy,
             onProcess = { proxy ->
+                val frameSampledAtMs = SystemClock.elapsedRealtime()
                 // Capture one engine for this entire frame; hot swaps happen on the next frame.
                 val frameInference = inference
                 val generation = resetGeneration.get()
@@ -114,7 +115,7 @@ class FramePipeline(
                 ) {
                     modelSampled = true
                     val preprocessStart = SystemClock.elapsedRealtime()
-                    val preprocessed = preprocessor.process(proxy, rotation, isFrontCamera)
+                    val preprocessed = preprocessor.process(proxy, rotation, isFrontCamera).copy(sampledAtMs = frameSampledAtMs)
                     preprocessMs = SystemClock.elapsedRealtime() - preprocessStart
                     try {
                         val inferenceStart = SystemClock.elapsedRealtime()

@@ -198,7 +198,9 @@ data class PreprocessedFrame(
     /** 已转正/镜像并 resize 到模型尺寸的 Bitmap（未 recycle），供 V9 直接做 NCHW 预处理 */
     val originalBitmap: Bitmap? = null,
     /** Full, rotated frame before the embedding model's square resize. */
-    val displayAspectRatio: Float? = null
+    val displayAspectRatio: Float? = null,
+    /** Monotonic arrival time captured before face detection or model inference. */
+    val sampledAtMs: Long = 0L
 )
 
 // ── 日志 ──────────────────────────────────────────────────────

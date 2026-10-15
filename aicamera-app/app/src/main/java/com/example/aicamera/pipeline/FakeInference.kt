@@ -148,6 +148,7 @@ enum class SceneType(val label: String) {
 }
 
 enum class CompositionStrategy(val label: String) {
+    ADAPTIVE("参考构图"),
     RULE_OF_THIRDS("三分法"),
     CENTER("中心构图"),
     SYMMETRY("对称构图"),
@@ -177,7 +178,10 @@ data class FakeInferenceOutput(
     val qualityAcceptable: Boolean = true,
     val imuObservationId: Long = 0L,
     val imuSampledAtMs: Long = 0L,
-    val rawRollDegrees: Float? = null
+    val rawRollDegrees: Float? = null,
+    val sceneAnalysis: com.example.aicamera.guidance.SceneAnalysisObservation? = null,
+    val objectTarget: com.example.aicamera.guidance.ObjectCompositionTarget? = null,
+    val rollObservable: Boolean? = null
 )
 
 data class FakeGuideLine(

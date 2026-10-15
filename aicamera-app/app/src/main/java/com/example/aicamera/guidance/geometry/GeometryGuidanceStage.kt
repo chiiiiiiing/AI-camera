@@ -79,8 +79,20 @@ class GeometryGuidanceStage @Inject constructor(
         val targetFace = structure?.singleFace(android.os.SystemClock.elapsedRealtime())
         val targetValid = oldTarget == null || (targetFace != null && oldTarget.accepts(targetFace, structure?.faceYawDegrees) && oldTarget.subjectTrackingId == structure?.trackingId &&
             oldTarget.viewportVersion == structure?.viewportVersion && targetFace != null)
-        val output = if (targetValid) input else input.copy(compositionTarget = null,
-            guideLines = input.guideLines.filterNot { it.type == "target_zone" })
+        val sceneFresh = input.sceneAnalysis?.isFresh(android.os.SystemClock.elapsedRealtime()) != false
+        val faceOutput = if (targetValid && sceneFresh) input else input.copy(compositionTarget = null,
+            confidence = if(sceneFresh) input.confidence else 0f,
+            guideLines = input.guideLines.filterNot { it.type == "target_zone" && (!sceneFresh || it.params["anchor_kind"] == "face") })
+        val objectObservation = input.sceneAnalysis?.objectObservation?.takeIf {
+            it.isFresh(android.os.SystemClock.elapsedRealtime()) && input.sceneAnalysis.isFresh(android.os.SystemClock.elapsedRealtime()) &&
+                it.viewportVersion == structure?.viewportVersion
+        }
+        val objectTargetValid = input.objectTarget?.let { target -> objectObservation?.let { target.accepts(it) } } == true
+        val output = faceOutput.copy(objectTarget = faceOutput.objectTarget.takeIf { objectTargetValid },
+            guideLines = faceOutput.guideLines.filterNot { line ->
+                line.params["anchor_kind"] == "object" &&
+                    ((line.type == "target_zone" && !objectTargetValid) || (line.type == "subject_box" && objectObservation == null))
+            })
 
         // ── 1. 真实水平/俯仰/偏航观测（含 isUpright/confidence） ──
         // ★ 传感器已做圆周平滑，此处保留 EMA 做二次去抖
@@ -135,7 +147,7 @@ class GeometryGuidanceStage @Inject constructor(
         val guidedSubject = smoothBox?.takeIf { hasTarget && hasRecommendation }
 
         // 模板是否期望主体：有人像类占位框即期望主体
-        val expectsSubject = output.expectsSubject || output.guideLines.any { it.type == "subject_box" }
+        val expectsSubject = output.expectsSubject
 
         // Pose observations describe how the user chose to frame the scene.
         // Only explicit verified targets can authorize changing pitch or yaw.
@@ -200,7 +212,8 @@ class GeometryGuidanceStage @Inject constructor(
                     } else null
                 }
                 "subject_box" -> {
-                    if (smoothBox != null) {
+                    if (line.params["anchor_kind"] == "object") line
+                    else if (smoothBox != null && expectsSubject) {
                         // 真实检测框替换占位框（real=true 标记：分步引导只信真实检测）
                         val aligned = hasRecommendation && hasTarget && GuidanceGeometry.isSubjectAligned(
                             smoothBox.centerX, smoothBox.centerY, targetCx, targetCy, targetTol, coordinateAspectRatio
@@ -230,7 +243,7 @@ class GeometryGuidanceStage @Inject constructor(
         }.toMutableList()
 
         // 模板没给主体框但检测到了主体（如风景照里有人）→ 也画出来
-        if (smoothBox != null && newLines.none { it.type == "subject_box" }) {
+        if (smoothBox != null && expectsSubject && newLines.none { it.type == "subject_box" }) {
             val aligned = hasRecommendation && hasTarget && GuidanceGeometry.isSubjectAligned(
                 smoothBox.centerX, smoothBox.centerY, targetCx, targetCy, targetTol, coordinateAspectRatio
             )
@@ -260,7 +273,8 @@ class GeometryGuidanceStage @Inject constructor(
             structureObservation = structure,
             imuObservationId = rawObs?.observationId ?: 0L,
             imuSampledAtMs = rawObs?.sampledAtMs ?: 0L,
-            rawRollDegrees = rawObs?.rawRollDegrees
+            rawRollDegrees = rawObs?.rawRollDegrees,
+            rollObservable = rawObs?.let { HorizonMath.hasObservableRoll(it) }
         )
     }
 

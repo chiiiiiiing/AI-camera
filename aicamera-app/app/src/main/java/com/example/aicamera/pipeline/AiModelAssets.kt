@@ -34,12 +34,14 @@ object AiModelAssets {
     private const val VERSION_FILE = "ai_model_version.txt"
 
     /** 资产内容变化时递增，强制旧设备重新复制 */
-    private const val CURRENT_VERSION = "v11-structure-guidance-1"
+    private const val CURRENT_VERSION = "v12-multiscene-guidance-1"
 
     // Optional capabilities fail closed in their own readers. A rejected quality head
     // must never prevent the existing retrieval model from starting.
     private val OPTIONAL_FILES = listOf(
-        "reference_structures.json", "quality_policy.json", "quality_head.json"
+        "reference_structures.json", "quality_policy.json", "quality_head.json",
+        "object_detector.onnx", "object_detector_manifest.json",
+        "multi_scene_references.json", "LICENSE.object_detector.txt"
     )
 
     /** 必须的部署文件；模型精度由 manifest 记录，不编码在部署文件名中。 */

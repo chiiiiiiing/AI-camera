@@ -54,3 +54,62 @@ data class GuidanceDecision(
     val observationId: Long,
     val replanRequested: Boolean = false
 )
+
+enum class SceneFamily { UNKNOWN, PORTRAIT, FOOD, STILL_LIFE, PLANT, NATURAL_LANDSCAPE, URBAN_LANDSCAPE }
+enum class ObservedAnchorKind { FACE, OBJECT, NONE }
+
+/** Detection geometry is distinct from a face and never certifies unseen subject parts. */
+data class ObjectObservation(
+    val observationId: Long,
+    val sampledAtMs: Long,
+    val viewportVersion: Long,
+    val trackingId: Int,
+    val classId: Int,
+    val box: NormalizedBox,
+    val confidence: Float,
+    val stableSamples: Int,
+    val aspectRatio: Float
+) {
+    fun isFresh(nowMs: Long): Boolean = observationId > 0 && nowMs >= sampledAtMs &&
+        nowMs-sampledAtMs <= 1500 && stableSamples >= 2 && confidence.isFinite() && confidence >= .5f &&
+        box.left >= .02f && box.top >= .02f && box.right <= .98f && box.bottom <= .98f &&
+        box.width > 0 && box.height > 0 && aspectRatio.isFinite() && aspectRatio > 0
+}
+
+data class ObjectCompositionTarget(
+    val id: String,
+    val center: NormalizedPoint,
+    val viewportVersion: Long,
+    val trackingId: Int,
+    val classId: Int,
+    val referenceBox: NormalizedBox,
+    val tolerance: Float = .06f,
+    val source: String = "reference_object"
+) {
+    fun accepts(observation: ObjectObservation): Boolean {
+        if (observation.viewportVersion != viewportVersion || observation.trackingId != trackingId || observation.classId != classId) return false
+        val b = observation.box
+        val dx = center.x-b.centerX; val dy = center.y-b.centerY
+        return kotlin.math.abs(dx) <= .20f && kotlin.math.abs(dy) <= .20f &&
+            b.left+dx >= .03f && b.top+dy >= .03f && b.right+dx <= .97f && b.bottom+dy <= .97f &&
+            b.height/referenceBox.height in .65f..1.55f && b.width/referenceBox.width in .65f..1.55f
+    }
+}
+
+/** Measured image layout supports reference compatibility, never a claimed horizon or beauty score. */
+data class SceneLayout(
+    val lumaGrid: List<Float>, val edgeGrid: List<Float>,
+    val meanLuma: Float, val darkFraction: Float, val lightFraction: Float
+)
+
+data class SceneAnalysisObservation(
+    val observationId: Long,
+    val sampledAtMs: Long,
+    val viewportVersion: Long,
+    val family: SceneFamily,
+    val layout: SceneLayout,
+    val objectObservation: ObjectObservation? = null,
+    val detectorAvailable: Boolean = false
+) {
+    fun isFresh(nowMs: Long): Boolean = observationId > 0 && nowMs >= sampledAtMs && nowMs-sampledAtMs <= 1500
+}

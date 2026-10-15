@@ -378,11 +378,26 @@ class RenderViewModel @Inject constructor() : ViewModel() {
             }
         }
 
-        output.structureObservation?.let { structure ->
+        val scene = output.sceneAnalysis
+        val objectScene = scene?.family == com.example.aicamera.guidance.SceneFamily.FOOD ||
+            scene?.family == com.example.aicamera.guidance.SceneFamily.STILL_LIFE
+        val faceScene = scene == null || scene.family == com.example.aicamera.guidance.SceneFamily.PORTRAIT
+        output.structureObservation?.takeIf { faceScene }?.let { structure ->
             val rawFace = structure.singleFace(android.os.SystemClock.elapsedRealtime())
             subjectCx = rawFace?.centerX
             subjectCy = rawFace?.centerY
             hasRealSubject = rawFace != null
+        }
+        val observedObject = scene?.objectObservation?.takeIf { objectScene && it.isFresh(android.os.SystemClock.elapsedRealtime()) }
+        val objectTarget = output.objectTarget?.takeIf { target -> observedObject?.let { target.accepts(it) } == true }
+        if (!faceScene) {
+            subjectCx = observedObject?.box?.centerX
+            subjectCy = observedObject?.box?.centerY
+            hasRealSubject = observedObject != null
+            targetCx = objectTarget?.center?.x
+            targetCy = objectTarget?.center?.y
+            targetTol = objectTarget?.tolerance ?: .06f
+            coordinateAspectRatio = observedObject?.aspectRatio ?: 1f
         }
         return CompositionSessionController.FrameObservation(
             frameId = nextObservationFrameId(result),
@@ -397,23 +412,26 @@ class RenderViewModel @Inject constructor() : ViewModel() {
             targetCx = targetCx,
             targetCy = targetCy,
             targetTolerance = targetTol,
-            expectsSubject = output.expectsSubject,
+            expectsSubject = output.expectsSubject || objectTarget != null,
             hasRealSubject = hasRealSubject,
             modelConfidence = output.confidence,
             pitchTargetDegrees = pitchTarget,
             yawTargetDegrees = yawTarget,
             coordinateAspectRatio = coordinateAspectRatio,
-            subjectObservationId = output.structureObservation?.observationId ?: 0L,
-            subjectTrackingId = output.structureObservation?.trackingId,
-            subjectSampledAtMs = output.structureObservation?.sampledAtMs ?: 0L,
+            subjectObservationId = if(objectScene) observedObject?.observationId ?: 0L else output.structureObservation?.observationId ?: 0L,
+            subjectTrackingId = if(objectScene) observedObject?.trackingId else output.structureObservation?.trackingId.takeIf { faceScene },
+            subjectSampledAtMs = if(objectScene) observedObject?.sampledAtMs ?: 0L else output.structureObservation?.sampledAtMs ?: 0L,
             imuObservationId = output.imuObservationId,
             imuSampledAtMs = output.imuSampledAtMs,
-            faceCount = output.structureObservation?.faceCount ?: 0,
-            viewportVersion = output.structureObservation?.viewportVersion ?: -1,
-            targetViewportVersion = output.compositionTarget?.viewportVersion ?: -2,
-            targetId = output.compositionTarget?.id,
+            faceCount = if(faceScene) output.structureObservation?.faceCount ?: 0 else 0,
+            viewportVersion = scene?.viewportVersion ?: output.structureObservation?.viewportVersion ?: -1,
+            targetViewportVersion = objectTarget?.viewportVersion ?: output.compositionTarget?.viewportVersion ?: -2,
+            targetId = objectTarget?.id ?: output.compositionTarget?.id,
             qualityScore = output.qualityScore,
-            qualityAcceptable = output.qualityAcceptable
+            qualityAcceptable = output.qualityAcceptable,
+            observedAnchorKind = if(objectScene) com.example.aicamera.guidance.ObservedAnchorKind.OBJECT
+                else if(faceScene) com.example.aicamera.guidance.ObservedAnchorKind.FACE else com.example.aicamera.guidance.ObservedAnchorKind.NONE,
+            rollObservable = output.rollObservable != false
         )
     }
 }
