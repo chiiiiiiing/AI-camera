@@ -66,7 +66,7 @@
     "metadata_file": "templates.metadata.jsonl",
     "keys_file": "templates.keys.json",
     "embeddings_file": "templates.embeddings.f32",
-    "count": 408,
+    "count": 406,
     "reference_policy": "hash-bound AI-reviewed train references only"
   },
   "android_budget": {
@@ -78,7 +78,7 @@
   },
   "offline_quality": {
     "purpose": "index_diagnostic_not_release_gate",
-    "index_leave_one_out_top5_same_scene_pct": 96.32,
+    "index_leave_one_out_top5_same_scene_pct": 96.55,
     "aesthetic_improvement_measured": false,
     "note": "Index diagnostic only. Frozen train-gallery/test-query model comparison is bound separately; source independence remains imperfect."
   },

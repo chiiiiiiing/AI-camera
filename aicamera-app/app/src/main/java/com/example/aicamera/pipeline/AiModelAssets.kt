@@ -34,7 +34,7 @@ object AiModelAssets {
     private const val VERSION_FILE = "ai_model_version.txt"
 
     /** 资产内容变化时递增，强制旧设备重新复制 */
-    private const val CURRENT_VERSION = "v10-reviewed-recognition-1"
+    private const val CURRENT_VERSION = "v10-reviewed-recognition-2"
 
     /** 必须的部署文件；模型精度由 manifest 记录，不编码在部署文件名中。 */
     private val REQUIRED_FILES = listOf(

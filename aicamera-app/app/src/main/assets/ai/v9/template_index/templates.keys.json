@@ -1,5 +1,5 @@
 {
-  "count": 408,
+  "count": 406,
   "dimension": 512,
   "items": [
     {
@@ -109,2750 +109,2736 @@
     },
     {
       "key": 16,
-      "photo_id": "new_batch_00105",
-      "photo_type": "portrait",
-      "scene_category": "closeup_portrait",
-      "template_id": "new_batch_00105"
-    },
-    {
-      "key": 17,
       "photo_id": "new_batch_00108",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00108"
     },
     {
-      "key": 18,
+      "key": 17,
       "photo_id": "new_batch_00110",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00110"
     },
     {
-      "key": 19,
+      "key": 18,
       "photo_id": "new_batch_00111",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00111"
     },
     {
-      "key": 20,
+      "key": 19,
       "photo_id": "new_batch_00230_ai_restored_v1",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_00230_ai_restored_v1"
     },
     {
-      "key": 21,
+      "key": 20,
       "photo_id": "new_batch_00385",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_00385"
     },
     {
-      "key": 22,
+      "key": 21,
       "photo_id": "new_batch_00386",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_00386"
     },
     {
-      "key": 23,
+      "key": 22,
       "photo_id": "new_batch_00485",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00485"
     },
     {
-      "key": 24,
+      "key": 23,
       "photo_id": "new_batch_00486",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00486"
     },
     {
-      "key": 25,
+      "key": 24,
       "photo_id": "new_batch_00487",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00487"
     },
     {
-      "key": 26,
+      "key": 25,
       "photo_id": "new_batch_00488",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00488"
     },
     {
-      "key": 27,
+      "key": 26,
       "photo_id": "new_batch_00489",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00489"
     },
     {
-      "key": 28,
+      "key": 27,
       "photo_id": "new_batch_00490",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00490"
     },
     {
-      "key": 29,
+      "key": 28,
       "photo_id": "new_batch_00492",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00492"
     },
     {
-      "key": 30,
+      "key": 29,
       "photo_id": "new_batch_00498",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00498"
     },
     {
-      "key": 31,
+      "key": 30,
       "photo_id": "new_batch_00530",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00530"
     },
     {
-      "key": 32,
+      "key": 31,
       "photo_id": "new_batch_00531",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00531"
     },
     {
-      "key": 33,
+      "key": 32,
       "photo_id": "new_batch_00532",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00532"
     },
     {
-      "key": 34,
+      "key": 33,
       "photo_id": "new_batch_00533",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00533"
     },
     {
-      "key": 35,
+      "key": 34,
       "photo_id": "new_batch_00536",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00536"
     },
     {
-      "key": 36,
+      "key": 35,
       "photo_id": "new_batch_00546",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00546"
     },
     {
-      "key": 37,
+      "key": 36,
       "photo_id": "new_batch_00572",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00572"
     },
     {
-      "key": 38,
+      "key": 37,
       "photo_id": "new_batch_00573",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00573"
     },
     {
-      "key": 39,
+      "key": 38,
       "photo_id": "new_batch_00574",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00574"
     },
     {
-      "key": 40,
+      "key": 39,
       "photo_id": "new_batch_00575",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00575"
     },
     {
-      "key": 41,
+      "key": 40,
       "photo_id": "new_batch_00576",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00576"
     },
     {
-      "key": 42,
+      "key": 41,
       "photo_id": "new_batch_00577",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00577"
     },
     {
-      "key": 43,
+      "key": 42,
       "photo_id": "new_batch_00578",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00578"
     },
     {
-      "key": 44,
+      "key": 43,
       "photo_id": "new_batch_00579",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00579"
     },
     {
-      "key": 45,
+      "key": 44,
       "photo_id": "new_batch_00580",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00580"
     },
     {
-      "key": 46,
+      "key": 45,
       "photo_id": "new_batch_00581",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00581"
     },
     {
-      "key": 47,
+      "key": 46,
       "photo_id": "new_batch_00582",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00582"
     },
     {
-      "key": 48,
+      "key": 47,
       "photo_id": "new_batch_00583",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00583"
     },
     {
-      "key": 49,
+      "key": 48,
       "photo_id": "new_batch_00584",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00584"
     },
     {
-      "key": 50,
+      "key": 49,
       "photo_id": "new_batch_00593",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00593"
     },
     {
-      "key": 51,
+      "key": 50,
       "photo_id": "new_batch_00596",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00596"
     },
     {
-      "key": 52,
+      "key": 51,
       "photo_id": "new_batch_00598",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00598"
     },
     {
-      "key": 53,
+      "key": 52,
       "photo_id": "new_batch_00599",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00599"
     },
     {
-      "key": 54,
+      "key": 53,
       "photo_id": "new_batch_00600",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00600"
     },
     {
-      "key": 55,
+      "key": 54,
       "photo_id": "new_batch_00601",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00601"
     },
     {
-      "key": 56,
+      "key": 55,
       "photo_id": "new_batch_00602",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00602"
     },
     {
-      "key": 57,
+      "key": 56,
       "photo_id": "new_batch_00613",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00613"
     },
     {
-      "key": 58,
+      "key": 57,
       "photo_id": "new_batch_00614",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00614"
     },
     {
-      "key": 59,
+      "key": 58,
       "photo_id": "new_batch_00615",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00615"
     },
     {
-      "key": 60,
+      "key": 59,
       "photo_id": "new_batch_00616",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00616"
     },
     {
-      "key": 61,
+      "key": 60,
       "photo_id": "new_batch_00617",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00617"
     },
     {
-      "key": 62,
+      "key": 61,
       "photo_id": "new_batch_00618",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_00618"
     },
     {
-      "key": 63,
+      "key": 62,
       "photo_id": "new_batch_00642",
       "photo_type": "landscape",
       "scene_category": "urban_landscape",
       "template_id": "new_batch_00642"
     },
     {
-      "key": 64,
+      "key": 63,
       "photo_id": "new_batch_00644",
       "photo_type": "landscape",
       "scene_category": "urban_landscape",
       "template_id": "new_batch_00644"
     },
     {
-      "key": 65,
+      "key": 64,
       "photo_id": "new_batch_00645",
       "photo_type": "landscape",
       "scene_category": "urban_landscape",
       "template_id": "new_batch_00645"
     },
     {
-      "key": 66,
+      "key": 65,
       "photo_id": "new_batch_00647",
       "photo_type": "landscape",
       "scene_category": "urban_landscape",
       "template_id": "new_batch_00647"
     },
     {
-      "key": 67,
+      "key": 66,
       "photo_id": "new_batch_00648",
       "photo_type": "landscape",
       "scene_category": "urban_landscape",
       "template_id": "new_batch_00648"
     },
     {
-      "key": 68,
+      "key": 67,
       "photo_id": "new_batch_00649",
       "photo_type": "landscape",
       "scene_category": "urban_landscape",
       "template_id": "new_batch_00649"
     },
     {
-      "key": 69,
+      "key": 68,
       "photo_id": "new_batch_00656",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00656"
     },
     {
-      "key": 70,
+      "key": 69,
       "photo_id": "new_batch_00657",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00657"
     },
     {
-      "key": 71,
+      "key": 70,
       "photo_id": "new_batch_00658",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00658"
     },
     {
-      "key": 72,
+      "key": 71,
       "photo_id": "new_batch_00660",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00660"
     },
     {
-      "key": 73,
+      "key": 72,
       "photo_id": "new_batch_00662",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00662"
     },
     {
-      "key": 74,
+      "key": 73,
       "photo_id": "new_batch_00663",
       "photo_type": "landscape",
       "scene_category": "urban_landscape",
       "template_id": "new_batch_00663"
     },
     {
-      "key": 75,
+      "key": 74,
       "photo_id": "new_batch_00667",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00667"
     },
     {
-      "key": 76,
+      "key": 75,
       "photo_id": "new_batch_00668",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00668"
     },
     {
-      "key": 77,
+      "key": 76,
       "photo_id": "new_batch_00669",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00669"
     },
     {
-      "key": 78,
+      "key": 77,
       "photo_id": "new_batch_00670",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00670"
     },
     {
-      "key": 79,
+      "key": 78,
       "photo_id": "new_batch_00671",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00671"
     },
     {
-      "key": 80,
+      "key": 79,
       "photo_id": "new_batch_00672",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00672"
     },
     {
-      "key": 81,
+      "key": 80,
       "photo_id": "new_batch_00673",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00673"
     },
     {
-      "key": 82,
+      "key": 81,
       "photo_id": "new_batch_00674",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00674"
     },
     {
-      "key": 83,
+      "key": 82,
       "photo_id": "new_batch_00675",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00675"
     },
     {
-      "key": 84,
+      "key": 83,
       "photo_id": "new_batch_00676",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00676"
     },
     {
-      "key": 85,
+      "key": 84,
       "photo_id": "new_batch_00677",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00677"
     },
     {
-      "key": 86,
+      "key": 85,
       "photo_id": "new_batch_00680",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00680"
     },
     {
-      "key": 87,
+      "key": 86,
       "photo_id": "new_batch_00688",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00688"
     },
     {
-      "key": 88,
+      "key": 87,
       "photo_id": "new_batch_00689",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00689"
     },
     {
-      "key": 89,
+      "key": 88,
       "photo_id": "new_batch_00690",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00690"
     },
     {
-      "key": 90,
+      "key": 89,
       "photo_id": "new_batch_00691",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00691"
     },
     {
-      "key": 91,
+      "key": 90,
       "photo_id": "new_batch_00695",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00695"
     },
     {
-      "key": 92,
+      "key": 91,
       "photo_id": "new_batch_00715",
       "photo_type": "landscape",
       "scene_category": "urban_landscape",
       "template_id": "new_batch_00715"
     },
     {
-      "key": 93,
+      "key": 92,
       "photo_id": "new_batch_00721",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00721"
     },
     {
-      "key": 94,
+      "key": 93,
       "photo_id": "new_batch_00722",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00722"
     },
     {
-      "key": 95,
+      "key": 94,
       "photo_id": "new_batch_00723",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00723"
     },
     {
-      "key": 96,
+      "key": 95,
       "photo_id": "new_batch_00725",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00725"
     },
     {
-      "key": 97,
+      "key": 96,
       "photo_id": "new_batch_00727",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00727"
     },
     {
-      "key": 98,
+      "key": 97,
       "photo_id": "new_batch_00730",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00730"
     },
     {
-      "key": 99,
+      "key": 98,
       "photo_id": "new_batch_00732",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00732"
     },
     {
-      "key": 100,
+      "key": 99,
       "photo_id": "new_batch_00736",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00736"
     },
     {
-      "key": 101,
+      "key": 100,
       "photo_id": "new_batch_00739",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00739"
     },
     {
-      "key": 102,
+      "key": 101,
       "photo_id": "new_batch_00743",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00743"
     },
     {
-      "key": 103,
+      "key": 102,
       "photo_id": "new_batch_00744",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00744"
     },
     {
-      "key": 104,
+      "key": 103,
       "photo_id": "new_batch_00746",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00746"
     },
     {
-      "key": 105,
+      "key": 104,
       "photo_id": "new_batch_00747",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00747"
     },
     {
-      "key": 106,
+      "key": 105,
       "photo_id": "new_batch_00748",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00748"
     },
     {
-      "key": 107,
+      "key": 106,
       "photo_id": "new_batch_00750",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00750"
     },
     {
-      "key": 108,
+      "key": 107,
       "photo_id": "new_batch_00754",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00754"
     },
     {
-      "key": 109,
+      "key": 108,
       "photo_id": "new_batch_00756",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00756"
     },
     {
-      "key": 110,
+      "key": 109,
       "photo_id": "new_batch_00759",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00759"
     },
     {
-      "key": 111,
+      "key": 110,
       "photo_id": "new_batch_00761",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00761"
     },
     {
-      "key": 112,
+      "key": 111,
       "photo_id": "new_batch_00762",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00762"
     },
     {
-      "key": 113,
+      "key": 112,
       "photo_id": "new_batch_00763",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00763"
     },
     {
-      "key": 114,
+      "key": 113,
       "photo_id": "new_batch_00765",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00765"
     },
     {
-      "key": 115,
+      "key": 114,
       "photo_id": "new_batch_00766",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00766"
     },
     {
-      "key": 116,
+      "key": 115,
       "photo_id": "new_batch_00768",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00768"
     },
     {
-      "key": 117,
+      "key": 116,
       "photo_id": "new_batch_00775",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00775"
     },
     {
-      "key": 118,
+      "key": 117,
       "photo_id": "new_batch_00780",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00780"
     },
     {
-      "key": 119,
+      "key": 118,
       "photo_id": "new_batch_00782",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00782"
     },
     {
-      "key": 120,
+      "key": 119,
       "photo_id": "new_batch_00785",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00785"
     },
     {
-      "key": 121,
+      "key": 120,
       "photo_id": "new_batch_00786",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00786"
     },
     {
-      "key": 122,
+      "key": 121,
       "photo_id": "new_batch_00795",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00795"
     },
     {
-      "key": 123,
+      "key": 122,
       "photo_id": "new_batch_00797",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00797"
     },
     {
-      "key": 124,
+      "key": 123,
       "photo_id": "new_batch_00798",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00798"
     },
     {
-      "key": 125,
+      "key": 124,
       "photo_id": "new_batch_00800",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00800"
     },
     {
-      "key": 126,
+      "key": 125,
       "photo_id": "new_batch_00806",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00806"
     },
     {
-      "key": 127,
+      "key": 126,
       "photo_id": "new_batch_00807",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00807"
     },
     {
-      "key": 128,
+      "key": 127,
       "photo_id": "new_batch_00808",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00808"
     },
     {
-      "key": 129,
+      "key": 128,
       "photo_id": "new_batch_00809",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00809"
     },
     {
-      "key": 130,
+      "key": 129,
       "photo_id": "new_batch_00812",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00812"
     },
     {
-      "key": 131,
+      "key": 130,
       "photo_id": "new_batch_00818",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00818"
     },
     {
-      "key": 132,
+      "key": 131,
       "photo_id": "new_batch_00819",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00819"
     },
     {
-      "key": 133,
+      "key": 132,
       "photo_id": "new_batch_00820",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00820"
     },
     {
-      "key": 134,
+      "key": 133,
       "photo_id": "new_batch_00821",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00821"
     },
     {
-      "key": 135,
+      "key": 134,
       "photo_id": "new_batch_00822",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00822"
     },
     {
-      "key": 136,
+      "key": 135,
       "photo_id": "new_batch_00823",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00823"
     },
     {
-      "key": 137,
+      "key": 136,
       "photo_id": "new_batch_00824",
       "photo_type": "portrait",
       "scene_category": "closeup_portrait",
       "template_id": "new_batch_00824"
     },
     {
-      "key": 138,
+      "key": 137,
       "photo_id": "new_batch_00826",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00826"
     },
     {
-      "key": 139,
+      "key": 138,
       "photo_id": "new_batch_00828",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00828"
     },
     {
-      "key": 140,
+      "key": 139,
       "photo_id": "new_batch_00829",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00829"
     },
     {
-      "key": 141,
+      "key": 140,
       "photo_id": "new_batch_00830",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00830"
     },
     {
-      "key": 142,
+      "key": 141,
       "photo_id": "new_batch_00831",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00831"
     },
     {
-      "key": 143,
+      "key": 142,
       "photo_id": "new_batch_00832",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00832"
     },
     {
-      "key": 144,
+      "key": 143,
       "photo_id": "new_batch_00834",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00834"
     },
     {
-      "key": 145,
+      "key": 144,
       "photo_id": "new_batch_00835",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00835"
     },
     {
-      "key": 146,
+      "key": 145,
       "photo_id": "new_batch_00836",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00836"
     },
     {
-      "key": 147,
+      "key": 146,
       "photo_id": "new_batch_00837",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00837"
     },
     {
-      "key": 148,
+      "key": 147,
       "photo_id": "new_batch_00839",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00839"
     },
     {
-      "key": 149,
+      "key": 148,
       "photo_id": "new_batch_00840",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00840"
     },
     {
-      "key": 150,
+      "key": 149,
       "photo_id": "new_batch_00842",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00842"
     },
     {
-      "key": 151,
+      "key": 150,
       "photo_id": "new_batch_00845",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00845"
     },
     {
-      "key": 152,
+      "key": 151,
       "photo_id": "new_batch_00852",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00852"
     },
     {
-      "key": 153,
+      "key": 152,
       "photo_id": "new_batch_00853",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00853"
     },
     {
-      "key": 154,
+      "key": 153,
       "photo_id": "new_batch_00854",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00854"
     },
     {
-      "key": 155,
+      "key": 154,
       "photo_id": "new_batch_00855",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00855"
     },
     {
-      "key": 156,
+      "key": 155,
       "photo_id": "new_batch_00856",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00856"
     },
     {
-      "key": 157,
+      "key": 156,
       "photo_id": "new_batch_00858",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00858"
     },
     {
-      "key": 158,
+      "key": 157,
       "photo_id": "new_batch_00859",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00859"
     },
     {
-      "key": 159,
+      "key": 158,
       "photo_id": "new_batch_00860",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00860"
     },
     {
-      "key": 160,
+      "key": 159,
       "photo_id": "new_batch_00861",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00861"
     },
     {
-      "key": 161,
+      "key": 160,
       "photo_id": "new_batch_00862",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00862"
     },
     {
-      "key": 162,
+      "key": 161,
       "photo_id": "new_batch_00863",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00863"
     },
     {
-      "key": 163,
+      "key": 162,
       "photo_id": "new_batch_00864",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00864"
     },
     {
-      "key": 164,
+      "key": 163,
       "photo_id": "new_batch_00865",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00865"
     },
     {
-      "key": 165,
+      "key": 164,
       "photo_id": "new_batch_00866",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00866"
     },
     {
-      "key": 166,
+      "key": 165,
       "photo_id": "new_batch_00867",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00867"
     },
     {
-      "key": 167,
+      "key": 166,
       "photo_id": "new_batch_00868",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00868"
     },
     {
-      "key": 168,
+      "key": 167,
       "photo_id": "new_batch_00870",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00870"
     },
     {
-      "key": 169,
+      "key": 168,
       "photo_id": "new_batch_00871",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00871"
     },
     {
-      "key": 170,
+      "key": 169,
       "photo_id": "new_batch_00872",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00872"
     },
     {
-      "key": 171,
+      "key": 170,
       "photo_id": "new_batch_00873",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00873"
     },
     {
-      "key": 172,
+      "key": 171,
       "photo_id": "new_batch_00876",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00876"
     },
     {
-      "key": 173,
+      "key": 172,
       "photo_id": "new_batch_00877",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00877"
     },
     {
-      "key": 174,
+      "key": 173,
       "photo_id": "new_batch_00878",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00878"
     },
     {
-      "key": 175,
+      "key": 174,
       "photo_id": "new_batch_00879",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00879"
     },
     {
-      "key": 176,
+      "key": 175,
       "photo_id": "new_batch_00880",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00880"
     },
     {
-      "key": 177,
+      "key": 176,
       "photo_id": "new_batch_00882",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00882"
     },
     {
-      "key": 178,
+      "key": 177,
       "photo_id": "new_batch_00883",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00883"
     },
     {
-      "key": 179,
+      "key": 178,
       "photo_id": "new_batch_00884",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00884"
     },
     {
-      "key": 180,
+      "key": 179,
       "photo_id": "new_batch_00885",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00885"
     },
     {
-      "key": 181,
+      "key": 180,
       "photo_id": "new_batch_00886",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00886"
     },
     {
-      "key": 182,
+      "key": 181,
       "photo_id": "new_batch_00889",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00889"
     },
     {
-      "key": 183,
+      "key": 182,
       "photo_id": "new_batch_00890",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00890"
     },
     {
-      "key": 184,
+      "key": 183,
       "photo_id": "new_batch_00891",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00891"
     },
     {
-      "key": 185,
+      "key": 184,
       "photo_id": "new_batch_00892",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00892"
     },
     {
-      "key": 186,
+      "key": 185,
       "photo_id": "new_batch_00894",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00894"
     },
     {
-      "key": 187,
+      "key": 186,
       "photo_id": "new_batch_00895",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00895"
     },
     {
-      "key": 188,
+      "key": 187,
       "photo_id": "new_batch_00897",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00897"
     },
     {
-      "key": 189,
+      "key": 188,
       "photo_id": "new_batch_00901",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00901"
     },
     {
-      "key": 190,
+      "key": 189,
       "photo_id": "new_batch_00903",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00903"
     },
     {
-      "key": 191,
+      "key": 190,
       "photo_id": "new_batch_00905",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00905"
     },
     {
-      "key": 192,
+      "key": 191,
       "photo_id": "new_batch_00906",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00906"
     },
     {
-      "key": 193,
+      "key": 192,
       "photo_id": "new_batch_00908",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00908"
     },
     {
-      "key": 194,
+      "key": 193,
       "photo_id": "new_batch_00909",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00909"
     },
     {
-      "key": 195,
+      "key": 194,
       "photo_id": "new_batch_00915",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00915"
     },
     {
-      "key": 196,
+      "key": 195,
       "photo_id": "new_batch_00918",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00918"
     },
     {
-      "key": 197,
+      "key": 196,
       "photo_id": "new_batch_00919",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00919"
     },
     {
-      "key": 198,
+      "key": 197,
       "photo_id": "new_batch_00921",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00921"
     },
     {
-      "key": 199,
+      "key": 198,
       "photo_id": "new_batch_00924",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00924"
     },
     {
-      "key": 200,
+      "key": 199,
       "photo_id": "new_batch_00925",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00925"
     },
     {
-      "key": 201,
+      "key": 200,
       "photo_id": "new_batch_00926",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00926"
     },
     {
-      "key": 202,
+      "key": 201,
       "photo_id": "new_batch_00927",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00927"
     },
     {
-      "key": 203,
+      "key": 202,
       "photo_id": "new_batch_00930",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00930"
     },
     {
-      "key": 204,
+      "key": 203,
       "photo_id": "new_batch_00931",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00931"
     },
     {
-      "key": 205,
+      "key": 204,
       "photo_id": "new_batch_00937",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00937"
     },
     {
-      "key": 206,
+      "key": 205,
       "photo_id": "new_batch_00938",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00938"
     },
     {
-      "key": 207,
+      "key": 206,
       "photo_id": "new_batch_00940",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00940"
     },
     {
-      "key": 208,
+      "key": 207,
       "photo_id": "new_batch_00942",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00942"
     },
     {
-      "key": 209,
+      "key": 208,
       "photo_id": "new_batch_00943",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00943"
     },
     {
-      "key": 210,
+      "key": 209,
       "photo_id": "new_batch_00944",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00944"
     },
     {
-      "key": 211,
+      "key": 210,
       "photo_id": "new_batch_00945",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00945"
     },
     {
-      "key": 212,
+      "key": 211,
       "photo_id": "new_batch_00947",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00947"
     },
     {
-      "key": 213,
+      "key": 212,
       "photo_id": "new_batch_00948",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00948"
     },
     {
-      "key": 214,
+      "key": 213,
       "photo_id": "new_batch_00949",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00949"
     },
     {
-      "key": 215,
+      "key": 214,
       "photo_id": "new_batch_00950",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00950"
     },
     {
-      "key": 216,
+      "key": 215,
       "photo_id": "new_batch_00951",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00951"
     },
     {
-      "key": 217,
+      "key": 216,
       "photo_id": "new_batch_00952",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00952"
     },
     {
-      "key": 218,
+      "key": 217,
       "photo_id": "new_batch_00953",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00953"
     },
     {
-      "key": 219,
+      "key": 218,
       "photo_id": "new_batch_00957",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00957"
     },
     {
-      "key": 220,
+      "key": 219,
       "photo_id": "new_batch_00959",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00959"
     },
     {
-      "key": 221,
+      "key": 220,
       "photo_id": "new_batch_00960",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00960"
     },
     {
-      "key": 222,
+      "key": 221,
       "photo_id": "new_batch_00962",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00962"
     },
     {
-      "key": 223,
+      "key": 222,
       "photo_id": "new_batch_00963",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00963"
     },
     {
-      "key": 224,
+      "key": 223,
       "photo_id": "new_batch_00964",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00964"
     },
     {
-      "key": 225,
+      "key": 224,
       "photo_id": "new_batch_00965",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00965"
     },
     {
-      "key": 226,
+      "key": 225,
       "photo_id": "new_batch_00967",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00967"
     },
     {
-      "key": 227,
+      "key": 226,
       "photo_id": "new_batch_00970",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00970"
     },
     {
-      "key": 228,
+      "key": 227,
       "photo_id": "new_batch_00971",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00971"
     },
     {
-      "key": 229,
+      "key": 228,
       "photo_id": "new_batch_00972",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00972"
     },
     {
-      "key": 230,
+      "key": 229,
       "photo_id": "new_batch_00973",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00973"
     },
     {
-      "key": 231,
+      "key": 230,
       "photo_id": "new_batch_00977",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00977"
     },
     {
-      "key": 232,
+      "key": 231,
       "photo_id": "new_batch_00978",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00978"
     },
     {
-      "key": 233,
+      "key": 232,
       "photo_id": "new_batch_00979",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00979"
     },
     {
-      "key": 234,
+      "key": 233,
       "photo_id": "new_batch_00980",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_00980"
     },
     {
-      "key": 235,
-      "photo_id": "new_batch_00981",
-      "photo_type": "landscape",
-      "scene_category": "natural_landscape",
-      "template_id": "new_batch_00981"
-    },
-    {
-      "key": 236,
+      "key": 234,
       "photo_id": "new_batch_00982",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_00982"
     },
     {
-      "key": 237,
+      "key": 235,
       "photo_id": "new_batch_00988",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_00988"
     },
     {
-      "key": 238,
+      "key": 236,
       "photo_id": "new_batch_00996",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_00996"
     },
     {
-      "key": 239,
+      "key": 237,
       "photo_id": "new_batch_00997",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_00997"
     },
     {
-      "key": 240,
+      "key": 238,
       "photo_id": "new_batch_00998",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_00998"
     },
     {
-      "key": 241,
+      "key": 239,
       "photo_id": "new_batch_01001",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01001"
     },
     {
-      "key": 242,
+      "key": 240,
       "photo_id": "new_batch_01002",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01002"
     },
     {
-      "key": 243,
+      "key": 241,
       "photo_id": "new_batch_01003",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01003"
     },
     {
-      "key": 244,
+      "key": 242,
       "photo_id": "new_batch_01004",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01004"
     },
     {
-      "key": 245,
+      "key": 243,
       "photo_id": "new_batch_01006",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01006"
     },
     {
-      "key": 246,
+      "key": 244,
       "photo_id": "new_batch_01007",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01007"
     },
     {
-      "key": 247,
+      "key": 245,
       "photo_id": "new_batch_01008",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01008"
     },
     {
-      "key": 248,
+      "key": 246,
       "photo_id": "new_batch_01009",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01009"
     },
     {
-      "key": 249,
+      "key": 247,
       "photo_id": "new_batch_01010",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01010"
     },
     {
-      "key": 250,
+      "key": 248,
       "photo_id": "new_batch_01011",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01011"
     },
     {
-      "key": 251,
+      "key": 249,
       "photo_id": "new_batch_01012",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01012"
     },
     {
-      "key": 252,
+      "key": 250,
       "photo_id": "new_batch_01014",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01014"
     },
     {
-      "key": 253,
+      "key": 251,
       "photo_id": "new_batch_01016",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01016"
     },
     {
-      "key": 254,
+      "key": 252,
       "photo_id": "new_batch_01017",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01017"
     },
     {
-      "key": 255,
+      "key": 253,
       "photo_id": "new_batch_01018",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01018"
     },
     {
-      "key": 256,
+      "key": 254,
       "photo_id": "new_batch_01019",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01019"
     },
     {
-      "key": 257,
+      "key": 255,
       "photo_id": "new_batch_01040",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01040"
     },
     {
-      "key": 258,
+      "key": 256,
       "photo_id": "new_batch_01041",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01041"
     },
     {
-      "key": 259,
+      "key": 257,
       "photo_id": "new_batch_01042",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01042"
     },
     {
-      "key": 260,
+      "key": 258,
       "photo_id": "new_batch_01043",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01043"
     },
     {
-      "key": 261,
+      "key": 259,
       "photo_id": "new_batch_01045",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01045"
     },
     {
-      "key": 262,
+      "key": 260,
       "photo_id": "new_batch_01046",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01046"
     },
     {
-      "key": 263,
+      "key": 261,
       "photo_id": "new_batch_01048",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01048"
     },
     {
-      "key": 264,
+      "key": 262,
       "photo_id": "new_batch_01049",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01049"
     },
     {
-      "key": 265,
+      "key": 263,
       "photo_id": "new_batch_01050",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01050"
     },
     {
-      "key": 266,
+      "key": 264,
       "photo_id": "new_batch_01055",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01055"
     },
     {
-      "key": 267,
+      "key": 265,
       "photo_id": "new_batch_01056",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01056"
     },
     {
-      "key": 268,
+      "key": 266,
       "photo_id": "new_batch_01057",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01057"
     },
     {
-      "key": 269,
+      "key": 267,
       "photo_id": "new_batch_01061",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01061"
     },
     {
-      "key": 270,
+      "key": 268,
       "photo_id": "new_batch_01062",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01062"
     },
     {
-      "key": 271,
+      "key": 269,
       "photo_id": "new_batch_01063",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01063"
     },
     {
-      "key": 272,
+      "key": 270,
       "photo_id": "new_batch_01064",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01064"
     },
     {
-      "key": 273,
+      "key": 271,
       "photo_id": "new_batch_01065",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01065"
     },
     {
-      "key": 274,
+      "key": 272,
       "photo_id": "new_batch_01066",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01066"
     },
     {
-      "key": 275,
+      "key": 273,
       "photo_id": "new_batch_01067",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01067"
     },
     {
-      "key": 276,
+      "key": 274,
       "photo_id": "new_batch_01068",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01068"
     },
     {
-      "key": 277,
+      "key": 275,
       "photo_id": "new_batch_01069",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01069"
     },
     {
-      "key": 278,
+      "key": 276,
       "photo_id": "new_batch_01071",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01071"
     },
     {
-      "key": 279,
+      "key": 277,
       "photo_id": "new_batch_01072",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01072"
     },
     {
-      "key": 280,
+      "key": 278,
       "photo_id": "new_batch_01073",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01073"
     },
     {
-      "key": 281,
+      "key": 279,
       "photo_id": "new_batch_01074",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01074"
     },
     {
-      "key": 282,
+      "key": 280,
       "photo_id": "new_batch_01076",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01076"
     },
     {
-      "key": 283,
+      "key": 281,
       "photo_id": "new_batch_01077",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01077"
     },
     {
-      "key": 284,
+      "key": 282,
       "photo_id": "new_batch_01078",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01078"
     },
     {
-      "key": 285,
+      "key": 283,
       "photo_id": "new_batch_01079",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01079"
     },
     {
-      "key": 286,
+      "key": 284,
       "photo_id": "new_batch_01081",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01081"
     },
     {
-      "key": 287,
+      "key": 285,
       "photo_id": "new_batch_01085",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01085"
     },
     {
-      "key": 288,
+      "key": 286,
       "photo_id": "new_batch_01086",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01086"
     },
     {
-      "key": 289,
+      "key": 287,
       "photo_id": "new_batch_01087",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01087"
     },
     {
-      "key": 290,
+      "key": 288,
       "photo_id": "new_batch_01089",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01089"
     },
     {
-      "key": 291,
+      "key": 289,
       "photo_id": "new_batch_01090",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01090"
     },
     {
-      "key": 292,
+      "key": 290,
       "photo_id": "new_batch_01093",
       "photo_type": "still_life",
       "scene_category": "lifestyle_still_life",
       "template_id": "new_batch_01093"
     },
     {
-      "key": 293,
+      "key": 291,
       "photo_id": "new_batch_01094",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01094"
     },
     {
-      "key": 294,
+      "key": 292,
       "photo_id": "new_batch_01095",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01095"
     },
     {
-      "key": 295,
+      "key": 293,
       "photo_id": "new_batch_01096",
       "photo_type": "landscape",
       "scene_category": "urban_landscape",
       "template_id": "new_batch_01096"
     },
     {
-      "key": 296,
+      "key": 294,
       "photo_id": "new_batch_01097",
       "photo_type": "landscape",
       "scene_category": "urban_landscape",
       "template_id": "new_batch_01097"
     },
     {
-      "key": 297,
+      "key": 295,
       "photo_id": "new_batch_01098",
       "photo_type": "landscape",
       "scene_category": "urban_landscape",
       "template_id": "new_batch_01098"
     },
     {
-      "key": 298,
+      "key": 296,
       "photo_id": "new_batch_01100",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01100"
     },
     {
-      "key": 299,
+      "key": 297,
       "photo_id": "new_batch_01102",
       "photo_type": "landscape",
       "scene_category": "urban_landscape",
       "template_id": "new_batch_01102"
     },
     {
-      "key": 300,
+      "key": 298,
       "photo_id": "new_batch_01103",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01103"
     },
     {
-      "key": 301,
+      "key": 299,
       "photo_id": "new_batch_01104",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01104"
     },
     {
-      "key": 302,
+      "key": 300,
       "photo_id": "new_batch_01107",
       "photo_type": "landscape",
       "scene_category": "urban_landscape",
       "template_id": "new_batch_01107"
     },
     {
-      "key": 303,
+      "key": 301,
       "photo_id": "new_batch_01109",
       "photo_type": "landscape",
       "scene_category": "urban_landscape",
       "template_id": "new_batch_01109"
     },
     {
-      "key": 304,
+      "key": 302,
       "photo_id": "new_batch_01111",
       "photo_type": "landscape",
       "scene_category": "urban_landscape",
       "template_id": "new_batch_01111"
     },
     {
-      "key": 305,
+      "key": 303,
       "photo_id": "new_batch_01117",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01117"
     },
     {
-      "key": 306,
+      "key": 304,
       "photo_id": "new_batch_01118",
       "photo_type": "landscape",
       "scene_category": "urban_landscape",
       "template_id": "new_batch_01118"
     },
     {
-      "key": 307,
+      "key": 305,
       "photo_id": "new_batch_01119",
       "photo_type": "landscape",
       "scene_category": "urban_landscape",
       "template_id": "new_batch_01119"
     },
     {
-      "key": 308,
+      "key": 306,
       "photo_id": "new_batch_01123",
       "photo_type": "landscape",
       "scene_category": "urban_landscape",
       "template_id": "new_batch_01123"
     },
     {
-      "key": 309,
+      "key": 307,
       "photo_id": "new_batch_01125",
       "photo_type": "landscape",
       "scene_category": "urban_landscape",
       "template_id": "new_batch_01125"
     },
     {
-      "key": 310,
+      "key": 308,
       "photo_id": "new_batch_01129",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01129"
     },
     {
-      "key": 311,
+      "key": 309,
       "photo_id": "new_batch_01130",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01130"
     },
     {
-      "key": 312,
+      "key": 310,
       "photo_id": "new_batch_01131",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01131"
     },
     {
-      "key": 313,
+      "key": 311,
       "photo_id": "new_batch_01132",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01132"
     },
     {
-      "key": 314,
+      "key": 312,
       "photo_id": "new_batch_01136",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01136"
     },
     {
-      "key": 315,
+      "key": 313,
       "photo_id": "new_batch_01138",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01138"
     },
     {
-      "key": 316,
+      "key": 314,
       "photo_id": "new_batch_01139",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01139"
     },
     {
-      "key": 317,
+      "key": 315,
       "photo_id": "new_batch_01140",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01140"
     },
     {
-      "key": 318,
+      "key": 316,
       "photo_id": "new_batch_01141",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01141"
     },
     {
-      "key": 319,
+      "key": 317,
       "photo_id": "new_batch_01144",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01144"
     },
     {
-      "key": 320,
+      "key": 318,
       "photo_id": "new_batch_01149",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01149"
     },
     {
-      "key": 321,
+      "key": 319,
       "photo_id": "new_batch_01150",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01150"
     },
     {
-      "key": 322,
+      "key": 320,
       "photo_id": "new_batch_01151",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01151"
     },
     {
-      "key": 323,
+      "key": 321,
       "photo_id": "new_batch_01157",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01157"
     },
     {
-      "key": 324,
+      "key": 322,
       "photo_id": "new_batch_01160",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01160"
     },
     {
-      "key": 325,
+      "key": 323,
       "photo_id": "new_batch_01161",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01161"
     },
     {
-      "key": 326,
+      "key": 324,
       "photo_id": "new_batch_01162",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01162"
     },
     {
-      "key": 327,
+      "key": 325,
       "photo_id": "new_batch_01163",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01163"
     },
     {
-      "key": 328,
+      "key": 326,
       "photo_id": "new_batch_01164",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01164"
     },
     {
-      "key": 329,
+      "key": 327,
       "photo_id": "new_batch_01165",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01165"
     },
     {
-      "key": 330,
+      "key": 328,
       "photo_id": "new_batch_01168",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01168"
     },
     {
-      "key": 331,
+      "key": 329,
       "photo_id": "new_batch_01169",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01169"
     },
     {
-      "key": 332,
+      "key": 330,
       "photo_id": "new_batch_01170",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01170"
     },
     {
-      "key": 333,
+      "key": 331,
       "photo_id": "new_batch_01172",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01172"
     },
     {
-      "key": 334,
+      "key": 332,
       "photo_id": "new_batch_01174",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01174"
     },
     {
-      "key": 335,
+      "key": 333,
       "photo_id": "new_batch_01179",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01179"
     },
     {
-      "key": 336,
+      "key": 334,
       "photo_id": "new_batch_01180",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01180"
     },
     {
-      "key": 337,
+      "key": 335,
       "photo_id": "new_batch_01186",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01186"
     },
     {
-      "key": 338,
+      "key": 336,
       "photo_id": "new_batch_01187",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01187"
     },
     {
-      "key": 339,
+      "key": 337,
       "photo_id": "new_batch_01188",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01188"
     },
     {
-      "key": 340,
+      "key": 338,
       "photo_id": "new_batch_01189",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01189"
     },
     {
-      "key": 341,
+      "key": 339,
       "photo_id": "new_batch_01190",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01190"
     },
     {
-      "key": 342,
+      "key": 340,
       "photo_id": "new_batch_01191",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01191"
     },
     {
-      "key": 343,
+      "key": 341,
       "photo_id": "new_batch_01193",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01193"
     },
     {
-      "key": 344,
+      "key": 342,
       "photo_id": "new_batch_01194",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01194"
     },
     {
-      "key": 345,
+      "key": 343,
       "photo_id": "new_batch_01196",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01196"
     },
     {
-      "key": 346,
+      "key": 344,
       "photo_id": "new_batch_01197",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01197"
     },
     {
-      "key": 347,
+      "key": 345,
       "photo_id": "new_batch_01198",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01198"
     },
     {
-      "key": 348,
+      "key": 346,
       "photo_id": "new_batch_01199",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01199"
     },
     {
-      "key": 349,
+      "key": 347,
       "photo_id": "new_batch_01200",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01200"
     },
     {
-      "key": 350,
+      "key": 348,
       "photo_id": "new_batch_01201",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01201"
     },
     {
-      "key": 351,
+      "key": 349,
       "photo_id": "new_batch_01202",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01202"
     },
     {
-      "key": 352,
+      "key": 350,
       "photo_id": "new_batch_01203",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01203"
     },
     {
-      "key": 353,
+      "key": 351,
       "photo_id": "new_batch_01204",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01204"
     },
     {
-      "key": 354,
+      "key": 352,
       "photo_id": "new_batch_01205",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01205"
     },
     {
-      "key": 355,
+      "key": 353,
       "photo_id": "new_batch_01206",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01206"
     },
     {
-      "key": 356,
+      "key": 354,
       "photo_id": "new_batch_01207",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01207"
     },
     {
-      "key": 357,
+      "key": 355,
       "photo_id": "new_batch_01208",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01208"
     },
     {
-      "key": 358,
+      "key": 356,
       "photo_id": "new_batch_01212",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01212"
     },
     {
-      "key": 359,
+      "key": 357,
       "photo_id": "new_batch_01217",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01217"
     },
     {
-      "key": 360,
+      "key": 358,
       "photo_id": "new_batch_01221",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01221"
     },
     {
-      "key": 361,
+      "key": 359,
       "photo_id": "new_batch_01222",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01222"
     },
     {
-      "key": 362,
+      "key": 360,
       "photo_id": "new_batch_01223",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01223"
     },
     {
-      "key": 363,
+      "key": 361,
       "photo_id": "new_batch_01224",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01224"
     },
     {
-      "key": 364,
+      "key": 362,
       "photo_id": "new_batch_01225",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01225"
     },
     {
-      "key": 365,
+      "key": 363,
       "photo_id": "new_batch_01228",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01228"
     },
     {
-      "key": 366,
+      "key": 364,
       "photo_id": "new_batch_01229",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01229"
     },
     {
-      "key": 367,
+      "key": 365,
       "photo_id": "new_batch_01231",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01231"
     },
     {
-      "key": 368,
+      "key": 366,
       "photo_id": "new_batch_01233",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01233"
     },
     {
-      "key": 369,
+      "key": 367,
       "photo_id": "new_batch_01234",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01234"
     },
     {
-      "key": 370,
+      "key": 368,
       "photo_id": "new_batch_01235",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01235"
     },
     {
-      "key": 371,
+      "key": 369,
       "photo_id": "new_batch_01238",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01238"
     },
     {
-      "key": 372,
+      "key": 370,
       "photo_id": "new_batch_01239",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01239"
     },
     {
-      "key": 373,
+      "key": 371,
       "photo_id": "new_batch_01241",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01241"
     },
     {
-      "key": 374,
+      "key": 372,
       "photo_id": "new_batch_01242",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01242"
     },
     {
-      "key": 375,
+      "key": 373,
       "photo_id": "new_batch_01243",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01243"
     },
     {
-      "key": 376,
+      "key": 374,
       "photo_id": "new_batch_01244",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01244"
     },
     {
-      "key": 377,
+      "key": 375,
       "photo_id": "new_batch_01245",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01245"
     },
     {
-      "key": 378,
+      "key": 376,
       "photo_id": "new_batch_01247",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01247"
     },
     {
-      "key": 379,
+      "key": 377,
       "photo_id": "new_batch_01248",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01248"
     },
     {
-      "key": 380,
+      "key": 378,
       "photo_id": "new_batch_01250",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01250"
     },
     {
-      "key": 381,
+      "key": 379,
       "photo_id": "new_batch_01251",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01251"
     },
     {
-      "key": 382,
+      "key": 380,
       "photo_id": "new_batch_01254",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01254"
     },
     {
-      "key": 383,
+      "key": 381,
       "photo_id": "new_batch_01256",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01256"
     },
     {
-      "key": 384,
+      "key": 382,
       "photo_id": "new_batch_01260",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01260"
     },
     {
-      "key": 385,
+      "key": 383,
       "photo_id": "new_batch_01262",
       "photo_type": "landscape",
       "scene_category": "urban_landscape",
       "template_id": "new_batch_01262"
     },
     {
-      "key": 386,
+      "key": 384,
       "photo_id": "new_batch_01263",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01263"
     },
     {
-      "key": 387,
+      "key": 385,
       "photo_id": "new_batch_01269",
       "photo_type": "landscape",
       "scene_category": "urban_landscape",
       "template_id": "new_batch_01269"
     },
     {
-      "key": 388,
+      "key": 386,
       "photo_id": "new_batch_01270",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01270"
     },
     {
-      "key": 389,
+      "key": 387,
       "photo_id": "new_batch_01274",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01274"
     },
     {
-      "key": 390,
+      "key": 388,
       "photo_id": "new_batch_01276",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01276"
     },
     {
-      "key": 391,
+      "key": 389,
       "photo_id": "new_batch_01278",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01278"
     },
     {
-      "key": 392,
+      "key": 390,
       "photo_id": "new_batch_01281",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01281"
     },
     {
-      "key": 393,
+      "key": 391,
       "photo_id": "new_batch_01283",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01283"
     },
     {
-      "key": 394,
+      "key": 392,
       "photo_id": "new_batch_01284",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01284"
     },
     {
-      "key": 395,
+      "key": 393,
       "photo_id": "new_batch_01285",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01285"
     },
     {
-      "key": 396,
+      "key": 394,
       "photo_id": "new_batch_01287",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01287"
     },
     {
-      "key": 397,
+      "key": 395,
       "photo_id": "new_batch_01290",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01290"
     },
     {
-      "key": 398,
+      "key": 396,
       "photo_id": "new_batch_01291",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
       "template_id": "new_batch_01291"
     },
     {
-      "key": 399,
+      "key": 397,
       "photo_id": "new_batch_01296",
       "photo_type": "still_life",
       "scene_category": "plant_still_life",
       "template_id": "new_batch_01296"
     },
     {
-      "key": 400,
+      "key": 398,
       "photo_id": "new_batch_01298",
       "photo_type": "still_life",
       "scene_category": "plant_still_life",
       "template_id": "new_batch_01298"
     },
     {
-      "key": 401,
+      "key": 399,
       "photo_id": "new_batch_01300",
       "photo_type": "still_life",
       "scene_category": "plant_still_life",
       "template_id": "new_batch_01300"
     },
     {
-      "key": 402,
+      "key": 400,
       "photo_id": "new_batch_01302",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01302"
     },
     {
-      "key": 403,
+      "key": 401,
       "photo_id": "new_batch_01304",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01304"
     },
     {
-      "key": 404,
+      "key": 402,
       "photo_id": "new_batch_01309",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01309"
     },
     {
-      "key": 405,
+      "key": 403,
       "photo_id": "new_batch_01316",
       "photo_type": "landscape",
       "scene_category": "natural_landscape",
       "template_id": "new_batch_01316"
     },
     {
-      "key": 406,
+      "key": 404,
       "photo_id": "new_batch_01318",
       "photo_type": "landscape",
       "scene_category": "urban_landscape",
       "template_id": "new_batch_01318"
     },
     {
-      "key": 407,
+      "key": 405,
       "photo_id": "new_batch_01319",
       "photo_type": "landscape",
       "scene_category": "urban_landscape",
       "template_id": "new_batch_01319"
     },
     {
-      "key": 408,
+      "key": 406,
       "photo_id": "new_batch_01321",
       "photo_type": "still_life",
       "scene_category": "food_still_life",
