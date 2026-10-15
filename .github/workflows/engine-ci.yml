@@ -35,12 +35,15 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install model data test dependencies
-        run: python -m pip install 'numpy>=1.26,<3' 'Pillow>=10.4,<13' 'jsonschema>=4.23,<5'
+        run: python -m pip install 'numpy>=1.26,<3' 'Pillow>=10.4,<13' 'jsonschema>=4.23,<5' 'opencv-python-headless>=4.11,<5'
       - name: Validate model cache, training data, and index contracts
         run: |
           python -m unittest discover -s tests -p 'test_validate_template_index.py'
           python -m unittest discover -s tests -p 'test_evaluate_template_index_quality.py'
           python -m unittest discover -s tests -p 'test_validate_android_v9_assets.py'
+          python -m unittest discover -s tests -p 'test_validate_core_recommendation_assets.py'
+          python -m unittest discover -s tests -p 'test_run_core_recommendation.py'
+          python -m unittest discover -s tests -p 'test_build_reference_structures.py'
           python -m unittest discover -s tests -p 'test_generate_onnx_embeddings.py'
           python -m unittest discover -s tests -p 'test_build_distillation_dataset.py'
           python -m unittest discover -s tests -p 'test_prepare_retrieval_data.py'
@@ -72,3 +75,5 @@ jobs:
           python -m unittest discover -s tests -p 'test_build_reviewed_reference_bundle.py'
           python -m unittest discover -s tests -p 'test_train_transfer_retrieval.py'
           python -m unittest discover -s tests -p 'test_evaluate_frozen_retrieval.py'
+          python -m unittest discover -s tests -p 'test_prepare_quality_teacher.py'
+          python -m unittest discover -s tests -p 'test_train_guidance_quality.py'

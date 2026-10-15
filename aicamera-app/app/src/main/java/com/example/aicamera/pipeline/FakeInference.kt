@@ -169,7 +169,15 @@ data class FakeInferenceOutput(
     val expectsSubject: Boolean = false,
     /** Only the real V9 path supplies recommendations; heuristic fallback keeps these null. */
     val filterRecommendation: FilterRecommendation? = null,
-    val autoZoomRecommendation: AutoZoomRecommendation? = null
+    val autoZoomRecommendation: AutoZoomRecommendation? = null,
+    val structureObservation: com.example.aicamera.guidance.StructureObservation? = null,
+    val compositionTarget: com.example.aicamera.guidance.CompositionTarget? = null,
+    val qualityScore: Float? = null,
+    val qualityCrop: QualityCropResult? = null,
+    val qualityAcceptable: Boolean = true,
+    val imuObservationId: Long = 0L,
+    val imuSampledAtMs: Long = 0L,
+    val rawRollDegrees: Float? = null
 )
 
 data class FakeGuideLine(

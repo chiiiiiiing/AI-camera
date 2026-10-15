@@ -42,6 +42,8 @@ class PipelineViewModel @Inject constructor(
     geometryStage: GeometryGuidanceStage
 ) : ViewModel() {
 
+    fun requestReplan() = pipeline.requestReplan()
+
     /** AI 引擎装配状态（HUD/调试面板展示用） */
     val aiState: StateFlow<AiEngineManager.State> = aiEngine.state
 

@@ -51,9 +51,17 @@ class V9Inference(
 
     override val typeName: String = "V9-ONNX"
 
-    override val minInferenceIntervalMs: Long = 500L
+    override val minInferenceIntervalMs: Long get() = if (android.os.SystemClock.elapsedRealtime() < slowUntilMs) 1000L else 500L
 
     private val templateStabilizer = V9TemplateStabilizer()
+    private val structureMatcher = V9StructureMatcher()
+    private val qualityHead = index.qualityHead()
+    private val cropEvaluator = QualityCropEvaluator()
+    private var structure: com.example.aicamera.guidance.StructureObservation? = null
+    private var slowUntilMs = 0L
+    override fun updateStructure(observation: com.example.aicamera.guidance.StructureObservation?) { structure = observation }
+    override fun requestReplan() { structureMatcher.replan(); templateStabilizer.reset(); cropEvaluator.reset() }
+
 
     // ── IInference 实现 ───────────────────────────────────────
 
@@ -61,6 +69,7 @@ class V9Inference(
     override fun predict(buffer: ByteBuffer, frame: PreprocessedFrame): Any? {
         // Step 1: 获取 Bitmap — 优先使用预处理阶段保留的 224×224 Bitmap，
         //         否则从 buffer 重建（降级路径）
+        val started = android.os.SystemClock.elapsedRealtime()
         var reconstructed: Bitmap? = null
         try {
             val sourceBitmap = frame.originalBitmap ?: bufferToBitmap(buffer, frame.width, frame.height)
@@ -69,7 +78,7 @@ class V9Inference(
             val embedding = runtime.embed(nchw)
 
             // Step 2: 检索 + 规则重排
-            val candidates = index.search(embedding, topK = 8)
+            val candidates = index.search(embedding, topK = 32)
             if (candidates.isEmpty()) {
                 resetSession()
                 return createEmptyResult(
@@ -85,10 +94,12 @@ class V9Inference(
                 null
             }
 
-            val reranked = index.rerank(
+            val semantic = index.rerank(
                 candidates,
-                stats?.let { sceneContextEstimator.estimate(candidates, it) } ?: SceneContext()
+                stats?.let { sceneContextEstimator.estimate(candidates, it) } ?: SceneContext(), limit = 32
             )
+            val now = android.os.SystemClock.elapsedRealtime()
+            val reranked = structureMatcher.rank(semantic, structure, now)
             if (reranked.isEmpty()) {
                 resetSession()
                 return createEmptyResult(
@@ -142,8 +153,25 @@ class V9Inference(
             val selectedHit = templateStabilizer.select(reranked)
             val meta = selectedHit.metadata ?: index.getMetadata(selectedHit.templateId)
             return if (meta != null) {
+                val target = structureMatcher.target(reranked + semantic.filter { candidate -> reranked.none { it.templateId == candidate.templateId } }, structure, now)
+                val face = structure?.singleFace(now)
+                val features = QualityHead.features(sourceBitmap, face)
+                val head = qualityHead?.takeIf { meta.sceneCategory in it.scenes || meta.photoType in it.scenes }
+                val qualityScore = head?.score(embedding, features)
+                val crop = if (target == null && head != null && head.cropDiagnosticsEnabled && qualityScore != null && now >= slowUntilMs)
+                    cropEvaluator.evaluate(sourceBitmap, embedding, face, head, qualityScore, now) {
+                        runtime.embed(V9EmbeddingRuntime.bitmapToNchw224(it))
+                    } else null
                 metaToFakeOutput(meta, selectedHit.cosine, frame.displayAspectRatio,
-                    filterRecommendation, autoZoomRecommendation)
+                    filterRecommendation, autoZoomRecommendation).let { output ->
+                    val lines = output.guideLines.filterNot { it.type == "target_zone" }.toMutableList()
+                    target?.let { lines.add(FakeGuideLine("target_zone", true, mapOf(
+                        "center_x" to it.center.x, "center_y" to it.center.y, "radius" to it.tolerance,
+                        "anchor_kind" to "face", "coordinate_aspect_ratio" to (frame.displayAspectRatio ?: 1f)))) }
+                    output.copy(guideLines = lines, compositionTarget = target, structureObservation = structure,
+                        qualityScore = qualityScore, qualityCrop = crop,
+                        qualityAcceptable = features[2] < .98f && features[3] < .98f)
+                }
             } else {
                 createEmptyResult(filterRecommendation, autoZoomRecommendation)
             }
@@ -156,6 +184,8 @@ class V9Inference(
                 AutoZoomRecommendations.disabled(AutoZoomReason.FALLBACK)
             )
         } finally {
+            val finished = android.os.SystemClock.elapsedRealtime()
+            if (finished-started > 150) slowUntilMs = finished+10_000
             reconstructed?.recycle()
         }
     }
@@ -290,6 +320,9 @@ class V9Inference(
     @Synchronized
     override fun resetSession() {
         templateStabilizer.reset()
+        structureMatcher.reset()
+        cropEvaluator.reset()
+        structure = null
         filterStabilizer.reset()
         autoZoomStabilizer.reset()
     }

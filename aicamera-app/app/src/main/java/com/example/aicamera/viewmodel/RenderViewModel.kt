@@ -86,7 +86,7 @@ class RenderViewModel @Inject constructor() : ViewModel() {
     /** Scheduler frame counters restart on resume; controller observations must keep increasing. */
     private var observationFrameId: Long = 0
 
-    fun connect(pipelineResults: SharedFlow<PipelineResult>) {
+    fun connect(pipelineResults: SharedFlow<PipelineResult>, onRequestReplan: () -> Unit = {}) {
         if (collectJob?.isActive == true) return
 
         collectJob = viewModelScope.launch {
@@ -138,6 +138,7 @@ class RenderViewModel @Inject constructor() : ViewModel() {
 
                     // ★ 同步驱动统一会话控制器（替代双工作流）
                     sessionController.observe(buildFrameObservation(fakeOutput, result))
+                    if (sessionController.decision.value.replanRequested) onRequestReplan()
                 } else {
                     // A pipeline failure/unknown schema must revoke readiness immediately,
                     // including when no later frame arrives to clear ALIGNED hysteresis.
@@ -149,7 +150,7 @@ class RenderViewModel @Inject constructor() : ViewModel() {
                     // target or sensor readings. Keep Capturing/Saved handling in the controller.
                     sessionController.observe(CompositionSessionController.FrameObservation(
                         frameId = nextObservationFrameId(result),
-                        timestampMs = System.currentTimeMillis(),
+                        timestampMs = android.os.SystemClock.elapsedRealtime(),
                         modelConfidence = 0f
                     ))
                 }
@@ -377,10 +378,17 @@ class RenderViewModel @Inject constructor() : ViewModel() {
             }
         }
 
+        output.structureObservation?.let { structure ->
+            val rawFace = structure.singleFace(android.os.SystemClock.elapsedRealtime())
+            subjectCx = rawFace?.centerX
+            subjectCy = rawFace?.centerY
+            hasRealSubject = rawFace != null
+        }
         return CompositionSessionController.FrameObservation(
             frameId = nextObservationFrameId(result),
-            timestampMs = System.currentTimeMillis(),
+            timestampMs = android.os.SystemClock.elapsedRealtime(),
             rollDegrees = roll,
+            rawRollDegrees = output.rawRollDegrees,
             pitchDegrees = pitch,
             yawDegrees = yaw,
             isUpright = isUpright,
@@ -394,7 +402,18 @@ class RenderViewModel @Inject constructor() : ViewModel() {
             modelConfidence = output.confidence,
             pitchTargetDegrees = pitchTarget,
             yawTargetDegrees = yawTarget,
-            coordinateAspectRatio = coordinateAspectRatio
+            coordinateAspectRatio = coordinateAspectRatio,
+            subjectObservationId = output.structureObservation?.observationId ?: 0L,
+            subjectTrackingId = output.structureObservation?.trackingId,
+            subjectSampledAtMs = output.structureObservation?.sampledAtMs ?: 0L,
+            imuObservationId = output.imuObservationId,
+            imuSampledAtMs = output.imuSampledAtMs,
+            faceCount = output.structureObservation?.faceCount ?: 0,
+            viewportVersion = output.structureObservation?.viewportVersion ?: -1,
+            targetViewportVersion = output.compositionTarget?.viewportVersion ?: -2,
+            targetId = output.compositionTarget?.id,
+            qualityScore = output.qualityScore,
+            qualityAcceptable = output.qualityAcceptable
         )
     }
 }

@@ -71,6 +71,11 @@ class ResilientInference(
         return output
     }
 
+    override fun updateStructure(observation: com.example.aicamera.guidance.StructureObservation?) {
+        if (!degraded) primary.updateStructure(observation)
+    }
+    override fun requestReplan() { if (!degraded) primary.requestReplan() }
+
     @Synchronized
     override fun resetSession() {
         consecutiveErrors = 0

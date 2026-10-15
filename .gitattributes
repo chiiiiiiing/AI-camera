@@ -1,0 +1,3 @@
+# Hash-bound runtime manifests and sidecars must retain their byte representation
+# across Windows and Linux checkouts.
+aicamera-app/app/src/main/assets/ai/v9/*.json text eol=lf

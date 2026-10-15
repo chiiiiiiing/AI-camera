@@ -47,6 +47,25 @@ class GeometryGuidanceStage @Inject constructor(
     private val subjectEmaX = EmaSmoother(SUBJECT_EMA_ALPHA)
     private val subjectEmaY = EmaSmoother(SUBJECT_EMA_ALPHA)
 
+    private var structure: com.example.aicamera.guidance.StructureObservation? = null
+    private var lastFaceId = -1L
+    private var cachedSmoothBox: NormalizedBox? = null
+    private var lastImuId = -1L
+    private var cachedRoll: Float? = null
+    private var cachedPitch: Float? = null
+    private var cachedYaw: Float? = null
+
+    fun observe(imageProxy: ImageProxy, isFrontCamera: Boolean): com.example.aicamera.guidance.StructureObservation? {
+        faceDetector.detectIfDue(imageProxy, isFrontCamera)
+        val previous = structure
+        structure = faceDetector.latestObservation()?.copy(
+            aspectRatio = imageProxy.analysisCrop().displayAspectRatio(imageProxy.imageInfo.rotationDegrees))
+        if (previous != null && previous.trackingId != structure?.trackingId) {
+            subjectEmaX.reset(); subjectEmaY.reset(); lastFaceId = -1; cachedSmoothBox = null
+        }
+        return structure
+    }
+
     /**
      * 把几何信号应用到推理输出。
      *
@@ -54,21 +73,35 @@ class GeometryGuidanceStage @Inject constructor(
      * @param imageProxy 当前帧（人脸检测用）
      * @param isFrontCamera 是否前摄
      */
-    fun apply(output: Any?, imageProxy: ImageProxy, isFrontCamera: Boolean): Any? {
-        if (output !is FakeInferenceOutput) return output
+    fun apply(input: Any?, imageProxy: ImageProxy, isFrontCamera: Boolean): Any? {
+        if (input !is FakeInferenceOutput) return input
+        val oldTarget = input.compositionTarget
+        val targetFace = structure?.singleFace(android.os.SystemClock.elapsedRealtime())
+        val targetValid = oldTarget == null || (targetFace != null && oldTarget.accepts(targetFace, structure?.faceYawDegrees) && oldTarget.subjectTrackingId == structure?.trackingId &&
+            oldTarget.viewportVersion == structure?.viewportVersion && targetFace != null)
+        val output = if (targetValid) input else input.copy(compositionTarget = null,
+            guideLines = input.guideLines.filterNot { it.type == "target_zone" })
 
         // ── 1. 真实水平/俯仰/偏航观测（含 isUpright/confidence） ──
         // ★ 传感器已做圆周平滑，此处保留 EMA 做二次去抖
         val rawObs = horizonSensor.latestObservation()?.takeIf { it.confidence.isFinite() && it.confidence > 0f }
-        val rawAngle = rawObs?.takeIf { HorizonMath.hasObservableRoll(it) }?.rollDegrees
-        val smoothAngle = rawAngle?.let { horizonEma.smooth(it) }
-        val smoothPitch = rawObs?.pitchDegrees?.takeIf { it.isFinite() }?.let { pitchEma.smooth(it) }
-        val smoothYaw = rawObs?.yawDegrees?.takeIf { it.isFinite() }?.let { yawEma.smooth(it) }
+        if (rawObs == null) {
+            horizonEma.reset(); pitchEma.reset(); yawEma.reset()
+            cachedRoll = null; cachedPitch = null; cachedYaw = null; lastImuId = -1
+        } else if (rawObs.observationId != lastImuId) {
+            cachedRoll = rawObs.takeIf { HorizonMath.hasObservableRoll(it) }?.rollDegrees?.let { horizonEma.smooth(it) }
+            cachedPitch = rawObs.pitchDegrees?.takeIf { it.isFinite() }?.let { pitchEma.smooth(it) }
+            cachedYaw = rawObs.yawDegrees?.takeIf { it.isFinite() }?.let { yawEma.smooth(it) }
+            lastImuId = rawObs.observationId
+        }
+        val smoothAngle = cachedRoll
+        val smoothPitch = cachedPitch
+        val smoothYaw = cachedYaw
         val coordinateAspectRatio = imageProxy.analysisCrop().displayAspectRatio(imageProxy.imageInfo.rotationDegrees)
 
         // ── 2. 真实主体框 ──
-        val rawBox = faceDetector.detectIfDue(imageProxy, isFrontCamera)
-        val smoothBox = rawBox?.let {
+        val rawBox = structure?.singleFace(android.os.SystemClock.elapsedRealtime())
+        val smoothBox = if (rawBox != null && structure?.observationId == lastFaceId) cachedSmoothBox else rawBox?.let {
             val cx = subjectEmaX.add(it.centerX)
             val cy = subjectEmaY.add(it.centerY)
             NormalizedBox(
@@ -78,6 +111,8 @@ class GeometryGuidanceStage @Inject constructor(
                 bottom = (cy + it.height / 2f).coerceIn(0f, 1f)
             )
         }
+        lastFaceId = structure?.observationId ?: -1L
+        cachedSmoothBox = smoothBox
         if (rawBox == null) {
             // 主体丢失时缓慢衰减，避免指令跳变
             subjectEmaX.reset()
@@ -221,13 +256,21 @@ class GeometryGuidanceStage @Inject constructor(
             // Template similarity is not geometric evidence of alignment.
             compositionProgress = boostedProgress,
             // 标注模板主体期望：分步引导序列器据此决定是否需要 SUBJECT 步
-            expectsSubject = expectsSubject
+            expectsSubject = expectsSubject,
+            structureObservation = structure,
+            imuObservationId = rawObs?.observationId ?: 0L,
+            imuSampledAtMs = rawObs?.sampledAtMs ?: 0L,
+            rawRollDegrees = rawObs?.rawRollDegrees
         )
     }
 
     /** 切换摄像头/场景切换后调用：清空检测缓存与平滑状态 */
     fun reset() {
         faceDetector.resetCache()
+        structure = null
+        lastFaceId = -1L
+        cachedSmoothBox = null
+        lastImuId = -1; cachedRoll = null; cachedPitch = null; cachedYaw = null
         horizonEma.reset()
         pitchEma.reset()
         yawEma.reset()

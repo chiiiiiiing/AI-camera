@@ -12,6 +12,7 @@ import re
 from pathlib import Path
 
 from build_template_db import validate_template_index
+from validate_core_recommendation_assets import validate as validate_core_recommendation
 
 
 def sha256(path: Path) -> str:
@@ -192,6 +193,8 @@ def validate(asset_root: Path) -> None:
                 f"recomputed top5 same-scene quality {measured_quality} is below gate {quality_gate}")
     require(abs(measured_quality - quality_score) <= 0.01,
             f"reported quality {quality_score} differs from packaged index measurement {measured_quality}")
+
+    validate_core_recommendation(asset_root)
 
     print(
         f"V9 asset gate passed: {embedding_count} aligned embeddings; "

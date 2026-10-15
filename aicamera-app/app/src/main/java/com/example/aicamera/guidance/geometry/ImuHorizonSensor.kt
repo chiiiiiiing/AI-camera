@@ -63,6 +63,7 @@ class ImuHorizonSensor @Inject constructor(
 
     @Volatile
     private var listening = false
+    private var observationId = 0L
 
     /** 传感器是否可用（无任何重力来源时 false，调用方应走无水平信号分支） */
     val isAvailable: Boolean
@@ -123,7 +124,7 @@ class ImuHorizonSensor @Inject constructor(
         when (event.sensor.type) {
             Sensor.TYPE_GRAVITY -> {
                 gravityValues = event.values.clone()
-                updateObservation()
+                updateObservation(event.timestamp / 1_000_000L)
             }
             Sensor.TYPE_ACCELEROMETER -> {
                 if (gravitySensor != null) return
@@ -133,7 +134,7 @@ class ImuHorizonSensor @Inject constructor(
                 val next = FloatArray(3) { i -> alpha * prev[i] + (1 - alpha) * event.values[i] }
                 filteredGravity = next
                 gravityValues = next
-                updateObservation()
+                updateObservation(event.timestamp / 1_000_000L)
             }
             Sensor.TYPE_MAGNETIC_FIELD -> {
                 magneticValues = event.values.clone()
@@ -147,9 +148,9 @@ class ImuHorizonSensor @Inject constructor(
     }
 
     @Synchronized
-    private fun updateObservation() {
+    private fun updateObservation(sampledAtMs: Long) {
         val g = gravityValues ?: return
-        latestGravityAtMs = SystemClock.elapsedRealtime()
+        latestGravityAtMs = sampledAtMs
         val raw = HorizonMath.compute(g[0], g[1], g[2])
         val smoothedRoll = rollSmoother.smooth(raw.rollDegrees)
         val smoothedPitch = pitchSmoother.smooth(raw.pitchDegrees ?: 0f)
@@ -159,7 +160,10 @@ class ImuHorizonSensor @Inject constructor(
             pitchDegrees = smoothedPitch,
             yawDegrees = latestObservation?.yawDegrees,
             isUpright = raw.isUpright,
-            confidence = raw.confidence
+            confidence = raw.confidence,
+            observationId = ++observationId,
+            sampledAtMs = sampledAtMs,
+            rawRollDegrees = raw.rollDegrees
         )
 
         // 重力更新后也需要重新计算 YAW（如果磁力计已就绪）

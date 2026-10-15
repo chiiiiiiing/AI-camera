@@ -56,6 +56,9 @@ class FramePipeline(
     private var lastInference: IInference? = null
     private val resetGeneration = AtomicLong(0)
     private var appliedResetGeneration = -1L
+    private val replanGeneration = AtomicLong(0)
+    private var appliedReplan = 0L
+    fun requestReplan() { replanGeneration.incrementAndGet() }
     private val modelSampler = ModelOutputSampler()
 
     // ── 公开 API ──────────────────────────────────────────────
@@ -94,6 +97,15 @@ class FramePipeline(
                     lastAnalysisCrop = crop
                 }
 
+                val replan = replanGeneration.get()
+                if (replan != appliedReplan) {
+                    frameInference.requestReplan()
+                    modelSampler.reset()
+                    appliedReplan = replan
+                }
+                val structureStart = SystemClock.elapsedRealtime()
+                frameInference.updateStructure(geometryStage?.observe(proxy, isFrontCamera))
+                val structureMs = SystemClock.elapsedRealtime()-structureStart
                 var preprocessMs = 0L
                 var inferenceMs = 0L
                 var modelSampled = false
@@ -119,7 +131,7 @@ class FramePipeline(
                 geometryStage?.let { stage ->
                     modelOutput = stage.apply(modelOutput, proxy, isFrontCamera)
                 }
-                val geometryMs = SystemClock.elapsedRealtime() - geometryStart
+                val geometryMs = structureMs + SystemClock.elapsedRealtime() - geometryStart
                 PipelineResult(
                     frameIndex = 0,
                     rotationDegrees = rotation,
@@ -216,6 +228,8 @@ interface IInference {
 
     /** 切换镜头、暂停或开始新会话时清空跨帧状态。无状态推理器无需覆写。 */
     fun resetSession() = Unit
+    fun requestReplan() = resetSession()
+    fun updateStructure(observation: com.example.aicamera.guidance.StructureObservation?) = Unit
 }
 
 /**

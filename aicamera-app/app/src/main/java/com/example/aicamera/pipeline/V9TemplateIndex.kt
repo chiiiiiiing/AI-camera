@@ -72,6 +72,8 @@ class V9TemplateIndex(
                 throw IllegalStateException("有 ${missingMetadata.size} 个 embedding 缺少 metadata")
             }
 
+            val structures = ReferenceStructures.load(File(indexDir.parentFile, "reference_structures.json"), metadata)
+            structures.forEach { (id, structure) -> metadata[id]?.let { metadata[id] = it.copy(structure = structure) } }
             templateCount = embeddings.size
             Log.i(TAG, "模板索引加载完成: $templateCount 条模板, ${V9EmbeddingRuntime.EMBEDDING_DIM} 维")
             return true
@@ -161,7 +163,8 @@ class V9TemplateIndex(
                         lightingContrast = attribute(lighting, "contrast", "medium"),
                         timeOfDay = attribute(lighting, "time_of_day", "unknown"),
                         referenceEligible = V9ReferencePolicy.isEligible(json),
-                        faceAnchor = V9ReferencePolicy.parseFaceAnchor(json)
+                        faceAnchor = V9ReferencePolicy.parseFaceAnchor(json),
+                        imageSha256 = json.optString("source_sha256")
                     )
                 } catch (e: Exception) {
                     throw IllegalArgumentException("metadata 行非法: ${e.message}", e)
@@ -216,7 +219,8 @@ class V9TemplateIndex(
      */
     fun rerank(
         candidates: List<SearchHit>,
-        context: SceneContext = SceneContext()
+        context: SceneContext = SceneContext(),
+        limit: Int = 5
     ): List<SearchHit> {
         return candidates.asSequence().mapNotNull { hit ->
             val meta = hit.metadata
@@ -253,8 +257,10 @@ class V9TemplateIndex(
             hit.copy(rerankScore = rerankScore).takeIf { it.rerankScore.isFinite() }
         }.sortedWith(
             compareByDescending<SearchHit> { it.rerankScore }.thenBy { it.templateId }
-        ).take(5).toList()
+        ).take(limit.coerceIn(0, 32)).toList()
     }
+
+    fun qualityHead(): QualityHead? = QualityHead.load(indexDir.parentFile)
 
     fun getMetadata(templateId: String): TemplateMeta? = metadata[templateId]
 
@@ -357,7 +363,9 @@ data class TemplateMeta(
     /** annotation.lighting.time_of_day; absent legacy rows default to unknown. */
     val timeOfDay: String = "unknown",
     val referenceEligible: Boolean = false,
-    val faceAnchor: V9FaceAnchor? = null
+    val faceAnchor: V9FaceAnchor? = null,
+    val imageSha256: String = "",
+    val structure: ReferenceStructure? = null
 )
 
 /** 场景上下文（用于重排），后续可由独立场景分类器填充 */

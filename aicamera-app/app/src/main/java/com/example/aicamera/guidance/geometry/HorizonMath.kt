@@ -36,7 +36,11 @@ object HorizonMath {
         val pitch = observation.pitchDegrees ?: 0f
         val uprightGravity = cos(Math.toRadians(roll.toDouble())) *
             abs(cos(Math.toRadians(pitch.toDouble()))) * 9.8
-        return observation.copy(rollDegrees = roll, isUpright = uprightGravity > 0.5)
+        val rawMeasured = observation.rawRollDegrees?.let {
+            val rotated = it + rotationQuarterTurns*90f
+            ((rotated+180f)%360f+360f)%360f-180f
+        }
+        return observation.copy(rollDegrees = roll, isUpright = uprightGravity > 0.5, rawRollDegrees = rawMeasured)
     }
 
     /** Gravity cannot establish image-plane roll when the lens points almost vertically.
@@ -99,7 +103,10 @@ data class HorizonObservation(
     val pitchDegrees: Float? = null,
     val yawDegrees: Float? = null,
     val isUpright: Boolean,
-    val confidence: Float
+    val confidence: Float,
+    val observationId: Long = 0L,
+    val sampledAtMs: Long = 0L,
+    val rawRollDegrees: Float? = null
 )
 
 /**

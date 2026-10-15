@@ -34,7 +34,13 @@ object AiModelAssets {
     private const val VERSION_FILE = "ai_model_version.txt"
 
     /** 资产内容变化时递增，强制旧设备重新复制 */
-    private const val CURRENT_VERSION = "v10-reviewed-recognition-2"
+    private const val CURRENT_VERSION = "v11-structure-guidance-1"
+
+    // Optional capabilities fail closed in their own readers. A rejected quality head
+    // must never prevent the existing retrieval model from starting.
+    private val OPTIONAL_FILES = listOf(
+        "reference_structures.json", "quality_policy.json", "quality_head.json"
+    )
 
     /** 必须的部署文件；模型精度由 manifest 记录，不编码在部署文件名中。 */
     private val REQUIRED_FILES = listOf(
@@ -96,6 +102,14 @@ object AiModelAssets {
             if (!copyAsset(context, assetPath, targetFile)) {
                 Log.e(TAG, "索引文件复制失败: $fileName")
                 allSuccess = false
+            }
+        }
+
+        for (fileName in OPTIONAL_FILES) {
+            val targetFile = File(targetDir, fileName)
+            if (!copyAsset(context, "$ASSET_BASE/$fileName", targetFile)) {
+                // Remove a partial file left by an interrupted optional copy.
+                targetFile.delete()
             }
         }
 

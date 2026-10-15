@@ -20,7 +20,7 @@ class CompositionSessionControllerTest {
         val controller = activeController()
         for (id in 1L..12L) controller.observe(observation(id).copy(
             pitchDegrees = -45f, pitchTargetDegrees = null, yawDegrees = (id * 20f) % 360f,
-            expectsSubject = true, hasRealSubject = true,
+            expectsSubject = true, hasRealSubject = true, faceCount = 1,
             subjectCx = .5f, subjectCy = .5f, targetCx = .5f, targetCy = .5f
         ))
         assertEquals(CompositionSessionController.State.Ready, controller.state.value)
@@ -43,7 +43,7 @@ class CompositionSessionControllerTest {
     fun `circular face target rejects diagonal outside point and verifies entry`() {
         val controller = activeController()
         fun portrait(id: Long, x: Float, y: Float) = observation(id).copy(
-            expectsSubject = true, hasRealSubject = true, subjectCx = x, subjectCy = y,
+            expectsSubject = true, hasRealSubject = true, faceCount = 1, subjectCx = x, subjectCy = y,
             targetCx = 0.5f, targetCy = 0.5f, targetTolerance = 0.12f
         )
         for (id in 1L..12L) controller.observe(portrait(id, .59f, .59f))
@@ -58,7 +58,7 @@ class CompositionSessionControllerTest {
     fun `portrait without compatible target or requested pose observation stays unverified`() {
         val missingTarget = activeController()
         for (id in 1L..12L) missingTarget.observe(observation(id).copy(
-            expectsSubject = true, hasRealSubject = true, subjectCx = .5f, subjectCy = .5f
+            expectsSubject = true, hasRealSubject = true, faceCount = 1, subjectCx = .5f, subjectCy = .5f
         ))
         assertUnverified(missingTarget)
         val missingPose = activeController()
@@ -93,7 +93,7 @@ class CompositionSessionControllerTest {
     private fun observation(id: Long, confidence: Float = 0.8f) =
         CompositionSessionController.FrameObservation(
             frameId = id,
-            timestampMs = id * 100L,
+            timestampMs = id * 250L,
             rollDegrees = 0f,
             pitchDegrees = 0f,
             pitchTargetDegrees = 0f, // Explicit reference pose in positive verification fixtures.
@@ -176,7 +176,7 @@ class CompositionSessionControllerTest {
     fun `lost portrait exits ready and reacquisition requires new position stability`() {
         val controller = activeController()
         fun portrait(id: Long) = observation(id).copy(
-            expectsSubject = true, hasRealSubject = true,
+            expectsSubject = true, hasRealSubject = true, faceCount = 1,
             subjectCx = 0.5f, subjectCy = 0.5f, targetCx = 0.5f, targetCy = 0.5f
         )
         for (id in 1L..10L) controller.observe(portrait(id))
@@ -186,7 +186,7 @@ class CompositionSessionControllerTest {
         assertEquals(CompositionSessionController.GuidanceAction.HoldStill, controller.action.value)
         controller.observe(portrait(12L))
         assertTrue(controller.state.value is CompositionSessionController.State.Adjusting)
-        controller.observe(portrait(13L))
+        for (id in 13L..17L) controller.observe(portrait(id))
         assertEquals(CompositionSessionController.State.Verifying, controller.state.value)
     }
 

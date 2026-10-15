@@ -145,6 +145,7 @@ fun CameraScreen(
     val pipelineState by pipelineViewModel.pipelineState.collectAsStateWithLifecycle()
     // ★ 统一构图会话控制器状态（替代旧双工作流）
     val sessionState by renderViewModel.sessionController.state.collectAsStateWithLifecycle()
+    val sessionDecision by renderViewModel.sessionController.decision.collectAsStateWithLifecycle()
     // 将控制器状态映射到 UI overlay 所需的状态枚举
     val hasRealSubject = renderInput.guideLines.any {
         it.visible && it.type.name == "SUBJECT_BOX" && it.params["real"] == true &&
@@ -318,7 +319,7 @@ fun CameraScreen(
     LaunchedEffect(uiState.isInitialized) {
         if (uiState.isInitialized) {
             pipelineViewModel.connect(cameraViewModel.frameFlow)
-            renderViewModel.connect(pipelineViewModel.pipelineResults)
+            renderViewModel.connect(pipelineViewModel.pipelineResults, pipelineViewModel::requestReplan)
         }
     }
 
@@ -760,6 +761,13 @@ fun CameraScreen(
                 state = workflowState,
                 cue = workflowCue,
                 phase = workflowPhase,
+                feedbackHint = when (sessionDecision.feedback) {
+                    com.example.aicamera.guidance.GuidanceFeedback.WORSENING -> "先保持，刚才的调整没有改善构图"
+                    com.example.aicamera.guidance.GuidanceFeedback.NO_PROGRESS -> "先保持，暂未找到更有效的调整"
+                    com.example.aicamera.guidance.GuidanceFeedback.VERIFYING -> "位置合适，请保持稳定"
+                    com.example.aicamera.guidance.GuidanceFeedback.INSUFFICIENT_EVIDENCE -> "先保持，正在确认可用的构图依据"
+                    else -> null
+                },
                 targetNx = targetCenter?.first,
                 targetNy = targetCenter?.second,
                 horizonAngleDeg = horizonAngle,

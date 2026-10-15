@@ -79,6 +79,7 @@ fun CaptureWorkflowOverlay(
     state: CaptureWorkflowState,
     cue: GuidanceCue?,
     phase: GuidancePhase,
+    feedbackHint: String? = null,
     targetNx: Float? = null,
     targetNy: Float? = null,
     horizonAngleDeg: Float? = null,
@@ -149,11 +150,12 @@ fun CaptureWorkflowOverlay(
                     targetNx = targetNx, targetNy = targetNy,
                     subjectNx = subjectNx, subjectNy = subjectNy,
                     cue = cue,
+                    feedbackHint = feedbackHint,
                     aligned = phase == GuidancePhase.ALIGNED ||
                         cue == GuidanceCue.SUBJECT_ALIGNED
                 )
             } else {
-                FallbackGuidance(cue = cue, phase = phase)
+                FallbackGuidance(cue = cue, phase = phase, feedbackHint = feedbackHint)
             }
         }
 
@@ -387,6 +389,7 @@ private fun CenterPointGuidance(
     targetNx: Float, targetNy: Float,
     subjectNx: Float, subjectNy: Float,
     cue: GuidanceCue?,
+    feedbackHint: String? = null,
     aligned: Boolean
 ) {
     val infinite = rememberInfiniteTransition(label = "guide_dot")
@@ -449,7 +452,7 @@ private fun CenterPointGuidance(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = if (aligned) "位置已对齐，请保持稳定" else phoneMoveHint(cue),
+                text = feedbackHint ?: if (aligned) "位置已对齐，请保持稳定" else phoneMoveHint(cue),
                 color = if (aligned) GuideAligned else BrandPink,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
@@ -469,8 +472,8 @@ private fun phoneMoveHint(cue: GuidanceCue?): String = when (cue) {
 }
 
 @Composable
-private fun FallbackGuidance(cue: GuidanceCue?, phase: GuidancePhase) {
-    val hint = when {
+private fun FallbackGuidance(cue: GuidanceCue?, phase: GuidancePhase, feedbackHint: String? = null) {
+    val hint = feedbackHint ?: when {
         cue in listOf(GuidanceCue.MOVE_LEFT, GuidanceCue.MOVE_RIGHT, GuidanceCue.MOVE_UP, GuidanceCue.MOVE_DOWN) -> phoneMoveHint(cue)
         phase == GuidancePhase.NEAR -> "接近中..."
         phase == GuidancePhase.WRONG_DIRECTION -> "方向相反，回一点"

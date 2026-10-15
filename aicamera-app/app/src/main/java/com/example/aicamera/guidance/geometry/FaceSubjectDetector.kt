@@ -1,5 +1,6 @@
 package com.example.aicamera.guidance.geometry
 
+import com.example.aicamera.guidance.StructureObservation
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.util.Log
@@ -49,6 +50,7 @@ class FaceSubjectDetector @Inject constructor() : Closeable {
         .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_NONE)
         .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_NONE)
         .setMinFaceSize(0.06f)
+        .enableTracking()
         .build()
 
     private val detector: FaceDetector = FaceDetection.getClient(options)
@@ -58,6 +60,10 @@ class FaceSubjectDetector @Inject constructor() : Closeable {
 
     @Volatile
     private var lastBox: NormalizedBox? = null
+    @Volatile private var lastObservation: StructureObservation? = null
+    private var observationId = 0L
+    private var viewportVersion = 0L
+    fun latestObservation(): StructureObservation? = lastObservation
     private val detectionInFlight = AtomicBoolean(false)
 
     /** 最近一次的检测耗时（ms，性能面板用） */
@@ -101,7 +107,7 @@ class FaceSubjectDetector @Inject constructor() : Closeable {
             val faces = Tasks.await(task, detectTimeoutMs, TimeUnit.MILLISECONDS)
 
             // 4. 取最大人脸 → 归一化
-            val best = faces.maxByOrNull { it.boundingBox.width() * it.boundingBox.height() }
+            val best = faces.singleOrNull()
             lastBox = best?.let { face ->
                 val w = detectorBitmap.width.toFloat()
                 val h = detectorBitmap.height.toFloat()
@@ -112,10 +118,13 @@ class FaceSubjectDetector @Inject constructor() : Closeable {
                     bottom = (face.boundingBox.bottom / h).coerceIn(0f, 1f)
                 )
             }
+            lastObservation = StructureObservation(++observationId, start, viewportVersion,
+                faces.size, lastBox, best?.headEulerAngleY, best?.trackingId)
             return lastBox
         } catch (e: Exception) {
             Log.w(TAG, "人脸检测失败: ${e.message}")
             lastBox = null
+            lastObservation = StructureObservation(++observationId, start, viewportVersion, 0, null, valid = false)
             return null // Never guide from an indefinitely stale face after repeated failures.
         } finally {
             lastDetectMs = android.os.SystemClock.elapsedRealtime() - start
@@ -142,6 +151,8 @@ class FaceSubjectDetector @Inject constructor() : Closeable {
     /** 清空缓存（切换摄像头后调用，避免旧朝向的框残留） */
     fun resetCache() {
         lastBox = null
+        lastObservation = null
+        viewportVersion++
         lastRunAt = 0L
     }
 

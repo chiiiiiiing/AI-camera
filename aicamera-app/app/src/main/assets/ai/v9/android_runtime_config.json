@@ -36,10 +36,11 @@
   },
   "postprocess": {
     "l2_normalize_embedding": true,
-    "search_top_k": 8,
+    "search_top_k": 32,
     "display_top_k": 5,
     "low_margin_threshold": 0.01,
-    "stable_switch_samples": 2
+    "stable_switch_samples": 2,
+    "structure_top_k": 8
   },
   "ranking": {
     "base_score": "cosine_similarity",
@@ -51,7 +52,7 @@
       "photo_type_mismatch": -0.08,
       "scene_mismatch_high_confidence": -0.04
     },
-    "notes": "Top8 cosine then top5 rerank; legacy rule-generated composition/lighting/camera labels are ignored. Similarity is not calibrated confidence."
+    "notes": "Top32 semantic recall, at most Top8 measured-structure compatibility; single-face targets only. Similarity, geometry and raw preference scores are separate evidence."
   },
   "camera_preview": {
     "embedding_interval_ms_min": 500,
@@ -95,5 +96,21 @@
     "unverified_composition_targets_disabled": true,
     "cosine_threshold_calibrated": false,
     "phone_motion_and_face_coordinates_share_display_viewport": true
+  },
+  "core_recommendation": {
+    "schema_version": 1,
+    "structures": {
+      "file": "reference_structures.json",
+      "sha256": "37e629dd662539ee7bb995ff204eb7937a4c32bbd2aefc0b7a9cae753d28f747"
+    },
+    "quality": {
+      "file": "quality_policy.json",
+      "sha256": "081480b103c40d246bdfb8e69a657fd89d66bca476ef06c9e38825ccbd79bfaa"
+    },
+    "ready_min_independent_observations": 3,
+    "ready_min_span_ms": 750,
+    "quality_enabled": false,
+    "human_aesthetic_improvement_verified": false,
+    "physical_device_performance_verified": false
   }
 }
