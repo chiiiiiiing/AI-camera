@@ -21,7 +21,7 @@ def file_size(path: Path) -> int:
 
 
 def load_checkpoint(path: Path) -> dict[str, Any]:
-    return torch.load(path, map_location="cpu", weights_only=False)
+    return torch.load(path, map_location="cpu", weights_only=True)
 
 
 def load_model(checkpoint: dict[str, Any]) -> nn.Module:
@@ -33,7 +33,7 @@ def load_model(checkpoint: dict[str, Any]) -> nn.Module:
 
 def choose_quantized_engine() -> str:
     supported = list(torch.backends.quantized.supported_engines)
-    for candidate in ("qnnpack", "fbgemm", "x86"):
+    for candidate in ("qnnpack", "fbgemm", "x86", "onednn"):
         if candidate in supported:
             torch.backends.quantized.engine = candidate
             return candidate
@@ -108,7 +108,10 @@ def export_model(checkpoint_path: Path, output_dir: Path) -> dict[str, Any]:
     dummy = torch.randn(1, 3, image_size, image_size)
     fp32_script = torch.jit.trace(model, dummy)
     fp32_path = output_dir / "student_model.fp32.torchscript.pt"
-    fp32_script.save(str(fp32_path))
+    # PyTorch's native path writer can mis-handle non-ASCII Windows paths.
+    # Python opens the Unicode path correctly; JIT then writes to the stream.
+    with fp32_path.open("wb") as stream:
+        torch.jit.save(fp32_script, stream)
 
     quantized_engine = choose_quantized_engine()
     quantized = torch.quantization.quantize_dynamic(
@@ -118,7 +121,8 @@ def export_model(checkpoint_path: Path, output_dir: Path) -> dict[str, Any]:
     )
     quantized_script = torch.jit.trace(quantized, dummy)
     quantized_path = output_dir / "student_model.dynamic_int8.torchscript.pt"
-    quantized_script.save(str(quantized_path))
+    with quantized_path.open("wb") as stream:
+        torch.jit.save(quantized_script, stream)
     onnx_export = try_export_onnx(model, dummy, output_dir)
 
     manifest = {

@@ -8,6 +8,42 @@ import org.junit.Test
  */
 class HorizonMathTest {
 
+    @Test
+    fun `all four display orientations agree when image is level`() {
+        val gravityByRotation = listOf(0f to 9.8f, 9.8f to 0f, 0f to -9.8f, -9.8f to 0f)
+        for ((rotation, gravity) in gravityByRotation.withIndex()) {
+            val raw = HorizonMath.compute(gravity.first, gravity.second, 0f)
+            val displayed = HorizonMath.inDisplayCoordinates(raw, rotation)
+            assertEquals(0f, displayed.rollDegrees, .001f)
+            assertTrue(displayed.isUpright)
+        }
+    }
+
+    @Test
+    fun `display orientation keeps correction direction and upside down protection`() {
+        for (rotation in 0..3) {
+            val raw = HorizonObservation(-rotation * 90f + 10f, 0f, isUpright = false, confidence = 1f)
+            val clockwise = HorizonMath.inDisplayCoordinates(raw, rotation)
+            assertEquals(10f, clockwise.rollDegrees, .001f)
+            assertTrue(clockwise.isUpright)
+            val counterclockwise = HorizonMath.inDisplayCoordinates(raw.copy(rollDegrees = -rotation * 90f - 10f), rotation)
+            assertEquals(-10f, counterclockwise.rollDegrees, .001f)
+            val inverted = HorizonMath.inDisplayCoordinates(raw.copy(rollDegrees = -rotation * 90f + 180f), rotation)
+            assertFalse(inverted.isUpright)
+            assertEquals(180f, kotlin.math.abs(inverted.rollDegrees), .001f)
+        }
+    }
+
+    @Test
+    fun `display rotation never invents a horizon for overhead photography`() {
+        val raw = HorizonMath.compute(0f, 0f, 9.8f)
+        for (rotation in 0..3) {
+            val displayed = HorizonMath.inDisplayCoordinates(raw, rotation)
+            assertFalse(displayed.isUpright)
+            assertFalse(HorizonMath.hasObservableRoll(displayed))
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════
     // compute() — roll 角计算
     // ═══════════════════════════════════════════════════════════
@@ -21,8 +57,8 @@ class HorizonMathTest {
 
     @Test
     fun `微倾 3° — 方向应正确`() {
-        // 顺时针倾斜 3°，gx 约 0.51
-        val obs = HorizonMath.compute(gx = 0.51f, gy = 9.78f, gz = 0f)
+        // 面向屏幕顺时针倾斜 3°，设备 x 轴向下，gx 约 -0.51。
+        val obs = HorizonMath.compute(gx = -0.51f, gy = 9.78f, gz = 0f)
         assertTrue("顺时针倾斜应 > 0", obs.rollDegrees > 0f)
         assertTrue("3° 偏差应在 ±1°", kotlin.math.abs(obs.rollDegrees - 3f) < 1.5f)
         assertTrue(obs.isUpright)
@@ -30,7 +66,7 @@ class HorizonMathTest {
 
     @Test
     fun `逆时针倾斜 -3° — 方向应正确`() {
-        val obs = HorizonMath.compute(gx = -0.51f, gy = 9.78f, gz = 0f)
+        val obs = HorizonMath.compute(gx = 0.51f, gy = 9.78f, gz = 0f)
         assertTrue("逆时针倾斜应 < 0", obs.rollDegrees < 0f)
         assertTrue("-3° 偏差应在 ±1°", kotlin.math.abs(obs.rollDegrees + 3f) < 1.5f)
         assertTrue(obs.isUpright)
@@ -38,14 +74,14 @@ class HorizonMathTest {
 
     @Test
     fun `顺时针 10°`() {
-        val obs = HorizonMath.compute(gx = 1.71f, gy = 9.63f, gz = 0f)
+        val obs = HorizonMath.compute(gx = -1.71f, gy = 9.63f, gz = 0f)
         assertTrue(obs.rollDegrees > 5f)
         assertTrue(obs.isUpright)
     }
 
     @Test
     fun `逆时针 -10°`() {
-        val obs = HorizonMath.compute(gx = -1.71f, gy = 9.63f, gz = 0f)
+        val obs = HorizonMath.compute(gx = 1.71f, gy = 9.63f, gz = 0f)
         assertTrue(obs.rollDegrees < -5f)
         assertTrue(obs.isUpright)
     }
@@ -88,11 +124,32 @@ class HorizonMathTest {
     @Test
     fun `倒置但 roll 接近 0° — isUpright 必须 false`() {
         // 旧 Bug 场景：atan2(-gx,-gy) 倒置时给 ~0° + 无 isUpright → 错误通过
-        // 修正后：atan2(gx,gy) 倒置时给 ~±180°，isUpright=false
+        // 修正后：atan2(-gx,gy) 倒置时给 ~±180°，isUpright=false
         val obs = HorizonMath.compute(gx = 0f, gy = -9.8f, gz = 0f)
         // roll 应接近 ±180° 而非 0°
         assertTrue("倒置时 roll 不应接近 0°", kotlin.math.abs(obs.rollDegrees) > 90f)
         assertFalse(obs.isUpright)
+    }
+
+    @Test
+    fun `following roll cue reduces physical tilt in every display orientation`() {
+        for (rotation in 0..3) for (clockwiseTilt in listOf(-12f, 12f)) {
+            fun observation(tilt: Float): HorizonObservation {
+                val angle = Math.toRadians((tilt - rotation * 90f).toDouble())
+                return HorizonMath.inDisplayCoordinates(HorizonMath.compute(
+                    (-9.8 * kotlin.math.sin(angle)).toFloat(),
+                    (9.8 * kotlin.math.cos(angle)).toFloat(), 0f), rotation)
+            }
+            val before = observation(clockwiseTilt)
+            val cue = GuidanceGeometry.guidanceCue(null, null, false, horizonAngleDeg = before.rollDegrees)
+            val correction = when (cue) {
+                com.example.aicamera.guidance.GuidanceCue.ROLL_CLOCKWISE -> 4f
+                com.example.aicamera.guidance.GuidanceCue.ROLL_COUNTERCLOCKWISE -> -4f
+                else -> error("Expected a correction for 12 degree tilt")
+            }
+            assertTrue(kotlin.math.abs(observation(clockwiseTilt + correction).rollDegrees) <
+                kotlin.math.abs(before.rollDegrees))
+        }
     }
 
     // ═══════════════════════════════════════════════════════════

@@ -216,6 +216,38 @@ class LiteStudentEmbeddingNet(nn.Module):
         return F.normalize(output, p=2, dim=1)
 
 
+class MobileNetV3SmallRetrieval(nn.Module):
+    """Pretrained-feature retrieval student, with Android normalization in graph.
+
+    Construction is offline. Only the dedicated transfer-training command loads
+    official pretrained weights; loading an exported checkpoint never downloads.
+    """
+
+    def __init__(self, config: StudentModelConfig) -> None:
+        super().__init__()
+        if config.output_dim <= 0 or config.image_size <= 0:
+            raise ValueError("output_dim and image_size must be positive")
+        if config.width_mult != 1.0:
+            raise ValueError("mobilenet_v3_small_retrieval requires width_mult=1.0")
+        from torchvision.models import mobilenet_v3_small
+
+        self.config = config
+        self.features = mobilenet_v3_small(weights=None, width_mult=1.0).features
+        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.head = nn.Linear(576, config.output_dim)
+        self.register_buffer("imagenet_mean", torch.tensor([0.485, 0.456, 0.406]).reshape(1, 3, 1, 1))
+        self.register_buffer("imagenet_std", torch.tensor([0.229, 0.224, 0.225]).reshape(1, 3, 1, 1))
+
+    def encode_features(self, inputs: torch.Tensor) -> torch.Tensor:
+        # The app already sends RGB in [-1, 1]. Preserve that public contract.
+        normalized = ((inputs + 1.0) * 0.5 - self.imagenet_mean) / self.imagenet_std
+        features = self.pool(self.features(normalized)).flatten(1)
+        return F.normalize(features, p=2, dim=1)
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        return F.normalize(self.head(self.encode_features(inputs)), p=2, dim=1)
+
+
 def build_student_model(config: StudentModelConfig | dict[str, Any]) -> nn.Module:
     if isinstance(config, dict):
         config = StudentModelConfig(**{
@@ -227,6 +259,8 @@ def build_student_model(config: StudentModelConfig | dict[str, Any]) -> nn.Modul
         return TinyStudentEmbeddingNet(config)
     if config.architecture == "lite_cnn_v2":
         return LiteStudentEmbeddingNet(config)
+    if config.architecture == "mobilenet_v3_small_retrieval":
+        return MobileNetV3SmallRetrieval(config)
     raise ValueError(f"unsupported student architecture: {config.architecture}")
 
 

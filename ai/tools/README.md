@@ -16,7 +16,7 @@
 python -B ai/tools/validate_android_v9_assets.py --asset-root aicamera-app/app/src/main/assets/ai/v9
 ```
 
-此指标用于检查当前索引，不代表独立新照片泛化性能。历史 embedding 缺少生成模型 hash 时，脚本会明确报告，不能由文件名推断完整模型来源。本次没有重训或替换权重，也没有证明模型精度提升。
+此指标用于检查当前索引，不代表独立新照片泛化性能。历史 embedding 缺少生成模型 hash 时，脚本会明确报告，不能由文件名推断完整模型来源。2026-10-15 已完成 MobileNetV3-Small 迁移检索模型的真实训练/验证，结果和局限见 [识别模型报告](../../docs/AI识别模型优化与验证-2026-10-15.md)；复现入口见 [训练工具 README](build_template_db/README.md)。
 
 ## 运行模型与数据契约测试
 

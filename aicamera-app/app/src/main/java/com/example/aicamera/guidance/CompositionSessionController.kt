@@ -2,6 +2,7 @@ package com.example.aicamera.guidance
 
 import com.example.aicamera.guidance.geometry.HorizonObservation
 import com.example.aicamera.guidance.geometry.HorizonPolicy
+import com.example.aicamera.guidance.geometry.GuidanceGeometry
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -105,7 +106,11 @@ class CompositionSessionController {
         /** 是否有真实主体检测 */
         val hasRealSubject: Boolean = false,
         /** AI 模型置信度 */
-        val modelConfidence: Float = 0f
+        val modelConfidence: Float = 0f,
+        /** Explicit trusted pose targets; raw IMU observations never imply a zero target. */
+        val pitchTargetDegrees: Float? = null,
+        val yawTargetDegrees: Float? = null,
+        val coordinateAspectRatio: Float = 1f
     )
 
     private val _state = MutableStateFlow<State>(State.Idle)
@@ -123,12 +128,6 @@ class CompositionSessionController {
     private var positionBadFrames = 0
     private var verifyingStartMs = 0L
     private var lastAppliedFrameId: Long = -1
-
-    /** 偏航目标：进入构图引导时锁定当前朝向 */
-    private var yawTargetDeg: Float? = null
-
-    /** 俯仰目标：理想为水平（0°） */
-    private val pitchTargetDeg: Float = 0f
 
     /** 开始分析（快门按下后调用） */
     fun startAnalysis() {
@@ -251,23 +250,19 @@ class CompositionSessionController {
         }
 
         // 2. 水平检查
-        val levelOk = obs.rollDegrees != null &&
+        val levelOk = obs.rollDegrees != null && obs.rollDegrees.isFinite() &&
                 obs.isUpright == true &&
                 abs(obs.rollDegrees) <= horizonPolicy.enterLevelToleranceDeg
 
         if (levelOk) {
             levelGoodFrames++
             levelBadFrames = 0
-        } else if (obs.rollDegrees != null) {
+        } else {
             levelBadFrames++
             levelGoodFrames = 0
         }
 
         val levelStable = levelGoodFrames >= horizonPolicy.stableFrameCount
-        val levelBadStable = levelBadFrames >= horizonPolicy.exitFrames &&
-                obs.rollDegrees != null &&
-                abs(obs.rollDegrees) > horizonPolicy.exitLevelToleranceDeg
-
         // 水平未达标 → 旋转指令优先
         if (!levelStable && obs.rollDegrees != null &&
             abs(obs.rollDegrees) > horizonPolicy.enterLevelToleranceDeg
@@ -278,43 +273,43 @@ class CompositionSessionController {
         }
 
         // 3. 俯仰检查（水平已稳）
-        if (levelStable && obs.pitchDegrees != null &&
-            abs(obs.pitchDegrees) > PITCH_TOLERANCE_DEG
+        val pitchDelta = GuidanceGeometry.angleDelta(obs.pitchDegrees, obs.pitchTargetDegrees)
+        if (levelStable && pitchDelta != null &&
+            abs(pitchDelta) > GuidanceGeometry.PITCH_THRESHOLD_DEG
         ) {
             positionGoodFrames = 0
-            return if (obs.pitchDegrees > 0) GuidanceAction.PitchDown
+            return if (pitchDelta > 0) GuidanceAction.PitchDown
             else GuidanceAction.PitchUp
         }
 
         // 4. 偏航检查（水平、俯仰已稳）
-        if (levelStable && obs.yawDegrees != null) {
-            if (yawTargetDeg == null) yawTargetDeg = obs.yawDegrees
-            val delta = normalizeAngle(obs.yawDegrees - yawTargetDeg!!)
-            if (abs(delta) > YAW_TOLERANCE_DEG) {
+        val yawDelta = GuidanceGeometry.angleDelta(obs.yawDegrees, obs.yawTargetDegrees)
+        if (levelStable && yawDelta != null) {
+            if (abs(yawDelta) > GuidanceGeometry.YAW_THRESHOLD_DEG) {
                 positionGoodFrames = 0
-                return if (delta > 0) GuidanceAction.YawRight
+                return if (yawDelta > 0) GuidanceAction.YawRight
                 else GuidanceAction.YawLeft
             }
         }
 
         // A portrait template needs a live subject. Level sensors cannot substitute
         // for detection, and reacquisition must build fresh position stability.
-        if (obs.expectsSubject && !obs.hasRealSubject) {
+        if ((obs.expectsSubject && !hasPositionEvidence(obs)) ||
+            (obs.pitchTargetDegrees != null && pitchDelta == null) ||
+            (obs.yawTargetDegrees != null && yawDelta == null)
+        ) {
             positionGoodFrames = 0
             positionBadFrames = 0
             return GuidanceAction.HoldStill
         }
 
         // 5. 位置检查（仅在有真实主体 + 模板期望主体时生效）
-        if (obs.hasRealSubject && obs.expectsSubject &&
-            obs.subjectCx != null && obs.subjectCy != null &&
-            obs.targetCx != null && obs.targetCy != null
-        ) {
-            val dx = obs.subjectCx - obs.targetCx
-            val dy = obs.subjectCy - obs.targetCy
-            val tolerance = obs.targetTolerance.coerceAtLeast(0.06f)
-
-            val positionOk = abs(dx) <= tolerance && abs(dy) <= tolerance
+        if (hasPositionEvidence(obs)) {
+            val positionCue = GuidanceGeometry.guidanceCue(
+                obs.subjectCx, obs.subjectCy, true, obs.targetCx!!, obs.targetCy!!, obs.targetTolerance,
+                coordinateAspectRatio = obs.coordinateAspectRatio
+            )
+            val positionOk = positionCue == GuidanceCue.SUBJECT_ALIGNED
 
             if (positionOk && levelStable) {
                 positionGoodFrames++
@@ -329,20 +324,26 @@ class CompositionSessionController {
 
             // 水平已稳 → 平移指令
             if (levelStable) {
-                if (dx > tolerance) return GuidanceAction.MoveLeft
-                if (dx < -tolerance) return GuidanceAction.MoveRight
-                if (dy > tolerance) return GuidanceAction.MoveUp
-                if (dy < -tolerance) return GuidanceAction.MoveDown
+                when (positionCue) {
+                    GuidanceCue.MOVE_LEFT -> return GuidanceAction.MoveLeft
+                    GuidanceCue.MOVE_RIGHT -> return GuidanceAction.MoveRight
+                    GuidanceCue.MOVE_UP -> return GuidanceAction.MoveUp
+                    GuidanceCue.MOVE_DOWN -> return GuidanceAction.MoveDown
+                    else -> {}
+                }
             }
         }
 
-        // A template that does not require a subject can verify using orientation alone.
-        if (levelStable && !obs.expectsSubject) {
+        // Level alone cannot certify a pleasing composition. A non-subject
+        // reference needs an explicit, comparable target pose to verify.
+        if (levelStable && !obs.expectsSubject && !hasPositionEvidence(obs) &&
+            (pitchDelta != null || yawDelta != null)
+        ) {
             return GuidanceAction.Ready
         }
 
         // 5. 水平接近中
-        return if (levelOk) GuidanceAction.HoldStill else GuidanceAction.HoldStill
+        return GuidanceAction.HoldStill
     }
 
     private fun transitionToVerifying(nowMs: Long) {
@@ -351,45 +352,36 @@ class CompositionSessionController {
     }
 
     private fun computeProgress(obs: FrameObservation): Float {
-        var score = 0f
-        var weight = 0f
-
-        if (obs.rollDegrees != null) {
-            val hScore = (1f - abs(obs.rollDegrees) / horizonPolicy.exitLevelToleranceDeg)
-                .coerceIn(0f, 1f)
-            score += 0.25f * hScore
-            weight += 0.25f
-        }
-
-        if (obs.pitchDegrees != null) {
-            val pScore = (1f - abs(obs.pitchDegrees) / (PITCH_TOLERANCE_DEG * 2f))
-                .coerceIn(0f, 1f)
-            score += 0.2f * pScore
-            weight += 0.2f
-        }
-
-        if (obs.yawDegrees != null && yawTargetDeg != null) {
-            val delta = normalizeAngle(obs.yawDegrees - yawTargetDeg!!)
-            val yScore = (1f - abs(delta) / (YAW_TOLERANCE_DEG * 2f))
-                .coerceIn(0f, 1f)
-            score += 0.15f * yScore
-            weight += 0.15f
-        }
-
-        if (obs.subjectCx != null && obs.subjectCy != null &&
-            obs.targetCx != null && obs.targetCy != null
-        ) {
-            val dist = kotlin.math.sqrt(
-                (obs.subjectCx - obs.targetCx).let { it * it } +
-                        (obs.subjectCy - obs.targetCy).let { it * it }
-            ).toFloat()
-            val pScore = (1f - dist / 0.5f).coerceIn(0f, 1f)
-            score += 0.4f * pScore
-            weight += 0.4f
-        }
-
-        return if (weight > 0f) (score / weight).coerceIn(0f, 1f) else 0f
+        val hasPosition = hasPositionEvidence(obs)
+        if ((obs.expectsSubject && !hasPosition) ||
+            (obs.pitchTargetDegrees != null && GuidanceGeometry.angleDelta(obs.pitchDegrees, obs.pitchTargetDegrees) == null) ||
+            (obs.yawTargetDegrees != null && GuidanceGeometry.angleDelta(obs.yawDegrees, obs.yawTargetDegrees) == null)
+        ) return 0f
+        val cue = GuidanceGeometry.guidanceCue(
+            obs.subjectCx.takeIf { hasPosition }, obs.subjectCy.takeIf { hasPosition }, obs.expectsSubject,
+            targetCx = obs.targetCx ?: 0.5f, targetCy = obs.targetCy ?: 0.5f,
+            targetTolerance = obs.targetTolerance, horizonAngleDeg = obs.rollDegrees,
+            pitchAngleDeg = obs.pitchDegrees, yawAngleDeg = obs.yawDegrees,
+            pitchTargetDeg = obs.pitchTargetDegrees, yawTargetDeg = obs.yawTargetDegrees,
+            coordinateAspectRatio = obs.coordinateAspectRatio
+        )
+        val progress = GuidanceGeometry.compositionProgress(
+            obs.subjectCx.takeIf { hasPosition }, obs.subjectCy.takeIf { hasPosition },
+            targetCx = obs.targetCx ?: 0.5f, targetCy = obs.targetCy ?: 0.5f,
+            targetTolerance = obs.targetTolerance, horizonAngleDeg = obs.rollDegrees,
+            pitchAngleDeg = obs.pitchDegrees, yawAngleDeg = obs.yawDegrees,
+            pitchTargetDeg = obs.pitchTargetDegrees, yawTargetDeg = obs.yawTargetDegrees,
+            coordinateAspectRatio = obs.coordinateAspectRatio
+        )
+        return GuidanceGeometry.verifiedProgress(cue, progress, obs.expectsSubject, hasPosition,
+            hasCompositionTarget = hasPosition || obs.pitchTargetDegrees != null || obs.yawTargetDegrees != null)
     }
+
+    private fun hasPositionEvidence(obs: FrameObservation): Boolean = obs.hasRealSubject &&
+        obs.subjectCx != null && obs.subjectCx.isFinite() && obs.subjectCx in 0f..1f &&
+        obs.subjectCy != null && obs.subjectCy.isFinite() && obs.subjectCy in 0f..1f &&
+        GuidanceGeometry.isValidTarget(obs.targetCx, obs.targetCy, obs.targetTolerance) &&
+        obs.coordinateAspectRatio.isFinite() && obs.coordinateAspectRatio > 0f
 
     private fun resetCounters(resetFrameSequence: Boolean = true) {
         levelGoodFrames = 0
@@ -398,24 +390,22 @@ class CompositionSessionController {
         positionBadFrames = 0
         verifyingStartMs = 0L
         if (resetFrameSequence) lastAppliedFrameId = -1
-        yawTargetDeg = null
     }
+}
 
-    /**
-     * 将任意角度归一化到 (-180, 180]。
-     */
-    private fun normalizeAngle(deg: Float): Float {
-        var d = deg % 360f
-        if (d > 180f) d -= 360f
-        if (d <= -180f) d += 360f
-        return d
-    }
-
-    companion object {
-        /** 俯仰角容差（度）：超过此值触发俯仰引导 */
-        private const val PITCH_TOLERANCE_DEG = 7.0f
-
-        /** 偏航角容差（度）：超过此值触发偏航引导 */
-        private const val YAW_TOLERANCE_DEG = 12.0f
-    }
+/** The active capture workflow renders the same action that controls readiness. */
+fun CompositionSessionController.GuidanceAction.toGuidanceCue(): GuidanceCue = when (this) {
+    CompositionSessionController.GuidanceAction.HoldStill -> GuidanceCue.NONE
+    CompositionSessionController.GuidanceAction.RotateClockwise -> GuidanceCue.ROLL_CLOCKWISE
+    CompositionSessionController.GuidanceAction.RotateCounterClockwise -> GuidanceCue.ROLL_COUNTERCLOCKWISE
+    CompositionSessionController.GuidanceAction.PitchUp -> GuidanceCue.PITCH_UP
+    CompositionSessionController.GuidanceAction.PitchDown -> GuidanceCue.PITCH_DOWN
+    CompositionSessionController.GuidanceAction.YawLeft -> GuidanceCue.YAW_LEFT
+    CompositionSessionController.GuidanceAction.YawRight -> GuidanceCue.YAW_RIGHT
+    CompositionSessionController.GuidanceAction.MoveLeft -> GuidanceCue.MOVE_LEFT
+    CompositionSessionController.GuidanceAction.MoveRight -> GuidanceCue.MOVE_RIGHT
+    CompositionSessionController.GuidanceAction.MoveUp -> GuidanceCue.MOVE_UP
+    CompositionSessionController.GuidanceAction.MoveDown -> GuidanceCue.MOVE_DOWN
+    CompositionSessionController.GuidanceAction.DeviceUpsideDown -> GuidanceCue.DEVICE_UPSIDE_DOWN
+    CompositionSessionController.GuidanceAction.Ready -> GuidanceCue.SUBJECT_ALIGNED
 }

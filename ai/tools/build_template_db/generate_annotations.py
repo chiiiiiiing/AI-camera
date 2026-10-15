@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-Enhanced visual annotation generator for new_batch images.
-Reads each image, extracts visual properties using PIL, detects text overlays
-from source titles, and produces aesthetic annotations following the schema.
+Generate rule-based draft annotations for new_batch images.
+Only pixel statistics are measured. Composition, lighting, aesthetic scores,
+and title-based text guesses are unverified priors, not visual ground truth.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import math
 import re
@@ -20,7 +21,7 @@ try:
 except ImportError:
     HAS_PIL = False
 
-BASE_DIR = Path("/Volumes/桌面/AI-camera/tools")
+BASE_DIR = Path(__file__).resolve().parents[3] / "local-data"
 BATCH_DIR = BASE_DIR / "preprocessed" / "annotation_batches.new_batch"
 RESULTS_DIR = BATCH_DIR / "results"
 
@@ -491,6 +492,13 @@ def annotate_item(item: dict[str, Any]) -> dict[str, Any]:
         "composition": composition, "lighting": lighting, "camera": camera,
         "subject": subject, "aesthetic_score": aesthetic_score,
         "template_value": template_value, "shooting_guidance": shooting_guidance,
+        "provenance": {
+            "method": "scene_rule_draft",
+            "visually_reviewed": False,
+            "human_reviewed": False,
+            "composition_ground_truth": False,
+            "aesthetic_ground_truth": False,
+        },
     }
 
 
@@ -530,7 +538,15 @@ def process_batch(batch_file: Path) -> Path:
 
 
 def main():
-    print("Starting enhanced visual annotation generation...")
+    global BASE_DIR, BATCH_DIR, RESULTS_DIR
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--data-root", type=Path, required=True,
+                        help="Local data tools directory containing preprocessed/")
+    args = parser.parse_args()
+    BASE_DIR = args.data_root.resolve()
+    BATCH_DIR = BASE_DIR / "preprocessed" / "annotation_batches.new_batch"
+    RESULTS_DIR = BATCH_DIR / "results"
+    print("Generating unverified rule drafts; not composition/aesthetic ground truth.")
     print(f"PIL available: {HAS_PIL}")
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)

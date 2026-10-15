@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -84,13 +85,41 @@ def validate_core(record: Any) -> list[str]:
     else:
         value = annotation.get("template_value")
         score = annotation.get("aesthetic_score")
-        if value not in {"medium", "high"}:
-            errors.append("annotation.template_value must be medium or high")
-        if not finite_number(score) or not 3 <= float(score) <= 5:
-            errors.append("annotation.aesthetic_score must be in [3, 5]")
         guidance = annotation.get("shooting_guidance")
-        if not isinstance(guidance, list) or not 1 <= len(guidance) <= 5:
-            errors.append("annotation.shooting_guidance must contain 1..5 items")
+        if value == "unrated":
+            if "aesthetic_score" not in annotation or score is not None:
+                errors.append("unrated annotation.aesthetic_score must be explicit null")
+            if guidance != []:
+                errors.append("unrated annotation.shooting_guidance must be empty")
+            provenance = annotation.get("provenance")
+            if not isinstance(provenance, dict) or provenance.get("aesthetic_ground_truth") is not False:
+                errors.append("unrated annotation requires provenance.aesthetic_ground_truth=false")
+            if "reference_review" not in record:
+                errors.append("unrated annotation requires hash-bound AI reference_review")
+        else:
+            if value not in {"medium", "high"}:
+                errors.append("annotation.template_value must be medium or high")
+            if not finite_number(score) or not 3 <= float(score) <= 5:
+                errors.append("annotation.aesthetic_score must be in [3, 5]")
+            if not isinstance(guidance, list) or not 1 <= len(guidance) <= 5:
+                errors.append("annotation.shooting_guidance must contain 1..5 items")
+
+    if "reference_review" in record:
+        review = record["reference_review"]
+        if not isinstance(review, dict):
+            errors.append("reference_review must be an object")
+        else:
+            if (review.get("photo_id") != record["photo_id"] or
+                    review.get("source_sha256") != record["source_sha256"]):
+                errors.append("reference_review must match photo_id and source_sha256")
+            digest = review.get("source_sha256")
+            if not isinstance(digest, str) or re.fullmatch(r"[a-f0-9]{64}", digest) is None:
+                errors.append("reference_review.source_sha256 must be a valid SHA-256")
+            if review.get("status") != "candidate_clean":
+                errors.append("reference_review.status must be candidate_clean")
+            provenance = review.get("provenance")
+            if not isinstance(provenance, dict) or provenance.get("method") != "ai_visual_review":
+                errors.append("reference_review requires provenance.method=ai_visual_review")
 
     embedding = record["embedding"]
     if not isinstance(embedding, dict):

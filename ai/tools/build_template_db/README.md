@@ -1,361 +1,148 @@
-# 摄影模板库工具链历史操作记录
+# 摄影参考库、小模型训练与评估
 
-> 本文保留 2026 年 7 月批次记录。当前源码、Android 路径及无私有数据校验命令见 [AI 工具说明](../README.md)。以下「当前」状态、素材数量和指标均属于历史批次，不能视作本次模型重训或泛化改善；示例数据路径需按本地数据位置调整。
+本目录负责素材导入、参考图整理、teacher embedding、小模型蒸馏、ONNX 导出、INT8 量化与检索评估。Android 实际加载 `aicamera-app/app/src/main/assets/ai/v9/`。历史 `visual-clean` 的 104 条索引不代表当前 App 的全部资产。
 
-> 当前阶段：模板库构建与端侧推荐原型。本文只保留还会继续用到的命令和边界。
+当前推荐模型为 `mobilenet_v3_small_retrieval`：官方预训练特征网络加 train-only 岭回归检索头，FP32 ONNX 4,900,248 bytes。49 张 val 的 Top5 同场景命中从 44 张提高至 47 张；冻结后的 53 张 test 从 45 张提高至 47 张。两次量化兼容实验均被拒绝，未采用失败的 INT8 权重。生活静物等子类存在回退，摄影美感与真机性能尚未证明，详见 [2026-10-15 模型报告](../../../docs/AI识别模型优化与验证-2026-10-15.md)。
 
-## 当前正式状态
+[2026-10-14 Tiny 历史实验](../../../docs/AI模型检索优化与实验-2026-10-14.md) 的三组微调未改善结论保持不变。工程入口见 [AI 工具说明](../README.md)。
 
-- 正式 raw manifest：`../raw_photos/manifest.annotation-clean.jsonl`
-- 正式 metadata：`../preprocessed/template_metadata.visual-clean.jsonl`
-- 正式索引：`../preprocessed/template_index.visual-clean/`
-- 正式模板数：104 条非人像模板。
-- embedding：全部 ready。
-- 不使用项目根目录 `results/`。
+## 本地目录与环境
 
-## 环境
+以下 PowerShell 命令从仓库根目录运行。复跑使用新实验目录，避免覆盖已有证据。
 
-```bash
-cd ai/tools/build_template_db
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pip install -r requirements-screening.txt
+```powershell
+$ModelTools = 'ai/tools/build_template_db'
+$ModelRun = 'local-output/model-optimization-rerun'
+$ModelData = 'local-data/AI-camera-local-archive/2026-10-10/private-data/tools'
+$ModelCheckpoint = "$ModelData/preprocessed/student_models/tiny_cnn_v9_wide_topk_siglip2_512/checkpoint.best.pt"
+New-Item -ItemType Directory -Force "$ModelRun/tmp" | Out-Null
+$env:TEMP = (Resolve-Path "$ModelRun/tmp").Path
+$env:TMP = $env:TEMP
 ```
 
-Android ONNX 导出和静态 int8 量化依赖 `onnx` / `onnxruntime`，已写入 `requirements.txt`。如果某个环境缺依赖，`export_student_model.py` 会把 ONNX 状态写成 `skipped`，不会伪造产物。
+训练需要匹配的 PyTorch / torchvision，依赖范围见 `requirements.txt`。本次实际环境为 Python 3.10、PyTorch 2.11.0+cu130、torchvision 0.26.0、ONNX 1.17.0、ONNX Runtime 1.19.2。CUDA 仅用于开发机训练，手机继续离线运行小模型。
 
-MediaPipe 姿态模型当前在：
+`local-data/` 存私有原图、历史权重与归档；`local-output/` 存实验清单、候选权重、裁剪结果、日志与虚拟环境。两者均被 Git 忽略。所有新增本地资料都留在原项目内，原始私有图片不随 GitHub 提交上传。
 
-```text
-models/pose_landmarker_lite.task
+## 数据审计
+
+```powershell
+python "$ModelTools/prepare_retrieval_data.py" --data-root $ModelData --output-dir "$ModelRun/dataset" --exclude-known-group-overlap
 ```
 
-MobileCLIP2-S0 原型 checkpoint 当前在：
+输出 train/val/test JSONL、manifest 与 audit。检查源图、teacher 向量哈希、维度和数值、跨集合 ID/内容重复，可排除已知来源帖交叉。无法恢复来源组的样本标为未知，不能视为独立。派生裁剪和 AI 修复版本须保留原图所在分组。
 
-```text
-models/mobileclip2_s0/mobileclip2_s0.pt
+当前批次的构图、光线及相机参数含按场景批量生成的规则标签，不是人工摄影真值。不能用这些标签宣称构图准确率或训练“好看照片”评分头。参考图需要另行检查主体完整、单张照片、无干扰 UI/教学字、可模仿及清晰度；AI 视觉分析须保留来源和不确定性。
+
+## 当前推荐模型：预训练特征迁移
+
+以下命令使用与现有报告完全相同的 prepared 清单，以新目录保留复跑证据。`python` 须来自安装了上述训练依赖的环境；本机实际使用的解释器是 `local-output/model-optimization-2026-10-14/.gpu-venv/Scripts/python.exe`。项目移动或重新生成清单后，必须先用旧模型重新产生同清单的 baseline 报告，不能绕过 manifest hash 检查。
+
+```powershell
+$RecognitionRun = 'local-output/model-recognition-rerun'
+$PreparedData = 'local-output/model-optimization-2026-10-14/dataset'
+$RecognitionBaseline = 'local-output/model-recognition-2026-10-15/baseline-assets/student_model.static_int8.onnx'
+$RecognitionBaselineReport = 'local-output/model-optimization-2026-10-14/quantization-baseline/retrieval/summary.json'
+New-Item -ItemType Directory -Force "$RecognitionRun/tmp" | Out-Null
+$env:TEMP = (Resolve-Path "$RecognitionRun/tmp").Path
+$env:TMP = $env:TEMP
+python "$ModelTools/train_transfer_retrieval.py" --dataset-dir $PreparedData --projection-checkpoint $ModelCheckpoint --baseline-report $RecognitionBaselineReport --output-dir "$RecognitionRun/transfer" --torch-cache "$RecognitionRun/torch-cache" --device auto
+python "$ModelTools/benchmark_onnx_retrieval.py" --dataset-dir $PreparedData --output-dir "$RecognitionRun/validation" --model "old_int8=$RecognitionBaseline" --model "fp32=$RecognitionRun/transfer/export/student_model.fp32.onnx" --reference fp32 --deployment-baseline old_int8 --threads 2 --repeats 50 --warmup 5
 ```
 
-SigLIP2 teacher checkpoint 当前在：
+训练只读取 train/val，固定 3 个 `λ=0.01,0.1,1.0` 候选，模型内部保留 Android RGB `[-1,1]` 输入契约并转换 ImageNet 标准化。512 维输出归一化，旧 Tiny/Lite checkpoint 仍可离线加载。官方权重只在显式训练时下载到 `--torch-cache`；推理和单元测试不下载。
 
-```text
-models/siglip2_base_patch16_224/
+迁移选择器要求 macro R@1、macro R@5、micro R@5、teacher Top5 重合率四项不低于旧产品模型，再选择教师重合率最高候选。`benchmark_onnx_retrieval.py` 同时输出逐项数值；历史 `validation_retrieval_gate_passed` 只覆盖两项 macro 与教师重合，阅读报告时仍须检查 micro R@5。相同输出维度不意味着新旧向量处于同一空间。
+
+模型冻结后才做一次 test 评估，不能观察 test 结果再换 λ。以下冻结文件绑定实际模型 SHA；首次评估产物和失败中间结果均不可覆盖。已有本次正式冻结记录和 test 报告时，直接查阅证据，不重复执行本例：
+
+```powershell
+$FrozenCandidate = "$RecognitionRun/transfer/export/student_model.fp32.onnx"
+$FrozenSelection = @{
+  selection_split = 'val'
+  test_used_for_selection = $false
+  baseline_sha256 = (Get-FileHash -LiteralPath $RecognitionBaseline -Algorithm SHA256).Hash.ToLowerInvariant()
+  candidate_sha256 = (Get-FileHash -LiteralPath $FrozenCandidate -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+$SelectionPath = Join-Path (Resolve-Path $RecognitionRun).Path 'frozen-selection.json'
+if (Test-Path -LiteralPath $SelectionPath) { throw 'Preserve the existing frozen selection' }
+[System.IO.File]::WriteAllText($SelectionPath, ($FrozenSelection | ConvertTo-Json), [System.Text.UTF8Encoding]::new($false))
+python "$ModelTools/evaluate_frozen_retrieval.py" --dataset-dir $PreparedData --selection "$RecognitionRun/frozen-selection.json" --baseline-model $RecognitionBaseline --candidate-model $FrozenCandidate --output-dir "$RecognitionRun/frozen-test"
 ```
 
-## 来源边界
+冻结评估器先校验模型 hash，再读取 train/test，检查 split、身份/源图哈希/已知来源组交叉。来源组未知仍会记入报告；不能因此宣称完全独立。四指标任一回退时 CLI 返回 2，并保留报告。当前真实证据在 `local-output/model-recognition-2026-10-15/`。
 
-允许候选来源：
+## 历史 Tiny 小模型微调
 
-- 自有或明确授权的本地素材。
-- Openverse / Wikimedia Commons / Flickr 中可追溯的公开候选。
-
-注意：
-
-- Unsplash / Pexels 普通 API 不用于批量 AI 数据收集，除非取得平台书面授权。
-- 小红书、Instagram、TikTok、微博等社交平台素材只能走“已授权本地导入”，不能靠爬虫或登录态抓取。
-- 人像必须额外确认肖像权。
-
-## 导入本地新批次
-
-```bash
-python import_local_photo_batch.py ../../图片素材/全部照片_已筛选 \
-  --output-dir ../raw_photos/new_batch \
-  --batch-id new_batch \
-  --overwrite
+```powershell
+python "$ModelTools/optimize_student_retrieval.py" --dataset-dir "$ModelRun/dataset" --init-checkpoint $ModelCheckpoint --output-dir "$ModelRun/candidate-a" --epochs 16 --device auto
 ```
 
-输出：
+旧 V9 权重是 223,680 参数、224×224 输入、512 维输出的 `tiny_cnn_v1`。本节复现历史固定结构实验，只用 train 图库与 val 查询选模：
 
-- `../raw_photos/new_batch/manifest.jsonl`
-- `../raw_photos/new_batch/import_report.json`
-- `../raw_photos/new_batch/images/`
+- 默认不随机翻转或裁切，保留摄影布局。原 `train_student_embedding.py` 的旧空间增强也改为显式 `--spatial-augmentation`。
+- teacher top-K 蒸馏在完整学生图库上归一化，惩罚 top-K 之外的错误高分候选；排除自身，图库向量每轮刷新并停止梯度。
+- val 按场景平均 recall@1/@5 均不得退步，再比较 teacher top-5 重合率。初始权重也参与选择，训练损失下降不能覆盖检索退步。
+- 不读取 test 图片选模。原训练器最终 test 评估已改为加载 best checkpoint；缓存改为源图哈希绑定的无损 PNG。
 
-本地导入只生成候选，不会进入正式库。
+输出 checkpoint、baseline/best validation、history、summary 和验证 embedding。`best_epoch=0` 或 `improved_validation=false` 表示没有证明微调改善，不能把保存动作称为模型升级。
 
-## 基础校验
+## 导出、量化、检索对照
 
-```bash
-python validate_manifest.py ../raw_photos/new_batch/manifest.jsonl
-python audit_dataset.py ../raw_photos/new_batch/manifest.jsonl
+以下以历史 Tiny 实验输出为例。新迁移模型的 FP32 ONNX 已由训练命令导出；若重新做量化兼容实验，仍须单独通过数值和检索门槛，不能因为文件更小就替换。
+
+```powershell
+python "$ModelTools/export_student_model.py" "$ModelRun/candidate-a/checkpoint.best.pt" --output-dir "$ModelRun/candidate-a/export"
+python "$ModelTools/quantize_onnx_static.py" "$ModelRun/candidate-a/export/student_model.fp32.onnx" --metadata "$ModelRun/dataset/train.jsonl" --validation-manifest "$ModelRun/dataset/val.jsonl" --output-model "$ModelRun/candidate-a/export/student_model.static_int8.onnx" --manifest-output "$ModelRun/candidate-a/export/android_onnx_runtime_manifest.json" --calibration-items 128 --batch-size 16
 ```
 
-校验内容包括：
+校准仅使用 train，按场景/照片类型分层抽样；val 单独验证数值漂移。已标记 val/test 的记录不能通过命令声明改作 train。没有验证集会标记 `not_validated` 并返回非零；数值检查失败也返回非零。`consistency_passed` 只表示同图向量接近，不代表检索合格。
 
-- JSONL schema
-- 文件可解码
-- SHA-256
-- 尺寸
-- 重复 hash
-- 权利和 review 状态字段
+默认只对 Conv/Gemm/MatMul 做 QDQ，其他算子保持 FP32。显式 `--quantize-ops Conv` 可让线性头保持浮点，产物应命名为 `mixed_conv_int8` 并据实报告混合精度。2026-10-15 的默认策略和 Conv-only 均未通过 `.95/.98/.02` 原阈值，所以停止尝试并固定 FP32。中文 Windows 路径若触发 ORT shape inference 错误，可在实验输出目录内用 ASCII 相对模型文件名运行；临时目录也保持项目内。
 
-## 人像姿态筛选
+随后各模型分别重算 train 图库和 val 查询，不能共用不同模型的 embedding：
 
-先生成只含人像的 manifest，再跑筛选：
-
-```bash
-python screen_candidates.py ../raw_photos/new_batch/manifest.portrait-screening.jsonl \
-  --model models/pose_landmarker_lite.task \
-  --output ../raw_photos/new_batch/screening_report.portrait.jsonl
+```powershell
+python "$ModelTools/benchmark_onnx_retrieval.py" --dataset-dir "$ModelRun/dataset" --output-dir "$ModelRun/onnx-comparison" --model "fp32=$ModelRun/candidate-a/export/student_model.fp32.onnx" --model 'old_int8=local-output/model-recognition-2026-10-15/baseline-assets/student_model.static_int8.onnx' --model "candidate_int8=$ModelRun/candidate-a/export/student_model.static_int8.onnx" --reference fp32 --deployment-baseline old_int8 --threads 2
 ```
 
-未检测到人体的人像候选应隔离，不进入人工 accepted 候选。
+报告分别记录同场景 micro/macro recall@1/@5、teacher top-5 重合率、同图数值余弦和桌面 CPU 耗时。命令完成不等于候选可上线，查看 `validation_retrieval_gate_passed` 与指标差值。`deployment_ready=false` 还表示资产配套和真机检查尚未完成。
 
-## 人工审核包
+历史“INT8 top-5 同场景 96.15%”是在包含 train 的 728 张图库中排除自身检索的结果，不是独立新照片准确率、好看率或商业门槛。桌面 CPU 延迟也不能写成中端手机延迟。
 
-```bash
-python make_review_pack.py ../raw_photos/new_batch/manifest.cv-preprocess-clean.jsonl \
-  --photo-type portrait \
-  --quality-status pending \
-  --output-dir ../raw_photos/new_batch/review_pack/portrait
+`evaluate_retrieval.py` 支持已有 embedding 的独立评估，拒绝 query/gallery ID 或源图哈希交叉。Android 重排对照只模拟候选自投票，不包含实际光线观测或时序稳定，不能代替 App 测试。
 
-python make_review_pack.py ../raw_photos/new_batch/manifest.cv-preprocess-clean.jsonl \
-  --photo-type landscape \
-  --quality-status pending \
-  --output-dir ../raw_photos/new_batch/review_pack/landscape
+## 恢复拼图、教程和截图中的照片
 
-python make_review_pack.py ../raw_photos/new_batch/manifest.cv-preprocess-clean.jsonl \
-  --photo-type still_life \
-  --quality-status pending \
-  --output-dir ../raw_photos/new_batch/review_pack/still_life
+先看原图，标出确实属于完整照片的区域。裁剪计划绑定源图 SHA-256，坐标为 EXIF 旋转修正后的归一化 `[left, top, right, bottom]`：
+
+```json
+{"photo_id":"来源图ID","source_sha256":"原图的64位SHA256","recovery_regions":[{"region_id":"panel_a","bbox":[0.05,0.10,0.48,0.90]}]}
 ```
 
-每包输出：
-
-- `index.html`
-- `contact_sheet.jpg`
-- `review_index.jsonl`
-
-## 应用人工审核结果
-
-示例：
-
-```bash
-python apply_review_decisions_file.py ../raw_photos/new_batch/manifest.cv-preprocess-clean.jsonl \
-  ../raw_photos/new_batch/review_decisions.md \
-  --review-pack-root ../raw_photos/new_batch/review_pack \
-  --output ../raw_photos/new_batch/manifest.reviewed.jsonl \
-  --accepted-output ../raw_photos/new_batch/manifest.accepted.jsonl \
-  --crop-output ../raw_photos/new_batch/review_crop_candidates.jsonl \
-  --summary-output ../raw_photos/new_batch/review_summary.json
+```powershell
+python "$ModelTools/recover_reference_crops.py" --train-manifest "$ModelRun/dataset/train.jsonl" --review-plan "$ModelRun/crop-plan.jsonl" --output-dir "$ModelRun/recovered-references"
 ```
 
-最终入库前必须满足：
+工具只处理明确指定的 train 区域，保留原图，输出无损 PNG，记录父/子图哈希、坐标和来源组。短边小于 224 会被拒绝，不放大制造细节；输出限项目 `local-output/` 新目录。
 
-- `quality_status=accepted`
-- `rights_status=accepted`
-- 人像还必须 `portrait_release_status=accepted`
+成功裁剪后仍须看主体完整性、残留文字/按钮并重新分析构图、生成 embedding。不能复制原拼图的向量或标签。AI 修复另存生成来源、提示词和父图，逐张复核；不能用生成修补画面证明真实拍摄引导改善。裁剪工具本身不执行生成式修补。
 
-本批次已由用户确认完整授权，审核应用工具会把输出 manifest 的 `rights.license` 规范化为 `local_authorized`，原始来源仍保留在 `source` 字段。
+`build_reviewed_reference_bundle.py` 从哈希绑定的 `ai_visual_review`、`candidate_clean` 记录选择 train 原图和复核后的派生图，重新运行指定 ONNX 生成全部向量，输出完整参考包。使用 `--help` 查看 train 清单、原 metadata、review、派生 manifest 和人脸锚点参数。`candidate_clean` 仅代表适合单图参考，不代表美感真值。
 
-多图拼接、封面图、带摄影教学文字但需要抠图的样本先写入 `review_crop_candidates.jsonl`，不直接进入 accepted manifest。
+未评价美感的参考使用 `aesthetic_score=null`、`template_value=unrated`、空 `shooting_guidance`，并声明 `aesthetic_ground_truth=false`。校验器只对带匹配图像哈希和 AI 审阅来源的记录开放此分支，旧 metadata、embedding 和 pose 校验仍保留。
 
-## CV 预处理
+## 新素材与验证
 
-审核前可用 `--include-pending` 做机器排查；正式输出只对 accepted 样本跑。
+现有工具顺序可用：`import_local_photo_batch.py` → manifest/audit → review pack → 应用审核记录 → CV 预处理 → 标注/embedding → 索引构建和资产检查。各工具以 `--help` 查看参数。文件名 `accepted` 不能证明做过逐张人工构图审核；素材许可、质量分析和人工审核应分别记录。
 
-```bash
-python preprocess.py ../raw_photos/new_batch/manifest.cv-preprocess-clean.jsonl \
-  --include-pending \
-  --output-root ../preprocessed/new_batch \
-  --jobs ../preprocessed/jobs.new_batch.pending.jsonl
+换权重必须配套重建全图库向量、索引、模型哈希与 manifest；维度相同不代表新旧向量可混用。
 
-python run_cv_preprocess.py ../preprocessed/jobs.new_batch.pending.jsonl \
-  --model models/pose_landmarker_lite.task \
-  --report ../preprocessed/cv_report.new_batch.pending.jsonl \
-  --allow-partial
+```powershell
+Push-Location ai/tools/build_template_db
+python -m unittest discover -s tests
+Pop-Location
+python -B ai/tools/validate_android_v9_assets.py --asset-root aicamera-app/app/src/main/assets/ai/v9
 ```
 
-如果有人像关键点失败：
-
-```bash
-python quarantine_cv_failures.py ../raw_photos/new_batch/manifest.cv-screened.jsonl \
-  ../preprocessed/cv_report.new_batch.pending.jsonl \
-  --output ../raw_photos/new_batch/manifest.cv-preprocess-clean.jsonl
-```
-
-## 视觉标注
-
-只有人工审核后的 accepted manifest 才能进入视觉标注。本批次素材授权已由用户于 2026-07-18 确认，不再作为阻塞项。
-
-```bash
-python build_annotation_requests.py ../raw_photos/new_batch/manifest.accepted.jsonl \
-  --prompt-template config/annotation_prompt.photography_tips.txt \
-  --output ../preprocessed/annotation_requests.new_batch.jsonl
-
-python pack_annotation_batches.py ../preprocessed/annotation_requests.new_batch.jsonl \
-  --output-dir ../preprocessed/annotation_batches.new_batch \
-  --max-items 50 \
-  --prefix annotation_batch_new_batch
-```
-
-视觉模型结果回来后：
-
-```bash
-python check_annotation_results.py ../preprocessed/annotation_batches.new_batch --require-complete
-python merge_annotation_results.py ../preprocessed/annotation_requests.new_batch.jsonl \
-  ../preprocessed/annotation_batches.new_batch/results/*.jsonl \
-  --output ../preprocessed/annotations.new_batch.jsonl
-python validate_annotations.py ../preprocessed/annotations.new_batch.jsonl
-```
-
-不要编造视觉标注结果。
-
-视觉标注里 `template_value=low/reject` 或 `aesthetic_score<3` 的样本不能进入模板 metadata：
-
-```bash
-python quarantine_annotation_results.py ../raw_photos/new_batch/manifest.accepted.jsonl \
-  ../preprocessed/annotations.new_batch.jsonl \
-  --output ../raw_photos/new_batch/manifest.template-candidates.jsonl
-```
-
-## Metadata、embedding、索引
-
-正式 template candidates + annotation 完成后：
-
-```bash
-python build_template_metadata.py ../raw_photos/new_batch/manifest.template-candidates.jsonl \
-  ../preprocessed/jobs.new_batch.accepted.jsonl \
-  ../preprocessed/annotations.new_batch.jsonl \
-  --output ../preprocessed/template_metadata.new_batch.jsonl
-```
-
-MobileCLIP2-S0 只保留为原型验证，不能作为商业默认路线。若只是复现阶段 2 原型，可执行：
-
-```bash
-python generate_mobileclip_embeddings.py ../preprocessed/jobs.new_batch.accepted.jsonl \
-  --checkpoint models/mobileclip2_s0/mobileclip2_s0.pt \
-  --projection pairwise
-```
-
-商业路线已选自有端侧 embedding 蒸馏。新 batch 应先用 teacher / baseline 生成 embedding 并评估质量，再做小模型蒸馏和端侧导出。
-
-```bash
-python generate_hf_image_embeddings.py ../preprocessed/template_metadata.new_batch.jsonl \
-  --model-id models/siglip2_base_patch16_224 \
-  --output-dir ../preprocessed/teacher_embeddings.siglip2_new_batch \
-  --metadata-output ../preprocessed/template_metadata.new_batch.siglip2-teacher.jsonl \
-  --manifest-output ../preprocessed/teacher_embeddings.siglip2_new_batch.jsonl
-
-python build_template_index.py ../preprocessed/template_metadata.new_batch.siglip2-teacher.jsonl \
-  --dimension 768 \
-  --output-dir ../preprocessed/template_index.new_batch.siglip2-teacher
-
-python build_usearch_index.py ../preprocessed/template_index.new_batch.siglip2-teacher
-python validate_template_index.py ../preprocessed/template_index.new_batch.siglip2-teacher
-
-python evaluate_template_index_quality.py ../preprocessed/template_index.new_batch.siglip2-teacher \
-  --top-k 5 \
-  --sample-size 24 \
-  --output-json ../preprocessed/template_index.new_batch.siglip2-teacher/templates.quality_report.json \
-  --output-md ../preprocessed/template_index.new_batch.siglip2-teacher/templates.quality_report.md
-
-python build_distillation_dataset.py ../preprocessed/template_metadata.new_batch.siglip2-teacher.jsonl \
-  --output-dir ../preprocessed/distillation.siglip2_new_batch
-
-python train_student_embedding.py ../preprocessed/distillation.siglip2_new_batch \
-  --output-dir ../preprocessed/student_models/tiny_cnn_v9_wide_topk_siglip2_512 \
-  --architecture tiny_cnn_v1 \
-  --output-dim 512 \
-  --image-size 224 \
-  --width-mult 1.5 \
-  --epochs 56 \
-  --batch-size 20 \
-  --learning-rate 0.0009 \
-  --lr-schedule cosine \
-  --min-learning-rate 0.00003 \
-  --weight-decay 0.0001 \
-  --relation-loss-weight 0.35 \
-  --listwise-loss-weight 0.06 \
-  --teacher-top-k 12 \
-  --listwise-temperature 0.12 \
-  --teacher-temperature 0.08 \
-  --hard-negative-loss-weight 0.04 \
-  --hard-negative-margin 0.04 \
-  --hard-negative-positives 4 \
-  --hard-negative-count 8 \
-  --photo-type-loss-weight 0.08 \
-  --scene-loss-weight 0.16 \
-  --cache-images \
-  --image-cache-dir ../preprocessed/student_image_cache_224
-
-python export_student_model.py ../preprocessed/student_models/tiny_cnn_v9_wide_topk_siglip2_512/checkpoint.best.pt \
-  --output-dir ../preprocessed/student_models/tiny_cnn_v9_wide_topk_siglip2_512/export
-
-python quantize_onnx_static.py \
-  ../preprocessed/student_models/tiny_cnn_v9_wide_topk_siglip2_512/export/student_model.fp32.onnx \
-  --metadata ../preprocessed/template_metadata.new_batch.siglip2-teacher.jsonl \
-  --output-model ../preprocessed/student_models/tiny_cnn_v9_wide_topk_siglip2_512/export/student_model.static_int8.onnx \
-  --manifest-output ../preprocessed/student_models/tiny_cnn_v9_wide_topk_siglip2_512/export/android_onnx_runtime_manifest.json \
-  --calibration-items 128 \
-  --batch-size 16
-
-python generate_student_embeddings.py ../preprocessed/template_metadata.new_batch.siglip2-teacher.jsonl \
-  --checkpoint ../preprocessed/student_models/tiny_cnn_v9_wide_topk_siglip2_512/checkpoint.best.pt \
-  --output-dir ../preprocessed/student_embeddings.tiny_cnn_v9_wide_topk_siglip2_512_new_batch \
-  --metadata-output ../preprocessed/template_metadata.new_batch.student-tiny-cnn-v9-wide-topk-512.jsonl \
-  --manifest-output ../preprocessed/student_embeddings.tiny_cnn_v9_wide_topk_siglip2_512_new_batch.jsonl \
-  --batch-size 20 \
-  --image-cache-dir ../preprocessed/student_image_cache_224
-
-python build_template_index.py ../preprocessed/template_metadata.new_batch.student-tiny-cnn-v9-wide-topk-512.jsonl \
-  --dimension 512 \
-  --output-dir ../preprocessed/template_index.new_batch.student-tiny-cnn-v9-wide-topk-512
-
-python build_usearch_index.py ../preprocessed/template_index.new_batch.student-tiny-cnn-v9-wide-topk-512
-python validate_template_index.py ../preprocessed/template_index.new_batch.student-tiny-cnn-v9-wide-topk-512
-
-python evaluate_template_index_quality.py ../preprocessed/template_index.new_batch.student-tiny-cnn-v9-wide-topk-512 \
-  --top-k 5 \
-  --sample-size 24 \
-  --output-json ../preprocessed/template_index.new_batch.student-tiny-cnn-v9-wide-topk-512/templates.quality_report.json \
-  --output-md ../preprocessed/template_index.new_batch.student-tiny-cnn-v9-wide-topk-512/templates.quality_report.md
-
-python generate_onnx_embeddings.py ../preprocessed/template_metadata.new_batch.siglip2-teacher.jsonl \
-  --onnx-model ../preprocessed/student_models/tiny_cnn_v9_wide_topk_siglip2_512/export/student_model.static_int8.onnx \
-  --output-dir ../preprocessed/student_embeddings.tiny_cnn_v9_static_int8_onnx_new_batch \
-  --metadata-output ../preprocessed/template_metadata.new_batch.student-tiny-cnn-v9-static-int8-onnx-512.jsonl \
-  --manifest-output ../preprocessed/student_embeddings.tiny_cnn_v9_static_int8_onnx_new_batch.jsonl \
-  --batch-size 16 \
-  --image-cache-dir ../preprocessed/student_image_cache_224
-
-python build_template_index.py ../preprocessed/template_metadata.new_batch.student-tiny-cnn-v9-static-int8-onnx-512.jsonl \
-  --dimension 512 \
-  --output-dir ../preprocessed/template_index.new_batch.student-tiny-cnn-v9-static-int8-onnx-512
-
-python build_usearch_index.py ../preprocessed/template_index.new_batch.student-tiny-cnn-v9-static-int8-onnx-512
-python validate_template_index.py ../preprocessed/template_index.new_batch.student-tiny-cnn-v9-static-int8-onnx-512
-
-python evaluate_template_index_quality.py ../preprocessed/template_index.new_batch.student-tiny-cnn-v9-static-int8-onnx-512 \
-  --top-k 5 \
-  --sample-size 24 \
-  --output-json ../preprocessed/template_index.new_batch.student-tiny-cnn-v9-static-int8-onnx-512/templates.quality_report.json \
-  --output-md ../preprocessed/template_index.new_batch.student-tiny-cnn-v9-static-int8-onnx-512/templates.quality_report.md
-```
-
-不要重复生成已有 104 条正式 embedding，除非明确重建全库。
-
-当前推荐 student 检索候选是 `tiny_cnn_v9_wide_topk_siglip2_512`：512 维，223,680 参数，FP32 TorchScript 约 1.03MB，dynamic int8 原型约 671KB，FP32 ONNX 897,730 bytes，static int8 ONNX 301,677 bytes。v9 FP32 top5 同场景 96.57%，static int8 ONNX top5 同场景 96.15%，均达到 95%+ 质量门槛并接近 SigLIP2 teacher 的 97.53%。`export_student_model.py` 的 dynamic int8 只量化 Linear 层；Android 首发使用 ONNX Runtime Mobile static int8 包，仍需要真机延迟验证。
-
-Android 端侧预算按平衡档记录在 `export/export_manifest.json`：
-
-- 单帧 embedding 延迟目标：p50 <= 80ms，p90 <= 150ms。
-- 量化后模型大小目标：<= 5MB。
-- 相机预览中不要每帧跑 embedding，建议 500ms-1000ms 抽帧或画面变化触发。
-- 推荐结果使用 top5 + 规则重排，不只依赖 top1。
-
-## 全量验证
-
-```bash
-python3 -m unittest discover -s tests
-cd ../../..
-python3 ai/tools/build_template_db/check_pipeline.py --root . --require-embeddings
-python3 ai/tools/validate_android_v9_assets.py --asset-root aicamera-app/app/src/main/assets/ai/v9
-```
-
-## 当前边界
-
-- `template_index.visual-clean` 是当前正式索引。
-- `new_batch` 已完成人工审核、视觉标注、teacher embedding、teacher index、蒸馏数据集、student v5/v6/v8/v9 训练和 student index；尚未合并为正式索引。
-- MobileCLIP2-S0 只用于阶段 2 原型；商业路线已选自有端侧 embedding 蒸馏。
-- `engine/src/utils/usearch.hpp` 不是有效 USearch C++ 依赖，生产 ANN 接入前必须替换。
+测试验证实现行为。“更容易拍出好看照片”还需要实拍执行引导前后的盲评与动作正确率记录。

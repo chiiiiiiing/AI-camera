@@ -237,6 +237,7 @@ class RenderViewModel @Inject constructor() : ViewModel() {
         var subjectFrac: Float? = null
         var hasSubject = false
         for (line in output.guideLines) {
+            if (!line.visible) continue
             when (line.type) {
                 "horizon_level" -> {
                     angle = (line.params["angle_degrees"] as? Number)?.toFloat()
@@ -246,9 +247,9 @@ class RenderViewModel @Inject constructor() : ViewModel() {
                 "subject_box" -> {
                     // ★ 只信真实检测框（real=true）：模板占位框会让
                     //   自动变焦对着假主体算出「无需变焦」的错误结论
-                    val isReal = line.params["real"] == true
+                    val isReal = line.params["real"] == true && line.params["anchor_kind"] == "face"
                     val h = (line.params["height"] as? Number)?.toFloat()
-                    if (isReal && h != null && h > 0f) {
+                    if (isReal && h != null && h.isFinite() && h > 0f && h <= 1f) {
                         subjectFrac = h
                         hasSubject = true
                     }
@@ -323,6 +324,8 @@ class RenderViewModel @Inject constructor() : ViewModel() {
         var roll: Float? = null
         var pitch: Float? = null
         var yaw: Float? = null
+        var pitchTarget: Float? = null
+        var yawTarget: Float? = null
         var isUpright: Boolean? = null
         var subjectCx: Float? = null
         var subjectCy: Float? = null
@@ -330,23 +333,32 @@ class RenderViewModel @Inject constructor() : ViewModel() {
         var targetCx: Float? = null
         var targetCy: Float? = null
         var targetTol = 0.12f
+        var coordinateAspectRatio = 1f
 
         for (line in output.guideLines) {
+            if (!line.visible) continue
             when (line.type) {
                 "horizon_level" -> {
                     roll = (line.params["angle_degrees"] as? Number)?.toFloat()
                     pitch = (line.params["pitch_degrees"] as? Number)?.toFloat()
                     yaw = (line.params["yaw_degrees"] as? Number)?.toFloat()
+                    if (line.params["pose_target_verified"] == true) {
+                        pitchTarget = (line.params["target_pitch_degrees"] as? Number)?.toFloat()?.takeIf { it.isFinite() }
+                        yawTarget = (line.params["target_yaw_degrees"] as? Number)?.toFloat()?.takeIf { it.isFinite() }
+                    }
                     isUpright = line.params["is_upright"] as? Boolean
                 }
                 "subject_box" -> {
-                    val isReal = line.params["real"] == true
+                    val isReal = line.params["real"] == true && line.params["anchor_kind"] == "face"
                     if (isReal) {
                         val x = (line.params["x"] as? Number)?.toFloat()
                         val y = (line.params["y"] as? Number)?.toFloat()
                         val w = (line.params["width"] as? Number)?.toFloat()
                         val h = (line.params["height"] as? Number)?.toFloat()
-                        if (x != null && y != null && w != null && h != null) {
+                        if (x != null && y != null && w != null && h != null &&
+                            x.isFinite() && y.isFinite() && w.isFinite() && h.isFinite() && w > 0f && h > 0f &&
+                            x >= 0f && y >= 0f && x + w <= 1f && y + h <= 1f
+                        ) {
                             subjectCx = x + w / 2f
                             subjectCy = y + h / 2f
                             hasRealSubject = true
@@ -354,9 +366,13 @@ class RenderViewModel @Inject constructor() : ViewModel() {
                     }
                 }
                 "target_zone" -> {
-                    targetCx = (line.params["center_x"] as? Number)?.toFloat()
-                    targetCy = (line.params["center_y"] as? Number)?.toFloat()
-                    targetTol = (line.params["radius"] as? Number)?.toFloat() ?: 0.12f
+                    // The live subject detector observes a face, not the complete body.
+                    if (line.params["anchor_kind"] == "face") {
+                        targetCx = (line.params["center_x"] as? Number)?.toFloat()
+                        targetCy = (line.params["center_y"] as? Number)?.toFloat()
+                        targetTol = (line.params["radius"] as? Number)?.toFloat() ?: 0.12f
+                        coordinateAspectRatio = (line.params["coordinate_aspect_ratio"] as? Number)?.toFloat() ?: 1f
+                    }
                 }
             }
         }
@@ -375,7 +391,10 @@ class RenderViewModel @Inject constructor() : ViewModel() {
             targetTolerance = targetTol,
             expectsSubject = output.expectsSubject,
             hasRealSubject = hasRealSubject,
-            modelConfidence = output.confidence
+            modelConfidence = output.confidence,
+            pitchTargetDegrees = pitchTarget,
+            yawTargetDegrees = yawTarget,
+            coordinateAspectRatio = coordinateAspectRatio
         )
     }
 }

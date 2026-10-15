@@ -7,6 +7,23 @@ import train_student_embedding
 
 
 class TrainStudentEmbeddingTests(unittest.TestCase):
+    def test_wrong_neighbor_outside_teacher_topk_is_penalized(self):
+        vectors = torch.tensor([[1., 0., 0.], [.8, .6, 0.], [.8, -.6, 0.], [0., 0., 1.]])
+        bank = train_student_embedding.ReferenceBank(vectors, vectors, torch.zeros(4).long(), torch.zeros(4).long())
+        good = torch.tensor([[1., 0., 0.]])
+        bad = torch.tensor([[0., 0., 1.]], requires_grad=True)
+        def loss(query):
+            return train_student_embedding.teacher_topk_listwise_loss(query, torch.tensor([0]), bank, 2, .2, .2)
+        self.assertGreater(float(loss(bad)), float(loss(good)) + 1.)
+        loss(bad).backward()
+        self.assertGreater(float(bad.grad.abs().sum()), 0.)
+
+    def test_default_augmentation_preserves_spatial_layout(self):
+        transform = train_student_embedding.transform_for_split(224, train=True)
+        names = [type(step).__name__ for step in transform.transforms]
+        self.assertNotIn("RandomHorizontalFlip", names)
+        self.assertNotIn("RandomResizedCrop", names)
+
     def test_teacher_projection_outputs_unit_vectors(self):
         embeddings = np.array(
             [

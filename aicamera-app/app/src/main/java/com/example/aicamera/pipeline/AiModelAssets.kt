@@ -24,7 +24,7 @@ import java.security.MessageDigest
  * - 由 [AiEngineManager] 在后台线程调用（首次启动或版本升级）
  *
  * ## 完整性
- * 复制后按 `android_onnx_runtime_manifest.json` 中的 sha256 校验 int8 模型，
+ * 复制后按 `android_onnx_runtime_manifest.json` 中的 sha256 校验部署模型，
  * 防止截断/损坏的模型进入推理链路（见 [verifyModelIntegrity]）。
  */
 object AiModelAssets {
@@ -34,11 +34,11 @@ object AiModelAssets {
     private const val VERSION_FILE = "ai_model_version.txt"
 
     /** 资产内容变化时递增，强制旧设备重新复制 */
-    private const val CURRENT_VERSION = "v9-static-int8-onnx-2"
+    private const val CURRENT_VERSION = "v10-reviewed-recognition-1"
 
-    /** 必须的模型文件（fp32 对照模型不进 APK，仅 AI 侧调试用） */
+    /** 必须的部署文件；模型精度由 manifest 记录，不编码在部署文件名中。 */
     private val REQUIRED_FILES = listOf(
-        "student_model.static_int8.onnx",
+        MODEL_FILE,
         "android_onnx_runtime_manifest.json",
         "android_runtime_config.json"
     )
@@ -51,7 +51,7 @@ object AiModelAssets {
     )
 
     /** 模型文件名（sha256 校验对象） */
-    private const val MODEL_FILE = "student_model.static_int8.onnx"
+    private const val MODEL_FILE = "student_model.onnx"
     private const val MANIFEST_FILE = "android_onnx_runtime_manifest.json"
 
     // ── 公开 API ──────────────────────────────────────────────
@@ -139,7 +139,7 @@ object AiModelAssets {
     }
 
     /**
-     * 按 manifest 中的 sha256 校验 int8 模型完整性。
+     * 按 manifest 中的 sha256 校验部署模型完整性。
      *
      * @return true = 校验通过；缺失或损坏的 manifest / 模型返回 false。
      */
@@ -168,13 +168,18 @@ object AiModelAssets {
         return match
     }
 
-    /** 从 manifest JSON 读取 int8 模型的期望 sha256，读取失败返回 null */
+    /** 新 manifest 使用 deployment_onnx；仅在该字段不存在时兼容旧 manifest。 */
     private fun expectedModelSha256(modelDir: File): String? {
         return try {
             val manifest = File(modelDir, MANIFEST_FILE)
             if (!manifest.exists()) return null
-            JSONObject(manifest.readText())
-                .optJSONObject("static_int8_onnx")
+            val content = JSONObject(manifest.readText())
+            val deployment = if (content.has("deployment_onnx")) {
+                content.optJSONObject("deployment_onnx")
+            } else {
+                content.optJSONObject("static_int8_onnx")
+            }
+            deployment
                 ?.optString("sha256")
                 ?.takeIf { it.matches(Regex("[0-9a-fA-F]{64}")) }
         } catch (e: Exception) {

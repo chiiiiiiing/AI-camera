@@ -142,7 +142,8 @@ class V9Inference(
             val selectedHit = templateStabilizer.select(reranked)
             val meta = selectedHit.metadata ?: index.getMetadata(selectedHit.templateId)
             return if (meta != null) {
-                metaToFakeOutput(meta, selectedHit.rerankScore, filterRecommendation, autoZoomRecommendation)
+                metaToFakeOutput(meta, selectedHit.cosine, frame.displayAspectRatio,
+                    filterRecommendation, autoZoomRecommendation)
             } else {
                 createEmptyResult(filterRecommendation, autoZoomRecommendation)
             }
@@ -174,10 +175,13 @@ class V9Inference(
     private fun metaToFakeOutput(
         meta: TemplateMeta,
         score: Float,
+        frameAspectRatio: Float?,
         filterRecommendation: FilterRecommendation,
         autoZoomRecommendation: AutoZoomRecommendation
     ): FakeInferenceOutput {
-        val strategy = compositionTypeToStrategy(meta.compositionType)
+        // Legacy composition labels were generated from scene classes. Only image-reviewed
+        // geometry can supply a target; scene labels cannot locate a face or a horizon.
+        val strategy = CompositionStrategy.RULE_OF_THIRDS
         val scene = sceneCategoryToSceneType(meta.sceneCategory)
 
         val guideLines = mutableListOf<FakeGuideLine>()
@@ -192,33 +196,18 @@ class V9Inference(
         )
 
         // 2. 目标区域 — 根据构图类型选位置
-        v9SubjectTarget(meta.subjectPosition)?.let { (targetX, targetY) ->
+        V9ReferencePolicy.faceTarget(meta, score, frameAspectRatio)?.let { anchor ->
             guideLines.add(FakeGuideLine("target_zone", true,
-                mapOf("center_x" to targetX, "center_y" to targetY,
-                    "radius" to if (meta.subjectPosition == "center") 0.15f else 0.12f)))
+                mapOf("center_x" to anchor.x, "center_y" to anchor.y,
+                    "radius" to 0.08f, "anchor_kind" to "face")))
         }
 
         // 3. 水平仪 + 水平参考线（reference_y 合并进同一条线，避免重复绘制）
-        val horizonRefY = when (meta.horizonPosition) {
-            "upper_third" -> 0.333f
-            "lower_third" -> 0.667f
-            "middle" -> 0.5f
-            else -> null
-        }
         val horizonParams = mutableMapOf<String, Any>("angle_degrees" to 0f)
-        if (horizonRefY != null) horizonParams["reference_y"] = horizonRefY
         guideLines.add(FakeGuideLine("horizon_level", true, horizonParams))
 
         // Subject boxes come only from the live geometry detector; template metadata cannot
         // locate a person in the current preview frame.
-
-        // 5. 引导线提示
-        if (meta.leadingLines) {
-            guideLines.add(
-                FakeGuideLine("direction_arrow", true,
-                    mapOf("from_x" to 0.3f, "from_y" to 0.6f, "to_x" to 0.5f, "to_y" to 0.35f))
-            )
-        }
 
         return FakeInferenceOutput(
             sceneType = scene,

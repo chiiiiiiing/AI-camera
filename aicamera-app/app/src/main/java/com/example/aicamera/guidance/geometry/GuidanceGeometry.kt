@@ -16,7 +16,7 @@ import kotlin.math.hypot
  * - SUBJECT_ALIGNED（主体已进入目标区容差）
  * - NONE（其余情况）
  *
- * PITCH 与 YAW 系列第一版不做（需要 IMU 姿态/视觉几何之外更多的信号，docs/10 明确不建议硬做）。
+ * PITCH/YAW 仅在调用方提供已验证的目标姿态时启用；观测角度本身不是目标。
  */
 object GuidanceGeometry {
 
@@ -65,6 +65,8 @@ object GuidanceGeometry {
      * @param pitchAngleDeg 设备俯仰角（度，正值 = 上仰），无信号传 null
      * @param yawAngleDeg 设备偏航角（度），无信号传 null
      * @param yawTargetDeg 偏航目标角（度），null 时不判断偏航
+     * @param pitchTargetDeg 已验证的俯仰目标角（度），null 时尊重当前拍摄角度
+     * @param coordinateAspectRatio 转正显示帧宽/高；目标圆半径以短边为基准
      */
     fun guidanceCue(
         subjectCx: Float?,
@@ -76,7 +78,9 @@ object GuidanceGeometry {
         horizonAngleDeg: Float? = null,
         pitchAngleDeg: Float? = null,
         yawAngleDeg: Float? = null,
-        yawTargetDeg: Float? = null
+        yawTargetDeg: Float? = null,
+        pitchTargetDeg: Float? = null,
+        coordinateAspectRatio: Float = 1f
     ): GuidanceCue {
         // 1. 水平倾斜优先（构图先要端平）
         val angle = horizonAngleDeg?.takeIf { it.isFinite() }
@@ -84,9 +88,9 @@ object GuidanceGeometry {
         if (angle != null && angle < -ROLL_THRESHOLD_DEG) return GuidanceCue.ROLL_CLOCKWISE
 
         // 2. 俯仰角
-        val pitch = pitchAngleDeg?.takeIf { it.isFinite() }
-        if (pitch != null && pitch > PITCH_THRESHOLD_DEG) return GuidanceCue.PITCH_DOWN
-        if (pitch != null && pitch < -PITCH_THRESHOLD_DEG) return GuidanceCue.PITCH_UP
+        val pitchDelta = angleDelta(pitchAngleDeg, pitchTargetDeg)
+        if (pitchDelta != null && pitchDelta > PITCH_THRESHOLD_DEG) return GuidanceCue.PITCH_DOWN
+        if (pitchDelta != null && pitchDelta < -PITCH_THRESHOLD_DEG) return GuidanceCue.PITCH_UP
 
         // 3. 偏航角（需有目标朝向）
         if (yawAngleDeg != null && yawTargetDeg != null && yawAngleDeg.isFinite() && yawTargetDeg.isFinite()) {
@@ -96,30 +100,39 @@ object GuidanceGeometry {
         }
 
         // 4. 模板期望主体但没检测到 → 引导用户放入主体
-        val hasSubject = subjectCx != null && subjectCy != null && subjectCx.isFinite() && subjectCy.isFinite()
+        val hasSubject = validCoordinate(subjectCx) && validCoordinate(subjectCy)
         if (!hasSubject) {
             return if (expectsSubject) GuidanceCue.SUBJECT_TARGET else GuidanceCue.NONE
         }
 
-        // 5. 主体 vs 目标区差值（与 docs/10 的映射一致）
-        val tolerance = targetTolerance.takeIf { it.isFinite() }?.coerceIn(MIN_TOLERANCE, 0.5f) ?: 0.12f
-        val dx = subjectCx!! - (targetCx.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0.5f)
-        val dy = subjectCy!! - (targetCy.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0.5f)
+        // 5. MOVE describes the phone, not the subject's pixel motion. Moving
+        // the phone right shifts a stationary subject left in display space.
+        // Both rear previews and already-mirrored front previews use this frame.
+        if (!isValidTarget(targetCx, targetCy, targetTolerance) ||
+            !coordinateAspectRatio.isFinite() || coordinateAspectRatio <= 0f
+        ) {
+            return if (expectsSubject) GuidanceCue.SUBJECT_TARGET else GuidanceCue.NONE
+        }
+        val tolerance = effectiveTargetRadius(targetTolerance)
+        val dx = (subjectCx!! - targetCx) * maxOf(1f, coordinateAspectRatio)
+        val dy = (subjectCy!! - targetCy) * maxOf(1f, 1f / coordinateAspectRatio)
 
-        if (abs(dx) <= tolerance && abs(dy) <= tolerance) {
+        if (hypot(dx, dy) <= tolerance) {
             return GuidanceCue.SUBJECT_ALIGNED
         }
-        if (dx > tolerance) return GuidanceCue.MOVE_LEFT
-        if (dx < -tolerance) return GuidanceCue.MOVE_RIGHT
-        if (dy > tolerance) return GuidanceCue.MOVE_UP
-        if (dy < -tolerance) return GuidanceCue.MOVE_DOWN
-        return GuidanceCue.SUBJECT_TARGET
+        // A point can be outside the circle while both component errors are below
+        // the radius. Correct the dominant error instead of accepting a square.
+        return if (abs(dx) >= abs(dy)) {
+            if (dx > 0f) GuidanceCue.MOVE_RIGHT else GuidanceCue.MOVE_LEFT
+        } else {
+            if (dy > 0f) GuidanceCue.MOVE_DOWN else GuidanceCue.MOVE_UP
+        }
     }
 
     /**
      * 计算构图进度 (0.0–1.0)。
      *
-     * 位置/水平/俯仰/偏航按权重归一化混合；所有信号都缺失时返回 null
+     * 位置/水平及有明确目标的俯仰/偏航按权重归一化混合；所有可比较信号都缺失时返回 null
      * （调用方应保持未验证，不能把检索相似度当作构图达标）。
      */
     fun compositionProgress(
@@ -130,35 +143,45 @@ object GuidanceGeometry {
         horizonAngleDeg: Float? = null,
         pitchAngleDeg: Float? = null,
         yawAngleDeg: Float? = null,
-        yawTargetDeg: Float? = null
+        yawTargetDeg: Float? = null,
+        pitchTargetDeg: Float? = null,
+        targetTolerance: Float = 0.12f,
+        coordinateAspectRatio: Float = 1f
     ): Float? {
         var score = 0f
         var weight = 0f
 
-        if (subjectCx != null && subjectCy != null && subjectCx.isFinite() &&
-            subjectCy.isFinite() && targetCx.isFinite() && targetCy.isFinite()
+        if (validCoordinate(subjectCx) && validCoordinate(subjectCy) &&
+            isValidTarget(targetCx, targetCy, targetTolerance) &&
+            coordinateAspectRatio.isFinite() && coordinateAspectRatio > 0f
         ) {
-            val dist = hypot(subjectCx - targetCx, subjectCy - targetCy)
-            val posScore = (1f - dist / POSITION_REF_DIST).coerceIn(0f, 1f)
+            val dist = hypot((subjectCx!! - targetCx) * maxOf(1f, coordinateAspectRatio),
+                (subjectCy!! - targetCy) * maxOf(1f, 1f / coordinateAspectRatio))
+            val remaining = (dist - effectiveTargetRadius(targetTolerance)).coerceAtLeast(0f)
+            val posScore = (1f - remaining / POSITION_REF_DIST).coerceIn(0f, 1f)
             score += POSITION_WEIGHT * posScore
             weight += POSITION_WEIGHT
         }
 
         if (horizonAngleDeg != null && horizonAngleDeg.isFinite()) {
-            val hScore = (1f - abs(horizonAngleDeg) / HORIZON_REF_DEG).coerceIn(0f, 1f)
+            val hScore = (1f - (abs(horizonAngleDeg) - ROLL_THRESHOLD_DEG).coerceAtLeast(0f) /
+                HORIZON_REF_DEG).coerceIn(0f, 1f)
             score += ROLL_WEIGHT * hScore
             weight += ROLL_WEIGHT
         }
 
-        if (pitchAngleDeg != null && pitchAngleDeg.isFinite()) {
-            val pScore = (1f - abs(pitchAngleDeg) / PITCH_REF_DEG).coerceIn(0f, 1f)
+        val pitchDelta = angleDelta(pitchAngleDeg, pitchTargetDeg)
+        if (pitchDelta != null) {
+            val pScore = (1f - (abs(pitchDelta) - PITCH_THRESHOLD_DEG).coerceAtLeast(0f) /
+                PITCH_REF_DEG).coerceIn(0f, 1f)
             score += PITCH_WEIGHT * pScore
             weight += PITCH_WEIGHT
         }
 
         if (yawAngleDeg != null && yawTargetDeg != null && yawAngleDeg.isFinite() && yawTargetDeg.isFinite()) {
             val delta = normalizeAngle(yawAngleDeg - yawTargetDeg)
-            val yScore = (1f - abs(delta) / YAW_REF_DEG).coerceIn(0f, 1f)
+            val yScore = (1f - (abs(delta) - YAW_THRESHOLD_DEG).coerceAtLeast(0f) /
+                YAW_REF_DEG).coerceIn(0f, 1f)
             score += YAW_WEIGHT * yScore
             weight += YAW_WEIGHT
         }
@@ -175,17 +198,41 @@ object GuidanceGeometry {
         progress: Float?,
         expectsSubject: Boolean,
         hasSubject: Boolean,
-        hasRecommendation: Boolean = true
+        hasRecommendation: Boolean = true,
+        hasCompositionTarget: Boolean = true
     ): Float {
         if (!hasRecommendation || (expectsSubject && !hasSubject)) return 0f
         if (progress == null || !progress.isFinite()) return 0f
         val safe = progress.coerceIn(0f, 1f)
+        // Level alone is useful guidance, but not proof of reference composition.
+        if (!hasCompositionTarget) return safe * 0.7f
         return when (cue) {
             GuidanceCue.SUBJECT_ALIGNED -> progressWithAlignedBoost(cue, safe)
             GuidanceCue.NONE -> safe
-            else -> safe.coerceAtMost(0.9f)
+            else -> safe * 0.7f
         }
     }
+
+    fun isValidTarget(cx: Float?, cy: Float?, radius: Float): Boolean =
+        validCoordinate(cx) && validCoordinate(cy) && radius.isFinite() && radius > 0f
+
+    fun effectiveTargetRadius(radius: Float): Float = radius.coerceIn(MIN_TOLERANCE, 0.5f)
+
+    /** Radius uses the shorter display-frame dimension, matching the rendered circle. */
+    fun isSubjectAligned(cx: Float?, cy: Float?, targetCx: Float?, targetCy: Float?, radius: Float,
+                         coordinateAspectRatio: Float = 1f): Boolean =
+        validCoordinate(cx) && validCoordinate(cy) && isValidTarget(targetCx, targetCy, radius) &&
+            coordinateAspectRatio.isFinite() && coordinateAspectRatio > 0f &&
+            hypot((cx!! - targetCx!!) * maxOf(1f, coordinateAspectRatio),
+                (cy!! - targetCy!!) * maxOf(1f, 1f / coordinateAspectRatio)) <= effectiveTargetRadius(radius)
+
+    private fun validCoordinate(value: Float?): Boolean = value != null && value.isFinite() && value in 0f..1f
+
+    /** Null means no comparable, explicitly targeted pose; never assumes zero. */
+    fun angleDelta(observed: Float?, target: Float?): Float? =
+        if (observed != null && target != null && observed.isFinite() && target.isFinite()) {
+            normalizeAngle(observed - target)
+        } else null
 
     /**
      * 进度与指令对齐（纯函数，便于单测）。

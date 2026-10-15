@@ -5,6 +5,86 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CompositionSessionControllerTest {
+
+    @Test
+    fun `capture workflow cue preserves the controller phone action`() {
+        assertEquals(GuidanceCue.MOVE_LEFT, CompositionSessionController.GuidanceAction.MoveLeft.toGuidanceCue())
+        assertEquals(GuidanceCue.MOVE_RIGHT, CompositionSessionController.GuidanceAction.MoveRight.toGuidanceCue())
+        assertEquals(GuidanceCue.MOVE_UP, CompositionSessionController.GuidanceAction.MoveUp.toGuidanceCue())
+        assertEquals(GuidanceCue.MOVE_DOWN, CompositionSessionController.GuidanceAction.MoveDown.toGuidanceCue())
+        assertEquals(GuidanceCue.ROLL_CLOCKWISE, CompositionSessionController.GuidanceAction.RotateClockwise.toGuidanceCue())
+        assertEquals(GuidanceCue.NONE, CompositionSessionController.GuidanceAction.HoldStill.toGuidanceCue())
+    }
+    @Test
+    fun `45 degree viewpoint and changing yaw are retained without model pose target`() {
+        val controller = activeController()
+        for (id in 1L..12L) controller.observe(observation(id).copy(
+            pitchDegrees = -45f, pitchTargetDegrees = null, yawDegrees = (id * 20f) % 360f,
+            expectsSubject = true, hasRealSubject = true,
+            subjectCx = .5f, subjectCy = .5f, targetCx = .5f, targetCy = .5f
+        ))
+        assertEquals(CompositionSessionController.State.Ready, controller.state.value)
+    }
+
+    @Test
+    fun `explicit pitch target can guide a tilted composition without forcing zero`() {
+        val controller = activeController()
+        for (id in 1L..6L) controller.observe(observation(id).copy(
+            pitchDegrees = -20f, pitchTargetDegrees = -45f
+        ))
+        assertEquals(CompositionSessionController.GuidanceAction.PitchDown, controller.action.value)
+        for (id in 7L..12L) controller.observe(observation(id).copy(
+            pitchDegrees = -45f, pitchTargetDegrees = -45f
+        ))
+        assertEquals(CompositionSessionController.State.Ready, controller.state.value)
+    }
+
+    @Test
+    fun `circular face target rejects diagonal outside point and verifies entry`() {
+        val controller = activeController()
+        fun portrait(id: Long, x: Float, y: Float) = observation(id).copy(
+            expectsSubject = true, hasRealSubject = true, subjectCx = x, subjectCy = y,
+            targetCx = 0.5f, targetCy = 0.5f, targetTolerance = 0.12f
+        )
+        for (id in 1L..12L) controller.observe(portrait(id, .59f, .59f))
+        assertTrue(controller.state.value is CompositionSessionController.State.Adjusting)
+        assertTrue(controller.action.value == CompositionSessionController.GuidanceAction.MoveRight ||
+            controller.action.value == CompositionSessionController.GuidanceAction.MoveDown)
+        for (id in 13L..22L) controller.observe(portrait(id, .55f, .55f))
+        assertEquals(CompositionSessionController.State.Ready, controller.state.value)
+    }
+
+    @Test
+    fun `portrait without compatible target or requested pose observation stays unverified`() {
+        val missingTarget = activeController()
+        for (id in 1L..12L) missingTarget.observe(observation(id).copy(
+            expectsSubject = true, hasRealSubject = true, subjectCx = .5f, subjectCy = .5f
+        ))
+        assertUnverified(missingTarget)
+        val missingPose = activeController()
+        for (id in 1L..12L) missingPose.observe(observation(id).copy(
+            pitchDegrees = null, pitchTargetDegrees = -45f
+        ))
+        assertUnverified(missingPose)
+    }
+
+    @Test
+    fun `lost sensor evidence revokes ready rather than retaining old level counts`() {
+        val controller = activeController()
+        for (id in 1L..9L) controller.observe(observation(id))
+        assertEquals(CompositionSessionController.State.Ready, controller.state.value)
+        controller.observe(observation(10L).copy(rollDegrees = null, pitchDegrees = null))
+        assertUnverified(controller)
+    }
+
+    @Test
+    fun `level alone cannot claim overall composition readiness`() {
+        val controller = activeController()
+        for (id in 1L..30L) controller.observe(observation(id).copy(pitchTargetDegrees = null))
+        val state = controller.state.value as CompositionSessionController.State.Adjusting
+        assertEquals(CompositionSessionController.GuidanceAction.HoldStill, state.action)
+        assertTrue(state.progress < .72f)
+    }
     private fun activeController() = CompositionSessionController().apply {
         startAnalysis()
         onAnalysisComplete()
@@ -16,6 +96,7 @@ class CompositionSessionControllerTest {
             timestampMs = id * 100L,
             rollDegrees = 0f,
             pitchDegrees = 0f,
+            pitchTargetDegrees = 0f, // Explicit reference pose in positive verification fixtures.
             isUpright = true,
             modelConfidence = confidence
         )

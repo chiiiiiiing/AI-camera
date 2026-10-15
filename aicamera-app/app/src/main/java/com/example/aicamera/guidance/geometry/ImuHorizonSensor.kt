@@ -5,7 +5,10 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.hardware.display.DisplayManager
+import android.os.SystemClock
 import android.util.Log
+import android.view.Display
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -35,6 +38,7 @@ class ImuHorizonSensor @Inject constructor(
 ) : SensorEventListener {
 
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+    private val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
     private val gravitySensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
     private val accelSensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     private val magneticSensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
@@ -42,6 +46,8 @@ class ImuHorizonSensor @Inject constructor(
     /** 最新完整观测（经圆周平滑）。Volatile 保证推理线程读到最新值。 */
     @Volatile
     private var latestObservation: HorizonObservation? = null
+    @Volatile
+    private var latestGravityAtMs: Long = 0L
 
     /** 圆周角平滑器 — sin/cos 向量 EMA，消除 ±180° 跳变 */
     private val rollSmoother = CircularAngleSmoother(alpha = 0.35f)
@@ -80,6 +86,9 @@ class ImuHorizonSensor @Inject constructor(
         yawSmoother.reset()
         gravityValues = null
         magneticValues = null
+        filteredGravity = null
+        latestObservation = null
+        latestGravityAtMs = 0L
 
         sensorManager.registerListener(this, gravity, SensorManager.SENSOR_DELAY_NORMAL)
         magneticSensor?.let {
@@ -90,18 +99,27 @@ class ImuHorizonSensor @Inject constructor(
     }
 
     fun stop() {
-        if (!listening) return
-        sensorManager.unregisterListener(this)
+        if (listening) sensorManager.unregisterListener(this)
         listening = false
+        latestObservation = null
+        latestGravityAtMs = 0L
     }
 
     /** 读取最新倾角（度），无信号返回 null */
-    fun latestAngleDegrees(): Float? = latestObservation?.rollDegrees
+    fun latestAngleDegrees(): Float? = latestObservation()?.rollDegrees
 
     /** 读取最新完整观测（含 roll/pitch/yaw / isUpright / confidence） */
-    fun latestObservation(): HorizonObservation? = latestObservation
+    fun latestObservation(): HorizonObservation? {
+        if (!listening || SystemClock.elapsedRealtime() - latestGravityAtMs > MAX_OBSERVATION_AGE_MS) return null
+        val observation = latestObservation ?: return null
+        // The app's camera runs on the phone's built-in display. Read rotation
+        // when consuming the observation, so 180-degree changes need no new sensor sample.
+        val rotation = displayManager?.getDisplay(Display.DEFAULT_DISPLAY)?.rotation ?: 0
+        return HorizonMath.inDisplayCoordinates(observation, rotation)
+    }
 
     override fun onSensorChanged(event: SensorEvent) {
+        if (!listening) return
         when (event.sensor.type) {
             Sensor.TYPE_GRAVITY -> {
                 gravityValues = event.values.clone()
@@ -131,6 +149,7 @@ class ImuHorizonSensor @Inject constructor(
     @Synchronized
     private fun updateObservation() {
         val g = gravityValues ?: return
+        latestGravityAtMs = SystemClock.elapsedRealtime()
         val raw = HorizonMath.compute(g[0], g[1], g[2])
         val smoothedRoll = rollSmoother.smooth(raw.rollDegrees)
         val smoothedPitch = pitchSmoother.smooth(raw.pitchDegrees ?: 0f)
@@ -166,5 +185,6 @@ class ImuHorizonSensor @Inject constructor(
 
     companion object {
         private const val TAG = "ImuHorizonSensor"
+        private const val MAX_OBSERVATION_AGE_MS = 1_500L
     }
 }

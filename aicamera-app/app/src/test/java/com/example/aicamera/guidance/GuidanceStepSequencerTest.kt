@@ -51,7 +51,9 @@ class GuidanceStepSequencerTest {
         zoom: Float = 1.0f,
         minZoom: Float = 1.0f,
         maxZoom: Float = 4.0f,
-        dtMs: Long = 100
+        dtMs: Long = 100,
+        // Existing zoom arithmetic tests explicitly supply a measured reference.
+        referenceSubjectFrac: Float? = 0.30f
     ): GuidanceStepSequencer.Input {
         now += dtMs
         return GuidanceStepSequencer.Input(
@@ -62,11 +64,39 @@ class GuidanceStepSequencerTest {
             currentZoomRatio = zoom,
             minZoomRatio = minZoom,
             maxZoomRatio = maxZoom,
-            nowMs = now
+            nowMs = now,
+            targetSubjectHeightFraction = referenceSubjectFrac
         )
     }
 
     // ── 步骤顺序 ─────────────────────────────────────────────
+
+    @Test
+    fun `visible face without measured reference height never auto zooms`() {
+        repeat(60) {
+            val output = seq.onFrame(
+                input(subjectFrac = 0.1f, hasSubject = true, expectsSubject = true,
+                    referenceSubjectFrac = null), GuidanceCue.SUBJECT_TARGET, 0f
+            )
+            assertNull(output.zoomTarget)
+        }
+    }
+
+    @Test
+    fun `level completion cannot replace missing composition evidence`() {
+        repeat(80) {
+            val output = seq.onFrame(input(angle = 0f), GuidanceCue.NONE, 0f)
+            assertEquals(0f, output.progress, 0f)
+        }
+    }
+
+    @Test
+    fun `intermediate steps cannot announce overall aligned`() {
+        repeat(15) {
+            val output = seq.onFrame(input(angle = 0f), GuidanceCue.NONE, 1f)
+            if (output.step != GuidanceStep.DONE) assertTrue(output.progress < 0.72f)
+        }
+    }
 
     @Test
     fun `风景场景无主体 - 广角端 ZOOM 短暂停留后跳过 直达 DONE`() {
@@ -258,6 +288,16 @@ class GuidanceStepSequencerTest {
     }
 
     @Test
+    fun `subject adjustment returns to level when reframing tilts the phone`() {
+        driveToSubjectStep()
+        val out = seq.onFrame(input(angle = 14f, hasSubject = true, expectsSubject = true),
+            GuidanceCue.ROLL_COUNTERCLOCKWISE, .5f)
+        assertEquals(GuidanceStep.LEVEL, out.step)
+        assertEquals(GuidanceCue.ROLL_COUNTERCLOCKWISE, out.cue)
+        assertTrue(out.progress < .72f)
+    }
+
+    @Test
     fun `SUBJECT 对齐 6 帧后进入 DONE`() {
         driveToSubjectStep()
         var step = seq.step
@@ -306,6 +346,34 @@ class GuidanceStepSequencerTest {
             step = seq.step
         }
         assertEquals(GuidanceStep.LEVEL, step)
+    }
+
+    @Test
+    fun `done upside down observations revoke progress immediately and regress after consecutive frames`() {
+        driveToDone()
+        repeat(GuidanceStepSequencer.DONE_REGRESS_FRAMES) { frame ->
+            val out = seq.onFrame(input(angle = 0f, hasSubject = true, expectsSubject = true)
+                .copy(isUpright = false), GuidanceCue.SUBJECT_ALIGNED, 1f)
+            assertEquals(GuidanceCue.DEVICE_UPSIDE_DOWN, out.cue)
+            assertEquals(0f, out.progress, 0f)
+            assertTrue(out.hint.contains("倒置"))
+            if (frame == GuidanceStepSequencer.DONE_REGRESS_FRAMES - 1) {
+                assertEquals(GuidanceStep.LEVEL, out.step)
+            }
+        }
+    }
+
+    @Test
+    fun `invalid zoom range never crashes or emits a guessed zoom`() {
+        for ((minimum, maximum) in listOf(2f to 4f, 1f to .8f, Float.NaN to 4f)) {
+            seq.reset(now)
+            repeat(10) {
+                val out = seq.onFrame(input(subjectFrac = .1f, hasSubject = true,
+                    expectsSubject = true, minZoom = minimum, maxZoom = maximum),
+                    GuidanceCue.SUBJECT_TARGET, .2f)
+                assertNull(out.zoomTarget)
+            }
+        }
     }
 
     @Test

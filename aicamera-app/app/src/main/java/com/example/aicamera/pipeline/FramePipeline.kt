@@ -52,6 +52,7 @@ class FramePipeline(
     /** 用于在镜头切换时清空跨帧推荐状态；调度器保证 process 串行执行。 */
     private var lastIsFrontCamera: Boolean? = null
     private var lastRotation: Int? = null
+    private var lastAnalysisCrop: AnalysisCrop? = null
     private var lastInference: IInference? = null
     private val resetGeneration = AtomicLong(0)
     private var appliedResetGeneration = -1L
@@ -79,8 +80,9 @@ class FramePipeline(
                 // Capture one engine for this entire frame; hot swaps happen on the next frame.
                 val frameInference = inference
                 val generation = resetGeneration.get()
+                val crop = proxy.analysisCrop()
                 if (appliedResetGeneration != generation || lastInference !== frameInference ||
-                    lastIsFrontCamera != isFrontCamera || lastRotation != rotation
+                    lastIsFrontCamera != isFrontCamera || lastRotation != rotation || lastAnalysisCrop != crop
                 ) {
                     modelSampler.reset()
                     frameInference.resetSession()
@@ -89,6 +91,7 @@ class FramePipeline(
                     lastInference = frameInference
                     lastIsFrontCamera = isFrontCamera
                     lastRotation = rotation
+                    lastAnalysisCrop = crop
                 }
 
                 var preprocessMs = 0L

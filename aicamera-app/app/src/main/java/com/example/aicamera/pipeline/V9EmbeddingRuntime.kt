@@ -15,7 +15,7 @@ import java.nio.FloatBuffer
  * V9 ONNX 模型推理运行时 — 封装 ONNX Runtime Mobile。
  *
  * ## 职责
- * - 加载 `student_model.static_int8.onnx`
+ * - 加载 `student_model.onnx`（精度与模型来源见随包 manifest）
  * - 执行 Bitmap → NCHW 224×224 float32 预处理
  * - 推理得到 512 维 L2 normalized embedding
  *

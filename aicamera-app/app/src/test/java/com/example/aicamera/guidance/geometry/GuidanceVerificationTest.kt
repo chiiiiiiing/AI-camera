@@ -10,6 +10,8 @@ class GuidanceVerificationTest {
         assertEquals(0f, GuidanceGeometry.verifiedProgress(GuidanceCue.NONE, 1f, false, false, false), 0f)
         assertEquals(0f, GuidanceGeometry.verifiedProgress(GuidanceCue.SUBJECT_TARGET, 1f, true, false), 0f)
         assertEquals(0f, GuidanceGeometry.verifiedProgress(GuidanceCue.SUBJECT_ALIGNED, 1f, true, true, false), 0f)
+        assertTrue(GuidanceGeometry.verifiedProgress(GuidanceCue.NONE, 1f, false, false,
+            hasCompositionTarget = false) < .72f)
     }
 
     @Test

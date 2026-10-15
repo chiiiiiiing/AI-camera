@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import random
@@ -132,8 +133,18 @@ def project_teacher_embeddings(embeddings: np.ndarray, projection: dict[str, np.
     return (projected / norms).astype(np.float32)
 
 
-def transform_for_split(image_size: int, train: bool, pre_resized: bool = False) -> transforms.Compose:
+def transform_for_split(image_size: int, train: bool, pre_resized: bool = False,
+                        spatial_augmentation: bool = False) -> transforms.Compose:
     if train:
+        if not spatial_augmentation:
+            # Cached teacher targets describe the original composition. Cropping or
+            # mirroring only the student input teaches the wrong spatial invariance.
+            return transforms.Compose([
+                transforms.Resize((image_size, image_size)),
+                transforms.ColorJitter(brightness=0.06, contrast=0.06, saturation=0.04),
+                transforms.ToTensor(),
+                transforms.Normalize(IMAGE_MEAN, IMAGE_STD),
+            ])
         steps: list[Any] = []
         if not pre_resized:
             steps.append(transforms.Resize((image_size + 16, image_size + 16)))
@@ -177,7 +188,7 @@ def load_resized_image(image_path: Path, image_size: int, train: bool) -> Image.
 
 def cache_image_path(cache_dir: Path, split: str, photo_id: str, image_size: int, train: bool) -> Path:
     suffix = "train" if train else "eval"
-    return cache_dir / split / f"{photo_id}.{image_size}.{suffix}.jpg"
+    return cache_dir / split / f"{photo_id}.{image_size}.{suffix}.v2.png"
 
 
 class DistillationImageDataset(
@@ -195,12 +206,14 @@ class DistillationImageDataset(
         split: str,
         cache_images: bool = False,
         image_cache_dir: Path | None = None,
+        spatial_augmentation: bool = False,
     ) -> None:
         self.rows = rows
         self.targets_by_photo_id = targets_by_photo_id
         self.labels_by_photo_id = labels_by_photo_id
         self.sample_indices_by_photo_id = sample_indices_by_photo_id
-        self.transform = transform_for_split(image_size, train, pre_resized=cache_images)
+        self.transform = transform_for_split(image_size, train, pre_resized=cache_images,
+                                            spatial_augmentation=spatial_augmentation)
         self.base_dir = base_dir
         self.cached_images: list[Image.Image] | None = None
         if cache_images:
@@ -208,8 +221,9 @@ class DistillationImageDataset(
             for index, record in enumerate(rows, 1):
                 photo_id = str(record.get("photo_id"))
                 image_path = resolve_path(str(record.get("source_path") or ""), self.base_dir)
+                source_hash = hashlib.sha256(image_path.read_bytes()).hexdigest()
                 prepared_path = (
-                    cache_image_path(image_cache_dir, split, photo_id, image_size, train)
+                    cache_image_path(image_cache_dir, split, photo_id + "_" + source_hash[:16], image_size, train)
                     if image_cache_dir is not None
                     else None
                 )
@@ -220,7 +234,7 @@ class DistillationImageDataset(
                     resized = load_resized_image(image_path, image_size, train)
                     if prepared_path is not None:
                         prepared_path.parent.mkdir(parents=True, exist_ok=True)
-                        resized.save(prepared_path, quality=92, optimize=True)
+                        resized.save(prepared_path, format="PNG")
                 self.cached_images.append(resized)
                 if index % 100 == 0 or index == len(rows):
                     print(
@@ -333,10 +347,12 @@ def teacher_topk_listwise_loss(
     effective_top_k = min(top_k, reference_bank.targets.shape[0] - 1)
     top_teacher_scores, top_indices = torch.topk(teacher_scores, k=effective_top_k, dim=1)
     student_scores = prediction @ reference_targets.T
-    top_student_scores = student_scores.gather(1, top_indices)
-
     teacher_probs = F.softmax(top_teacher_scores / teacher_temperature, dim=1).detach()
-    student_log_probs = F.log_softmax(top_student_scores / student_temperature, dim=1)
+    # Penalize every wrong candidate, including those outside teacher top-K.
+    # The query itself is excluded from both distributions.
+    student_scores = student_scores.clone()
+    student_scores[row_indices, sample_indices] = -torch.inf
+    student_log_probs = F.log_softmax(student_scores / student_temperature, dim=1).gather(1, top_indices)
     return F.kl_div(student_log_probs, teacher_probs, reduction="batchmean")
 
 
@@ -714,6 +730,7 @@ def train_student(args: argparse.Namespace) -> dict[str, Any]:
                 split=split,
                 cache_images=args.cache_images,
                 image_cache_dir=args.image_cache_dir,
+                spatial_augmentation=getattr(args, "spatial_augmentation", False),
             ),
             batch_size=args.batch_size,
             shuffle=(split == "train"),
@@ -762,8 +779,7 @@ def train_student(args: argparse.Namespace) -> dict[str, Any]:
             best_val = val_metrics["cosine"]
             best_epoch = epoch
             model.to("cpu")
-            torch.save(
-                checkpoint_payload(
+            best_payload = checkpoint_payload(
                     model.encoder,
                     config,
                     projection,
@@ -771,20 +787,18 @@ def train_student(args: argparse.Namespace) -> dict[str, Any]:
                     {"history": history, "best_epoch": best_epoch, "best_val_cosine": best_val},
                     {split: len(rows) for split, rows in rows_by_split.items()},
                     label_maps,
-                ),
-                best_path,
-            )
+                )
+            # Preserve auxiliary heads too, so best-epoch evaluation is coherent.
+            best_payload["training_module_state"] = model.state_dict()
+            torch.save(best_payload, best_path)
             model.to(device)
 
-    test_metrics = run_epoch(model, loaders["test"], reference_banks["test"], device, None, args)
     last_path = args.output_dir / "checkpoint.last.pt"
     model.to("cpu")
     final_metrics = {
         "history": history,
         "best_epoch": best_epoch,
         "best_val_cosine": best_val,
-        "test_loss": test_metrics["loss"],
-        "test_cosine": test_metrics["cosine"],
     }
     torch.save(
         checkpoint_payload(
@@ -798,6 +812,12 @@ def train_student(args: argparse.Namespace) -> dict[str, Any]:
         ),
         last_path,
     )
+    best_payload = torch.load(best_path, map_location=device, weights_only=True)
+    model.to(device)
+    model.load_state_dict(best_payload["training_module_state"])
+    test_metrics = run_epoch(model, loaders["test"], reference_banks["test"], device, None, args)
+    final_metrics.update({"test_loss": test_metrics["loss"], "test_cosine": test_metrics["cosine"],
+                          "test_checkpoint": str(best_path), "test_epoch": best_epoch})
     summary = {
         "schema_version": 1,
         "dataset_dir": str(args.dataset_dir),
@@ -875,6 +895,8 @@ def main() -> int:
     parser.add_argument("--max-train-items", type=int)
     parser.add_argument("--cache-images", action="store_true")
     parser.add_argument("--image-cache-dir", type=Path)
+    parser.add_argument("--spatial-augmentation", action="store_true",
+                        help="Legacy crop/flip augmentation; changes composition relative to cached teacher targets")
     args = parser.parse_args()
     try:
         summary = train_student(args)

@@ -29,36 +29,75 @@
   },
   "runtime": "onnxruntime-mobile",
   "schema_version": 1,
-  "source_onnx": "../preprocessed/student_models/tiny_cnn_v9_wide_topk_siglip2_512/export/student_model.fp32.onnx",
-  "static_int8_onnx": {
-    "activation_type": "QUInt8",
-    "bytes": 301677,
-    "calibration_items": 128,
-    "calibration_metadata": "../preprocessed/template_metadata.new_batch.siglip2-teacher.jsonl",
-    "calibration_method": "MinMax",
-    "op_types_quantized": [
-      "Conv",
-      "Gemm",
-      "MatMul"
+  "deployment_onnx": {
+    "path": "student_model.onnx",
+    "sha256": "f7f76fa326e0bf089eeb98c7df6ca9ca8225719fa80d482919216dff7504a9cf",
+    "bytes": 4900248,
+    "precision": "float32",
+    "architecture": "mobilenet_v3_small_retrieval",
+    "parameter_count": 1222432,
+    "opset": 17
+  },
+  "training_provenance": {
+    "pretrained_backbone": {
+      "weights_enum": "MobileNet_V3_Small_Weights.IMAGENET1K_V1",
+      "url": "https://download.pytorch.org/models/mobilenet_v3_small-047dcff4.pth",
+      "sha256": "047dcff4addef86ea5bc2eff13c9614dc11f47ab1160d0a71a25e7db994f4e1f",
+      "bytes": 10306551,
+      "pretraining_dataset": "ImageNet-1K",
+      "implementation_license": "torchvision BSD-3-Clause (implementation, not a license for source images)",
+      "implementation_license_url": "https://github.com/pytorch/vision/blob/main/LICENSE",
+      "documentation_url": "https://docs.pytorch.org/vision/stable/models/generated/torchvision.models.mobilenet_v3_small.html",
+      "image_normalization": "app RGB [-1,1] -> RGB [0,1] -> ImageNet mean/std inside model",
+      "resize": "EXIF corrected RGB, direct 224x224 bilinear; no crop or mirror",
+      "feature_normalization": "L2 of 576 pooled feature channels",
+      "classifier_discarded": true,
+      "backbone_frozen": true
+    },
+    "projection_checkpoint_sha256": "5beb14d72b718cd9fb077283113a85a5038a19b43cfa224cd6ebf4efb1a55fbb",
+    "teacher_projection": "existing checkpoint projection fitted on original train split; reused without validation refit",
+    "ridge_candidates": [
+      0.01,
+      0.1,
+      1.0
     ],
-    "path": "../preprocessed/student_models/tiny_cnn_v9_wide_topk_siglip2_512/export/student_model.static_int8.onnx",
-    "per_channel": true,
-    "quant_format": "QDQ",
-    "sha256": "752bfef24b553a27fb0d419e939a6fc2583a22efda1287b01ce1184409f3e5d9",
-    "weight_type": "QInt8"
+    "selected_ridge_strength": 0.1,
+    "fit_split": "train",
+    "selection_split": "val",
+    "test_split_read": false,
+    "selection_policy": "no regression in macro scene recall@1/@5, micro scene recall@5, teacher top5 overlap versus old_int8; then maximize teacher overlap",
+    "dataset_sha256": {
+      "train": "67ba32b6fc4740176a683594072abe21456c52a18054bf66bf116545247aa3df",
+      "val": "750918172231c4f3d3ff35939258a10d2c8d5fdf2559bd44978755dae7cf105f"
+    },
+    "dataset_validation": {
+      "row_counts": {
+        "train": 579,
+        "val": 49
+      },
+      "photo_id_disjoint": true,
+      "source_sha256_disjoint": true,
+      "known_source_group_disjoint": true,
+      "known_source_group_counts": {
+        "train": 63,
+        "val": 2
+      },
+      "unknown_source_group_rows": {
+        "train": 365,
+        "val": 44
+      },
+      "unknown_groups_are_independent": false,
+      "near_duplicate_detection": "not_performed",
+      "test_split_read": false
+    },
+    "baseline_report_sha256": "bd64886692618ed25d5ed7d7fa29983072a7155fde76fc5a71724a9fa9627b78"
   },
   "verification": {
-    "fp32_int8_cosine": 0.9914869070053101,
-    "fp32_output_shape": [
-      1,
-      512
-    ],
-    "int8_output_l2_norm": 1.000000238418579,
-    "int8_output_shape": [
-      1,
-      512
-    ],
-    "sample_photo_id": "new_batch_00027",
-    "status": "ready"
+    "status": "offline_model_and_bundle_verified",
+    "frozen_test_non_regression_passed": true,
+    "model_evaluation_sha256": "29be770ca1cf0ac9ede1db464d8352e699ef1b500be2c355412a81e3e02c26b3",
+    "android_device_tested": false,
+    "int8_rejected": true,
+    "int8_rejection_reason": "Both default QDQ and Conv-only variants failed independent validation numerical consistency; no thresholds relaxed."
   }
 }

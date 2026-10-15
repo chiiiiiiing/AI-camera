@@ -82,7 +82,7 @@ fun CaptureWorkflowOverlay(
     targetNx: Float? = null,
     targetNy: Float? = null,
     horizonAngleDeg: Float? = null,
-    /** 真实主体中心点（归一化），null = 无真实主体，箭头从画面中心出发 */
+    /** 真实主体中心点（归一化），null 时不绘制主体或位置连线。 */
     subjectNx: Float? = null,
     subjectNy: Float? = null,
     showGrid: Boolean = true,
@@ -144,10 +144,11 @@ fun CaptureWorkflowOverlay(
             enter = fadeIn(tween(300)),
             exit = fadeOut(tween(200))
         ) {
-            if (targetNx != null && targetNy != null) {
+            if (targetNx != null && targetNy != null && subjectNx != null && subjectNy != null) {
                 CenterPointGuidance(
                     targetNx = targetNx, targetNy = targetNy,
                     subjectNx = subjectNx, subjectNy = subjectNy,
+                    cue = cue,
                     aligned = phase == GuidancePhase.ALIGNED ||
                         cue == GuidanceCue.SUBJECT_ALIGNED
                 )
@@ -384,7 +385,8 @@ private fun AnalyzingOverlay() {
 @Composable
 private fun CenterPointGuidance(
     targetNx: Float, targetNy: Float,
-    subjectNx: Float? = null, subjectNy: Float? = null,
+    subjectNx: Float, subjectNy: Float,
+    cue: GuidanceCue?,
     aligned: Boolean
 ) {
     val infinite = rememberInfiniteTransition(label = "guide_dot")
@@ -398,12 +400,10 @@ private fun CenterPointGuidance(
         label = "dot_pulse"
     )
 
-    val sxNorm = subjectNx ?: 0.5f
-    val syNorm = subjectNy ?: 0.5f
     Box(contentAlignment = Alignment.Center) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val sx = sxNorm * size.width
-            val sy = syNorm * size.height
+            val sx = subjectNx * size.width
+            val sy = subjectNy * size.height
             val tx = targetNx * size.width  // 构图目标位置
             val ty = targetNy * size.height
 
@@ -423,32 +423,6 @@ private fun CenterPointGuidance(
                 cap = StrokeCap.Round,
                 pathEffect = if (aligned) null else dashEffect
             )
-
-            // ── 箭头三角（指向构图目标） ──
-            val dx = tx - sx
-            val dy = ty - sy
-            val len = kotlin.math.sqrt(dx * dx + dy * dy)
-            if (len > 1f) {
-                val ux = dx / len
-                val uy = dy / len
-                val arrowSize = 14.dp.toPx()
-                val tip = Offset(tx - ux * 6.dp.toPx(), ty - uy * 6.dp.toPx())
-                val left = Offset(
-                    tip.x - ux * arrowSize + uy * arrowSize * 0.45f,
-                    tip.y - uy * arrowSize - ux * arrowSize * 0.45f
-                )
-                val right = Offset(
-                    tip.x - ux * arrowSize - uy * arrowSize * 0.45f,
-                    tip.y - uy * arrowSize + ux * arrowSize * 0.45f
-                )
-                val arrowPath = Path().apply {
-                    moveTo(tip.x, tip.y)
-                    lineTo(left.x, left.y)
-                    lineTo(right.x, right.y)
-                    close()
-                }
-                drawPath(arrowPath, lineColor)
-            }
 
             // ── 主体当前点（或画面中心）: 青绿色/绿色实心 + 呼吸外环 ──
             val centerR = 6.dp.toPx()
@@ -475,7 +449,7 @@ private fun CenterPointGuidance(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = if (aligned) "位置已对齐" else "沿着箭头方向移动手机",
+                text = if (aligned) "位置已对齐，请保持稳定" else phoneMoveHint(cue),
                 color = if (aligned) GuideAligned else BrandPink,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
@@ -486,13 +460,21 @@ private fun CenterPointGuidance(
 }
 
 /** fallback：无 AI 目标位置时用简洁文字 */
+private fun phoneMoveHint(cue: GuidanceCue?): String = when (cue) {
+    GuidanceCue.MOVE_LEFT -> "手机稍向左移，让脸进入参考圆"
+    GuidanceCue.MOVE_RIGHT -> "手机稍向右移，让脸进入参考圆"
+    GuidanceCue.MOVE_UP -> "手机稍向上移，让脸进入参考圆"
+    GuidanceCue.MOVE_DOWN -> "手机稍向下移，让脸进入参考圆"
+    else -> "对照参考位置调整取景，随时可以拍摄"
+}
+
 @Composable
 private fun FallbackGuidance(cue: GuidanceCue?, phase: GuidancePhase) {
     val hint = when {
-        phase == GuidancePhase.ALIGNED -> "构图就绪"
+        cue in listOf(GuidanceCue.MOVE_LEFT, GuidanceCue.MOVE_RIGHT, GuidanceCue.MOVE_UP, GuidanceCue.MOVE_DOWN) -> phoneMoveHint(cue)
         phase == GuidancePhase.NEAR -> "接近中..."
         phase == GuidancePhase.WRONG_DIRECTION -> "方向相反，回一点"
-        else -> "调整构图"
+        else -> "可继续调整取景，随时可以拍摄"
     }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(

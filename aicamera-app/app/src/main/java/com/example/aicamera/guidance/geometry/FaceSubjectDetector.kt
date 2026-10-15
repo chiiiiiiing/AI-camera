@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.util.Log
 import androidx.camera.core.ImageProxy
+import com.example.aicamera.pipeline.toViewPortBitmap
 import com.google.android.gms.tasks.Tasks
 import com.google.android.gms.tasks.Task
 import com.google.mlkit.vision.common.InputImage
@@ -31,8 +32,8 @@ import javax.inject.Singleton
  * - 同步阻塞用 `Tasks.await(timeout)`，在推理工作线程调用（禁止主线程）。
  *
  * ## 为什么只检测人脸
- * v9 模板库中 portrait 类模板 97/728，人像是最需要「主体 vs 目标区」引导的
- * 场景；非人像模板没有可靠主体定义，保持 NONE 比乱指更诚实（docs/10 口径）。
+ * 人像可比较实时人脸与参考图中经过审阅的人脸锚点。
+ * 未提供可验证主体目标的模板不生成主体移动指令（docs/10 口径）。
  * 后续可扩展 ML Kit 主体分割（play-services-mlkit-subject-segmentation）。
  */
 @Singleton
@@ -84,7 +85,7 @@ class FaceSubjectDetector @Inject constructor() : Closeable {
         var detectionTask: Task<List<Face>>? = null
         try {
             // 1. 构造显示坐标系 Bitmap（转正 + 前摄镜像，与预处理同口径）
-            bitmap = imageProxy.toBitmap()
+            bitmap = imageProxy.toViewPortBitmap()
             val rotation = imageProxy.imageInfo.rotationDegrees
             if (rotation != 0) bitmap = rotate(requireNotNull(bitmap), rotation)
             if (isFrontCamera) bitmap = mirror(requireNotNull(bitmap))

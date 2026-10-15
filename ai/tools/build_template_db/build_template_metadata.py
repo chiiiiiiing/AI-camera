@@ -103,6 +103,7 @@ def build_metadata_record(
             "aesthetic_score": annotation.get("aesthetic_score"),
             "template_value": annotation.get("template_value"),
             "shooting_guidance": annotation.get("shooting_guidance"),
+            "provenance": annotation.get("provenance", {"method": "unknown", "human_reviewed": False}),
         },
         "embedding": {
             "status": embedding_status(job),

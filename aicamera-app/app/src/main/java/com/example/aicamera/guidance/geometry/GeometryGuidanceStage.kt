@@ -5,6 +5,7 @@ import androidx.camera.core.ImageProxy
 import com.example.aicamera.guidance.GuidanceCue
 import com.example.aicamera.pipeline.FakeGuideLine
 import com.example.aicamera.pipeline.FakeInferenceOutput
+import com.example.aicamera.pipeline.analysisCrop
 import java.io.Closeable
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -36,18 +37,15 @@ class GeometryGuidanceStage @Inject constructor(
 ) : Closeable {
 
     /** 水平角 EMA（传感器 5–10Hz 噪声约 ±1°） */
-    private val horizonEma = EmaSmoother(HORIZON_EMA_ALPHA)
+    private val horizonEma = CircularAngleSmoother(HORIZON_EMA_ALPHA)
     /** 俯仰角 EMA */
-    private val pitchEma = EmaSmoother(PITCH_EMA_ALPHA)
+    private val pitchEma = CircularAngleSmoother(PITCH_EMA_ALPHA)
     /** 偏航角 EMA（磁力计噪声更大，平滑更强） */
-    private val yawEma = EmaSmoother(YAW_EMA_ALPHA)
+    private val yawEma = CircularAngleSmoother(YAW_EMA_ALPHA)
 
     /** 主体框中心 EMA（检测限频 4Hz + 检测器本身有抖动） */
     private val subjectEmaX = EmaSmoother(SUBJECT_EMA_ALPHA)
     private val subjectEmaY = EmaSmoother(SUBJECT_EMA_ALPHA)
-
-    /** ★ 偏航目标：进入引导时记录当前朝向，后续提示用户保持该朝向 */
-    private var yawTargetDeg: Float? = null
 
     /**
      * 把几何信号应用到推理输出。
@@ -61,11 +59,12 @@ class GeometryGuidanceStage @Inject constructor(
 
         // ── 1. 真实水平/俯仰/偏航观测（含 isUpright/confidence） ──
         // ★ 传感器已做圆周平滑，此处保留 EMA 做二次去抖
-        val rawObs = horizonSensor.latestObservation()
-        val rawAngle = rawObs?.rollDegrees?.takeIf { it.isFinite() }
-        val smoothAngle = rawAngle?.let { horizonEma.add(it) }
-        val smoothPitch = rawObs?.pitchDegrees?.takeIf { it.isFinite() }?.let { pitchEma.add(it) }
-        val smoothYaw = rawObs?.yawDegrees?.takeIf { it.isFinite() }?.let { yawEma.add(it) }
+        val rawObs = horizonSensor.latestObservation()?.takeIf { it.confidence.isFinite() && it.confidence > 0f }
+        val rawAngle = rawObs?.takeIf { HorizonMath.hasObservableRoll(it) }?.rollDegrees
+        val smoothAngle = rawAngle?.let { horizonEma.smooth(it) }
+        val smoothPitch = rawObs?.pitchDegrees?.takeIf { it.isFinite() }?.let { pitchEma.smooth(it) }
+        val smoothYaw = rawObs?.yawDegrees?.takeIf { it.isFinite() }?.let { yawEma.smooth(it) }
+        val coordinateAspectRatio = imageProxy.analysisCrop().displayAspectRatio(imageProxy.imageInfo.rotationDegrees)
 
         // ── 2. 真实主体框 ──
         val rawBox = faceDetector.detectIfDue(imageProxy, isFrontCamera)
@@ -86,23 +85,32 @@ class GeometryGuidanceStage @Inject constructor(
         }
 
         // ── 3. 提取模板目标区参数（若有） ──
-        val targetLine = output.guideLines.firstOrNull { it.type == "target_zone" }
+        // The live detector returns faces. A generic whole-subject center is not
+        // a face anchor and must not drive face-position corrections.
+        val targetLine = output.guideLines.firstOrNull {
+            it.type == "target_zone" && it.visible && it.params["anchor_kind"] == "face"
+        }
         val targetCx = targetLine?.floatParam("center_x") ?: 0.5f
         val targetCy = targetLine?.floatParam("center_y") ?: 0.5f
         val targetTol = targetLine?.floatParam("radius") ?: 0.12f
-        val hasTarget = targetLine?.visible == true &&
-            targetLine.floatParam("center_x")?.isFinite() == true &&
-            targetLine.floatParam("center_y")?.isFinite() == true
+        val hasTarget = targetLine != null && GuidanceGeometry.isValidTarget(
+            targetLine.floatParam("center_x"), targetLine.floatParam("center_y"), targetTol
+        )
         val hasRecommendation = output.confidence.isFinite() && output.confidence > 0f
         val guidedSubject = smoothBox?.takeIf { hasTarget && hasRecommendation }
 
         // 模板是否期望主体：有人像类占位框即期望主体
         val expectsSubject = output.expectsSubject || output.guideLines.any { it.type == "subject_box" }
 
-        // ★ 记录偏航目标：首次获得有效偏航时锁定当前朝向
-        if (yawTargetDeg == null && smoothYaw != null) {
-            yawTargetDeg = smoothYaw
-        }
+        // Pose observations describe how the user chose to frame the scene.
+        // Only explicit verified targets can authorize changing pitch or yaw.
+        val poseTarget = output.guideLines.firstOrNull {
+            it.type == "horizon_level" && it.visible && it.params["pose_target_verified"] == true
+        }?.takeIf { hasRecommendation }
+        val pitchTarget = poseTarget?.floatParam("target_pitch_degrees")?.takeIf { it.isFinite() }
+        val yawTarget = poseTarget?.floatParam("target_yaw_degrees")?.takeIf { it.isFinite() }
+        val hasRequestedPoseEvidence = (pitchTarget == null || smoothPitch != null) &&
+            (yawTarget == null || smoothYaw != null)
 
         // ── 4. 计算指令与进度 ──
         val cue = GuidanceGeometry.guidanceCue(
@@ -115,7 +123,9 @@ class GeometryGuidanceStage @Inject constructor(
             horizonAngleDeg = smoothAngle,
             pitchAngleDeg = smoothPitch,
             yawAngleDeg = smoothYaw,
-            yawTargetDeg = yawTargetDeg
+            yawTargetDeg = yawTarget,
+            pitchTargetDeg = pitchTarget,
+            coordinateAspectRatio = coordinateAspectRatio
         )
         val geometryProgress = GuidanceGeometry.compositionProgress(
             subjectCx = guidedSubject?.centerX,
@@ -125,13 +135,17 @@ class GeometryGuidanceStage @Inject constructor(
             horizonAngleDeg = smoothAngle,
             pitchAngleDeg = smoothPitch,
             yawAngleDeg = smoothYaw,
-            yawTargetDeg = yawTargetDeg
+            yawTargetDeg = yawTarget,
+            pitchTargetDeg = pitchTarget,
+            targetTolerance = targetTol,
+            coordinateAspectRatio = coordinateAspectRatio
         )
         // ★ 指令-进度对齐：SUBJECT_ALIGNED 时提升到 ALIGNED 阈值之上，
         //   GuidanceStateMachine 才能进入 ALIGNED 相位（触发达标震动/绿闪）
         val boostedProgress = GuidanceGeometry.verifiedProgress(
             cue, geometryProgress, expectsSubject, smoothBox != null,
-            hasRecommendation = hasRecommendation && (!expectsSubject || hasTarget)
+            hasRecommendation = hasRecommendation && (!expectsSubject || hasTarget) && hasRequestedPoseEvidence,
+            hasCompositionTarget = guidedSubject != null || pitchTarget != null || yawTarget != null
         )
 
         // ── 5. 重建辅助线：真实水平角 + 真实主体框 ──
@@ -153,10 +167,9 @@ class GeometryGuidanceStage @Inject constructor(
                 "subject_box" -> {
                     if (smoothBox != null) {
                         // 真实检测框替换占位框（real=true 标记：分步引导只信真实检测）
-                        val aligned = hasRecommendation && hasTarget && kotlin.math.hypot(
-                            smoothBox.centerX - targetCx,
-                            smoothBox.centerY - targetCy
-                        ) <= targetTol
+                        val aligned = hasRecommendation && hasTarget && GuidanceGeometry.isSubjectAligned(
+                            smoothBox.centerX, smoothBox.centerY, targetCx, targetCy, targetTol, coordinateAspectRatio
+                        )
                         line.copy(
                             visible = true,
                             params = mapOf(
@@ -165,21 +178,27 @@ class GeometryGuidanceStage @Inject constructor(
                                 "width" to smoothBox.width,
                                 "height" to smoothBox.height,
                                 "real" to true,
+                                "anchor_kind" to "face",
                                 "aligned" to aligned
                             )
                         )
                     } else null
                 }
+                "target_zone" -> if (line === targetLine && hasTarget) {
+                    line.copy(params = line.params + mapOf(
+                        "radius" to GuidanceGeometry.effectiveTargetRadius(targetTol),
+                        "coordinate_aspect_ratio" to coordinateAspectRatio
+                    ))
+                } else line
                 else -> line
             }
         }.toMutableList()
 
         // 模板没给主体框但检测到了主体（如风景照里有人）→ 也画出来
         if (smoothBox != null && newLines.none { it.type == "subject_box" }) {
-            val aligned = hasRecommendation && hasTarget && kotlin.math.hypot(
-                smoothBox.centerX - targetCx,
-                smoothBox.centerY - targetCy
-            ) <= targetTol
+            val aligned = hasRecommendation && hasTarget && GuidanceGeometry.isSubjectAligned(
+                smoothBox.centerX, smoothBox.centerY, targetCx, targetCy, targetTol, coordinateAspectRatio
+            )
             newLines.add(
                 FakeGuideLine(
                     type = "subject_box", visible = true,
@@ -189,6 +208,7 @@ class GeometryGuidanceStage @Inject constructor(
                         "width" to smoothBox.width,
                         "height" to smoothBox.height,
                         "real" to true,
+                        "anchor_kind" to "face",
                         "aligned" to aligned
                     )
                 )
@@ -213,7 +233,6 @@ class GeometryGuidanceStage @Inject constructor(
         yawEma.reset()
         subjectEmaX.reset()
         subjectEmaY.reset()
-        yawTargetDeg = null
     }
 
     override fun close() {

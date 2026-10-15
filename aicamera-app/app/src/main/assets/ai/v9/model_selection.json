@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "selection_split": "val",
+  "test_used_for_selection": false,
+  "candidate": "mobilenet_v3_small_retrieval_ridge_0.1_fp32",
+  "candidate_sha256": "f7f76fa326e0bf089eeb98c7df6ca9ca8225719fa80d482919216dff7504a9cf",
+  "baseline_sha256": "752bfef24b553a27fb0d419e939a6fc2583a22efda1287b01ce1184409f3e5d9",
+  "selection_reason": "All four predeclared validation non-regression metrics pass; default and Conv-only INT8 variants rejected by independent numerical consistency checks. FP32 remains below the existing 5 MiB model budget.",
+  "validation_queries": 49,
+  "training_gallery_size": 579,
+  "ridge_candidates": [0.01, 0.1, 1.0],
+  "selected_ridge": 0.1,
+  "test_policy": "Run the frozen model comparison once. Do not retune after observing test."
+}

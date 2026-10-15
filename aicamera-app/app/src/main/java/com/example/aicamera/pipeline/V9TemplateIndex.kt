@@ -10,20 +10,20 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
- * V9 模板索引 — 加载 728 条模板 embedding + metadata，执行检索和规则重排。
+ * V9 接口模板索引 — 加载随模型重建的已审阅 embedding + metadata，执行检索和规则重排。
  *
  * ## 工作流
  * ```
  * query embedding [512]
- *   → cosine similarity × 728 templates
+ *   → cosine similarity × N reviewed templates
  *   → top 8 candidates
  *   → rule-based reranking (photo_type / scene / composition / lighting)
  *   → top 5 stabilized results
  * ```
  *
  * ## 索引文件（从 assets 复制到 filesDir/ai/v9/template_index/）
- * - templates.embeddings.f32  (728 × 512 float32, ~1.5MB)
- * - templates.metadata.jsonl   (728 行 JSON, ~1.8MB)
+ * - templates.embeddings.f32  (N × 512 float32)
+ * - templates.metadata.jsonl   (N 行 JSON，与 keys 行序一致)
  */
 class V9TemplateIndex(
     private val indexDir: File
@@ -127,7 +127,15 @@ class V9TemplateIndex(
                     val composition = annotation?.optJSONObject("composition")
                     val lighting = annotation?.optJSONObject("lighting")
                     val camera = annotation?.optJSONObject("camera")
-                    val visualSummary = annotation?.optString("visual_summary", "")
+                    val annotationMethod = annotation?.optJSONObject("provenance")?.optString("method")
+                    val isUnverifiedDraft = annotationMethod in setOf(
+                        "legacy_scene_rule_draft", "scene_rule_draft", "not_annotated_after_recovery"
+                    )
+                    // These fields were copied from a scene rule or invalidated by a crop.
+                    // They cannot vote as image-level composition, lighting or distance evidence.
+                    // Keep older metadata without explicit provenance compatible.
+                    fun attribute(source: JSONObject?, key: String, legacyDefault: String): String =
+                        if (isUnverifiedDraft) "unknown" else source?.optString(key, legacyDefault) ?: legacyDefault
                     if (templateId.isBlank()) {
                         throw IllegalArgumentException("metadata template_id 为空")
                     }
@@ -139,19 +147,21 @@ class V9TemplateIndex(
                         templateId = templateId,
                         photoType = photoType,
                         sceneCategory = sceneCategory,
-                        compositionType = composition?.optString("type", "rule_of_thirds") ?: "rule_of_thirds",
-                        subjectPosition = composition?.optString("subject_position", "center") ?: "center",
-                        horizonPosition = composition?.optString("horizon_position", "not_visible") ?: "not_visible",
-                        leadingLines = composition?.optBoolean("leading_lines", false) ?: false,
-                        negativeSpace = composition?.optString("negative_space", "medium") ?: "medium",
-                        lightingQuality = lighting?.optString("quality", "soft") ?: "soft",
-                        lightingDirection = lighting?.optString("direction", "front") ?: "front",
-                        cameraAngle = camera?.optString("angle", "eye_level") ?: "eye_level",
-                        cameraDistance = camera?.optString("distance", "medium") ?: "medium",
-                        cameraOrientation = camera?.optString("orientation", "portrait") ?: "portrait",
-                        visualSummary = visualSummary ?: "",
-                        lightingContrast = lighting?.optString("contrast", "medium") ?: "medium",
-                        timeOfDay = lighting?.optString("time_of_day", "unknown") ?: "unknown"
+                        compositionType = attribute(composition, "type", "rule_of_thirds"),
+                        subjectPosition = attribute(composition, "subject_position", "center"),
+                        horizonPosition = attribute(composition, "horizon_position", "not_visible"),
+                        leadingLines = !isUnverifiedDraft && (composition?.optBoolean("leading_lines", false) ?: false),
+                        negativeSpace = attribute(composition, "negative_space", "medium"),
+                        lightingQuality = attribute(lighting, "quality", "soft"),
+                        lightingDirection = attribute(lighting, "direction", "front"),
+                        cameraAngle = attribute(camera, "angle", "eye_level"),
+                        cameraDistance = attribute(camera, "distance", "medium"),
+                        cameraOrientation = attribute(camera, "orientation", "portrait"),
+                        visualSummary = if (isUnverifiedDraft) "" else annotation?.optString("visual_summary", "") ?: "",
+                        lightingContrast = attribute(lighting, "contrast", "medium"),
+                        timeOfDay = attribute(lighting, "time_of_day", "unknown"),
+                        referenceEligible = V9ReferencePolicy.isEligible(json),
+                        faceAnchor = V9ReferencePolicy.parseFaceAnchor(json)
                     )
                 } catch (e: Exception) {
                     throw IllegalArgumentException("metadata 行非法: ${e.message}", e)
@@ -178,6 +188,8 @@ class V9TemplateIndex(
         val normalizedQuery = V9EmbeddingRuntime.l2Normalize(query.copyOf())
         val best = ArrayList<ScoredIndex>(minOf(topK, embeddings.size))
         for (i in embeddings.indices) {
+            // Tutorial screenshots/collages are not a camera composition to imitate.
+            if (metadata[templateIds[i]]?.referenceEligible != true) continue
             val score = V9EmbeddingRuntime.cosineSimilarity(normalizedQuery, embeddings[i]).coerceIn(-1f, 1f)
             if (!score.isFinite()) continue
             insertTopHit(best, ScoredIndex(i, score), topK)
@@ -343,7 +355,9 @@ data class TemplateMeta(
     /** annotation.lighting.contrast; absent legacy rows default to medium. */
     val lightingContrast: String = "medium",
     /** annotation.lighting.time_of_day; absent legacy rows default to unknown. */
-    val timeOfDay: String = "unknown"
+    val timeOfDay: String = "unknown",
+    val referenceEligible: Boolean = false,
+    val faceAnchor: V9FaceAnchor? = null
 )
 
 /** 场景上下文（用于重排），后续可由独立场景分类器填充 */

@@ -48,6 +48,8 @@ class GuidanceStepSequencer {
         val nowMs: Long,
         /** False for missing/failed model output; never automate from demo guidance. */
         val recommendationReady: Boolean = true,
+        /** Verified reference face height, in the same coordinate frame; absent means no auto zoom. */
+        val targetSubjectHeightFraction: Float? = null,
     )
 
     data class Output(
@@ -120,12 +122,23 @@ class GuidanceStepSequencer {
             return Output(GuidanceStep.ZOOM, GuidanceCue.NONE, 0f, null, "AI 暂未就绪，可直接拍摄")
         }
         if (stepStartMs < 0) stepStartMs = input.nowMs
-        return when (step) {
+        val safeProgress = rawProgress.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0f
+        val result = when (step) {
             GuidanceStep.ZOOM -> handleZoom(input)
-            GuidanceStep.LEVEL -> handleLevel(input, rawProgress)
-            GuidanceStep.SUBJECT -> handleSubject(input, rawCue, rawProgress)
-            GuidanceStep.DONE -> handleDone(input, rawCue, rawProgress)
+            GuidanceStep.LEVEL -> handleLevel(input, safeProgress)
+            GuidanceStep.SUBJECT -> handleSubject(input, rawCue, safeProgress)
+            GuidanceStep.DONE -> handleDone(input, rawCue, safeProgress)
         }
+        // Completing LEVEL is not evidence that the whole composition is ready.
+        // Filtered-away cues must not turn a partial step into global ALIGNED.
+        val progress = minOf(result.progress, safeProgress,
+            if (result.step == GuidanceStep.DONE) 1f else 0.7f)
+        return result.copy(
+            progress = if (input.expectsSubject && !input.hasSubject) 0f else progress,
+            hint = if (result.step == GuidanceStep.DONE && progress < 0.95f &&
+                result.cue != GuidanceCue.DEVICE_UPSIDE_DOWN)
+                "可继续调整取景，随时可以拍摄" else result.hint
+        )
     }
 
     // ─────────────────────────────────────────────────────────
@@ -180,7 +193,7 @@ class GuidanceStepSequencer {
 
         val hint = when {
             !zoomDecisionDone -> "AI 正在分析画面…"
-            zoomTarget != null -> "自动变焦到 ${"%.1f".format(zoomTarget)}x，寻找最佳构图"
+            zoomTarget != null -> "自动变焦到 ${"%.1f".format(zoomTarget)}x，匹配参考取景"
             else -> "自动变焦中，请稍候…"
         }
         return Output(step, GuidanceCue.NONE, 0f, zoomTarget, hint)
@@ -196,18 +209,24 @@ class GuidanceStepSequencer {
     /**
      * 计算最佳变焦倍率。
      *
-     * 人像构图经验值：主体（人脸）高度占画面 ~[PORTRAIT_TARGET_FRAC] 时
-     * 头肩比例最自然。占比偏小 → 放大；占比过大 → 缩小。
+     * 只有已验证参考图提供同类主体目标占比时才能推导变焦倍率。
+     * 不能把固定人脸占比冒充当前画面的模型推荐。
      * 结果夹到 [minZoom, min(maxZoom, AUTO_ZOOM_CAP)]。
      */
     private fun decideZoomTarget(input: Input): Float? {
+        val targetFraction = input.targetSubjectHeightFraction?.takeIf { it.isFinite() && it in 0.02f..0.98f }
+            ?: return null
+        if (!input.currentZoomRatio.isFinite() || input.currentZoomRatio <= 0f ||
+            !input.minZoomRatio.isFinite() || !input.maxZoomRatio.isFinite()) return null
+        val minimum = maxOf(1f, input.minZoomRatio)
         val cap = minOf(input.maxZoomRatio, AUTO_ZOOM_CAP)
+        if (minimum > cap) return null
         if (zoomSamples.isNotEmpty()) {
             val median = zoomSamples.sorted().let { it[it.size / 2] }
-            val desired = input.currentZoomRatio * (PORTRAIT_TARGET_FRAC / median)
+            val desired = input.currentZoomRatio * (targetFraction / median)
             return desired
                 .coerceIn(input.currentZoomRatio * MIN_ZOOM_STEP_SCALE, input.currentZoomRatio * MAX_ZOOM_STEP_SCALE)
-                .coerceIn(maxOf(1f, input.minZoomRatio), cap)
+                .coerceIn(minimum, cap)
         }
         // 没有真实主体时不猜测，不覆盖用户手动选择的焦段。
         return null
@@ -221,8 +240,9 @@ class GuidanceStepSequencer {
     private val horizonPolicy = HorizonPolicy()
 
     private fun handleLevel(input: Input, rawProgress: Float): Output {
-        val angle = input.horizonAngleDeg
+        val angle = input.horizonAngleDeg?.takeIf { it.isFinite() }
         if (angle == null) {
+            levelGoodFrames = 0
             // 无传感器信号：连续无信号则跳过本步
             levelNoSignalFrames++
             if (levelNoSignalFrames >= LEVEL_NO_SIGNAL_SKIP_FRAMES) {
@@ -267,6 +287,14 @@ class GuidanceStepSequencer {
     // ─────────────────────────────────────────────────────────
 
     private fun handleSubject(input: Input, rawCue: GuidanceCue, rawProgress: Float): Output {
+        // Re-framing can tilt the phone after LEVEL has completed. Do not hide
+        // the only actionable correction until the subject step can complete.
+        val angle = input.horizonAngleDeg?.takeIf { it.isFinite() }
+        if (angle != null && (abs(angle) > horizonPolicy.exitLevelToleranceDeg ||
+            (input.isUpright == false && abs(angle) <= horizonPolicy.upsideDownToleranceDeg))) {
+            advanceTo(GuidanceStep.LEVEL, input.nowMs)
+            return handleLevel(input, rawProgress)
+        }
         // 模板不要主体（风景/静物）：本步无意义，停留最短时长后通过
         if (!input.expectsSubject &&
             input.nowMs - stepStartMs >= MIN_STEP_DWELL_MS
@@ -291,6 +319,8 @@ class GuidanceStepSequencer {
         val cue = when (rawCue) {
             GuidanceCue.MOVE_LEFT, GuidanceCue.MOVE_RIGHT,
             GuidanceCue.MOVE_UP, GuidanceCue.MOVE_DOWN,
+            GuidanceCue.PITCH_UP, GuidanceCue.PITCH_DOWN,
+            GuidanceCue.YAW_LEFT, GuidanceCue.YAW_RIGHT,
             GuidanceCue.SUBJECT_TARGET, GuidanceCue.SUBJECT_ALIGNED -> rawCue
             else -> GuidanceCue.NONE
         }
@@ -302,28 +332,22 @@ class GuidanceStepSequencer {
     // ─────────────────────────────────────────────────────────
 
     private fun handleDone(input: Input, rawCue: GuidanceCue, rawProgress: Float): Output {
-        // 水平被明显打乱（带滞回）→ 回 LEVEL
-        val angle = input.horizonAngleDeg
-        if (angle != null && abs(angle) > horizonPolicy.exitLevelToleranceDeg) {
+        val angle = input.horizonAngleDeg?.takeIf { it.isFinite() }
+        val upsideDown = input.isUpright == false && angle != null &&
+            abs(angle) <= horizonPolicy.upsideDownToleranceDeg
+        // A single counter covers both forms of invalid orientation. Resetting
+        // it before the upside-down check prevented that case ever regressing.
+        if (upsideDown || (angle != null && abs(angle) > horizonPolicy.exitLevelToleranceDeg)) {
             doneBadLevelFrames++
             if (doneBadLevelFrames >= DONE_REGRESS_FRAMES) {
                 advanceTo(GuidanceStep.LEVEL, input.nowMs)
-                return Output(step, GuidanceCue.NONE, rawProgress, null, hintFor(input, step))
+                return handleLevel(input, rawProgress)
             }
         } else {
             doneBadLevelFrames = 0
         }
-
-        // 倒置检测 → 回 LEVEL
-        if (input.isUpright == false && angle != null &&
-            abs(angle) <= horizonPolicy.upsideDownToleranceDeg
-        ) {
-            doneBadLevelFrames++
-            if (doneBadLevelFrames >= DONE_REGRESS_FRAMES) {
-                advanceTo(GuidanceStep.LEVEL, input.nowMs)
-                return Output(step, GuidanceCue.DEVICE_UPSIDE_DOWN, rawProgress, null,
-                    "手机已倒置，请翻转手机")
-            }
+        if (upsideDown) {
+            return Output(step, GuidanceCue.DEVICE_UPSIDE_DOWN, 0f, null, "手机已倒置，请翻转手机")
         }
 
         // 主体丢失 → 回 SUBJECT
@@ -356,14 +380,11 @@ class GuidanceStepSequencer {
         GuidanceStep.LEVEL ->
             if (input.horizonAngleDeg == null) "正在校准画面…" else "② 端平手机，保持画面水平"
         GuidanceStep.SUBJECT ->
-            if (!input.expectsSubject) "画面已就绪" else "③ 移动手机，让主体进入目标位置"
+            if (!input.expectsSubject) "继续调整取景，随时可以拍摄" else "③ 移动手机，让主体进入目标位置"
         GuidanceStep.DONE -> "构图已就绪，可以拍摄了"
     }
 
     companion object {
-        /** 人像主体目标占高比（头肩构图经验值） */
-        const val PORTRAIT_TARGET_FRAC = 0.30f
-
         /** 自动变焦倍率上限（不超过长焦端，避免数码变焦画质崩塌） */
         const val AUTO_ZOOM_CAP = 1.8f
         const val MIN_ZOOM_STEP_SCALE = 0.90f

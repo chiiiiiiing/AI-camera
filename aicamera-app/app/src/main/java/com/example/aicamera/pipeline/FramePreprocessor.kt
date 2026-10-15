@@ -17,7 +17,7 @@ import java.nio.ByteOrder
  * ```
  * ImageProxy (YUV_420_888)
  *     │
- *     ├─ imageProxy.toBitmap()       YUV → RGB Bitmap
+ *     ├─ imageProxy.toViewPortBitmap() YUV → RGB → shared preview cropRect
  *     ├─ rotateBitmap(rotation)      按 rotationDegrees 转正（模型要求正向输入）
  *     ├─ mirrorBitmap()              前摄：镜像到与预览画面一致
  *     ├─ resize → 224×224
@@ -66,8 +66,8 @@ class FramePreprocessor(
 
         var bitmap: Bitmap? = null
         try {
-            // Step 1: YUV → Bitmap
-            bitmap = imageProxy.toBitmap()
+            // Step 1: YUV → Bitmap → the same ViewPort shown in PreviewView.
+            bitmap = imageProxy.toViewPortBitmap()
 
             // Step 2: 按 rotationDegrees 转正（v9 协议：模型期望正向图）
             if (rotation != 0) bitmap = rotateBitmap(requireNotNull(bitmap), rotation)
@@ -77,6 +77,7 @@ class FramePreprocessor(
 
             // Step 4: Resize → 模型尺寸。current variable owns exactly one bitmap.
             val current = requireNotNull(bitmap)
+            val displayAspectRatio = current.width.toFloat() / current.height
             if (current.width != targetSize || current.height != targetSize) {
                 val resized = Bitmap.createScaledBitmap(current, targetSize, targetSize, true)
                 if (resized !== current) current.recycle()
@@ -97,7 +98,8 @@ class FramePreprocessor(
                 originalWidth = imageProxy.width,
                 originalHeight = imageProxy.height,
                 // Ownership transfers to FramePipeline, whose finally block recycles it.
-                originalBitmap = bitmap
+                originalBitmap = bitmap,
+                displayAspectRatio = displayAspectRatio
             )
         } catch (e: Exception) {
             // If construction fails, no PreprocessedFrame reaches FramePipeline to own this bitmap.
@@ -194,7 +196,9 @@ data class PreprocessedFrame(
     val originalWidth: Int,
     val originalHeight: Int,
     /** 已转正/镜像并 resize 到模型尺寸的 Bitmap（未 recycle），供 V9 直接做 NCHW 预处理 */
-    val originalBitmap: Bitmap? = null
+    val originalBitmap: Bitmap? = null,
+    /** Full, rotated frame before the embedding model's square resize. */
+    val displayAspectRatio: Float? = null
 )
 
 // ── 日志 ──────────────────────────────────────────────────────
