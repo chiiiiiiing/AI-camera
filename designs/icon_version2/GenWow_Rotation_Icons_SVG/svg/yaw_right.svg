@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 200 200" role="img" aria-label="YAW 向右">
+  <title>YAW 向右</title>
+  <defs>
+    <linearGradient id="activeGradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F37FA1"/>
+      <stop offset="1" stop-color="#F4A18E"/>
+    </linearGradient>
+  </defs>
+  <g id="target" fill="none" stroke="#66656B" stroke-width="3.6" stroke-linejoin="round">
+  <rect x="68" y="34" width="65" height="130" rx="7"/>
+  </g>
+  <g id="current" fill="none" stroke="url(#activeGradient)" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M64 42 Q64 36 70 39 L137 53 Q142 54 142 61 L142 145 Q142 151 136 153 L70 164 Q64 165 64 159 Z"/>
+        <path d="M75 52 L132 64 L132 142 L75 153 Z" stroke-width="2.5"/>
+        <path d="M92 50 L110 54" stroke-width="2.3"/>
+  </g>
+  <g id="correction-arrow" fill="none" stroke="url(#activeGradient)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M60 170 Q102 190 153 166"/><path d="M141 163 L155 165 L151 179"/>
+  </g>
+</svg>
