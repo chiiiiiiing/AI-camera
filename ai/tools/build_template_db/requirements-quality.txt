@@ -1,0 +1,6 @@
+# Install into a project-local environment/--target directory. Teacher runs locally.
+# Reuse the project's torch/torchvision GPU environment; do not replace its CUDA build.
+ftfy==6.3.1
+regex==2026.9.29
+wcwidth==0.9.2
+tqdm==4.67.1

@@ -1,0 +1,210 @@
+{
+  "schema_version": 1,
+  "candidate_sha256": "f7f76fa326e0bf089eeb98c7df6ca9ca8225719fa80d482919216dff7504a9cf",
+  "baseline_sha256": "752bfef24b553a27fb0d419e939a6fc2583a22efda1287b01ce1184409f3e5d9",
+  "selection_sha256": "69b676f36f43348db2c8be091bace5e6e2622458379a2d6110cf221fe7e1b990",
+  "model_test_non_regression_passed": true,
+  "candidate": {
+    "schema_version": 1,
+    "protocol": {
+      "query_gallery_photo_id_disjoint": true,
+      "query_gallery_source_sha256_disjoint": true,
+      "source_group_disjointness_verified": false,
+      "near_duplicate_disjointness_verified": false,
+      "scene_recall_definition": "fraction of queries with at least one same-scene result in top K",
+      "macro_scene_population": "scenes present in queries, including scenes absent from gallery",
+      "raw_tie_break": "gallery row order",
+      "normalization": "L2, float64"
+    },
+    "raw": {
+      "query_count": 53,
+      "gallery_count": 579,
+      "eligible_query_count": 53,
+      "effective_k": {
+        "1": 1,
+        "5": 5
+      },
+      "scene_micro_recall_at_k": {
+        "1": 0.8679245283018868,
+        "5": 0.8867924528301887
+      },
+      "scene_macro_recall_at_k": {
+        "1": 0.638888888888889,
+        "5": 0.6527777777777778
+      },
+      "mrr": 0.885007836667828,
+      "mrr_scope": "full_gallery",
+      "per_scene": {
+        "closeup_portrait": {
+          "query_count": 9,
+          "gallery_count": 77,
+          "scene_recall_at_k": {
+            "1": 1.0,
+            "5": 1.0
+          },
+          "mrr": 1.0
+        },
+        "food_still_life": {
+          "query_count": 12,
+          "gallery_count": 161,
+          "scene_recall_at_k": {
+            "1": 0.8333333333333334,
+            "5": 0.9166666666666666
+          },
+          "mrr": 0.8814102564102564
+        },
+        "lifestyle_still_life": {
+          "query_count": 6,
+          "gallery_count": 105,
+          "scene_recall_at_k": {
+            "1": 0.6666666666666666,
+            "5": 0.6666666666666666
+          },
+          "mrr": 0.6977225672877846
+        },
+        "natural_landscape": {
+          "query_count": 22,
+          "gallery_count": 210,
+          "scene_recall_at_k": {
+            "1": 1.0,
+            "5": 1.0
+          },
+          "mrr": 1.0
+        },
+        "plant_still_life": {
+          "query_count": 1,
+          "gallery_count": 3,
+          "scene_recall_at_k": {
+            "1": 0.0,
+            "5": 0.0
+          },
+          "mrr": 0.029411764705882353
+        },
+        "urban_landscape": {
+          "query_count": 3,
+          "gallery_count": 23,
+          "scene_recall_at_k": {
+            "1": 0.3333333333333333,
+            "5": 0.3333333333333333
+          },
+          "mrr": 0.3709150326797385
+        }
+      },
+      "teacher_top5_overlap": 0.45660377358490567,
+      "teacher_overlap_effective_k": 5
+    }
+  },
+  "baseline": {
+    "schema_version": 1,
+    "protocol": {
+      "query_gallery_photo_id_disjoint": true,
+      "query_gallery_source_sha256_disjoint": true,
+      "source_group_disjointness_verified": false,
+      "near_duplicate_disjointness_verified": false,
+      "scene_recall_definition": "fraction of queries with at least one same-scene result in top K",
+      "macro_scene_population": "scenes present in queries, including scenes absent from gallery",
+      "raw_tie_break": "gallery row order",
+      "normalization": "L2, float64"
+    },
+    "raw": {
+      "query_count": 53,
+      "gallery_count": 579,
+      "eligible_query_count": 53,
+      "effective_k": {
+        "1": 1,
+        "5": 5
+      },
+      "scene_micro_recall_at_k": {
+        "1": 0.7169811320754716,
+        "5": 0.8490566037735849
+      },
+      "scene_macro_recall_at_k": {
+        "1": 0.5130471380471381,
+        "5": 0.6452020202020202
+      },
+      "mrr": 0.7872944419004353,
+      "mrr_scope": "full_gallery",
+      "per_scene": {
+        "closeup_portrait": {
+          "query_count": 9,
+          "gallery_count": 77,
+          "scene_recall_at_k": {
+            "1": 0.5555555555555556,
+            "5": 0.6666666666666666
+          },
+          "mrr": 0.6493827160493828
+        },
+        "food_still_life": {
+          "query_count": 12,
+          "gallery_count": 161,
+          "scene_recall_at_k": {
+            "1": 0.9166666666666666,
+            "5": 0.9166666666666666
+          },
+          "mrr": 0.9177350427350427
+        },
+        "lifestyle_still_life": {
+          "query_count": 6,
+          "gallery_count": 105,
+          "scene_recall_at_k": {
+            "1": 0.8333333333333334,
+            "5": 1.0
+          },
+          "mrr": 0.888888888888889
+        },
+        "natural_landscape": {
+          "query_count": 22,
+          "gallery_count": 210,
+          "scene_recall_at_k": {
+            "1": 0.7727272727272727,
+            "5": 0.9545454545454546
+          },
+          "mrr": 0.856060606060606
+        },
+        "plant_still_life": {
+          "query_count": 1,
+          "gallery_count": 3,
+          "scene_recall_at_k": {
+            "1": 0.0,
+            "5": 0.0
+          },
+          "mrr": 0.011764705882352941
+        },
+        "urban_landscape": {
+          "query_count": 3,
+          "gallery_count": 23,
+          "scene_recall_at_k": {
+            "1": 0.0,
+            "5": 0.3333333333333333
+          },
+          "mrr": 0.23030303030303031
+        }
+      },
+      "teacher_top5_overlap": 0.19622641509433963,
+      "teacher_overlap_effective_k": 5
+    }
+  },
+  "dataset_sha256": {
+    "train": "67ba32b6fc4740176a683594072abe21456c52a18054bf66bf116545247aa3df",
+    "test": "2c4f33f8c64ae5468c43d5d79696f7e9adef12e02057a47b0fc347fa1dc7087e"
+  },
+  "dataset_isolation": {
+    "photo_id_disjoint": true,
+    "source_sha256_disjoint": true,
+    "known_source_group_disjoint": true,
+    "unknown_source_group_rows": {
+      "train": 365,
+      "test": 52
+    },
+    "unknown_groups_prove_independence": false,
+    "near_duplicate_independence_verified": false
+  },
+  "fit_performed": false,
+  "test_used_for_selection": false,
+  "android_device_tested": false,
+  "limitations": [
+    "unknown source groups remain; one perceptual train/test duplicate candidate identified",
+    "baseline historical quantization calibration included holdout images",
+    "scene labels are weak semantic labels, not aesthetic judgments"
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-camera.local/schema/raw_photo.schema.json",
+  "title": "AI Camera raw photo candidate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "photo_id",
+    "photo_type",
+    "scene_category",
+    "query",
+    "file_path",
+    "sha256",
+    "width",
+    "height",
+    "reported_width",
+    "reported_height",
+    "source",
+    "rights",
+    "review"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "photo_id": {"type": "string", "minLength": 1},
+    "photo_type": {"enum": ["portrait", "landscape", "still_life"]},
+    "scene_category": {"type": "string", "minLength": 1},
+    "query": {"type": "string", "minLength": 1},
+    "file_path": {"type": "string", "minLength": 1},
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "width": {"type": "integer", "minimum": 1},
+    "height": {"type": "integer", "minimum": 1},
+    "reported_width": {"type": "integer", "minimum": 1},
+    "reported_height": {"type": "integer", "minimum": 1},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "provider_id", "landing_url", "asset_url", "creator", "creator_url"],
+      "properties": {
+        "provider": {"type": "string", "minLength": 1},
+        "provider_id": {"type": "string", "minLength": 1},
+        "landing_url": {"type": "string", "format": "uri"},
+        "asset_url": {"type": "string", "format": "uri"},
+        "creator": {"type": ["string", "null"]},
+        "creator_url": {"type": ["string", "null"], "format": "uri"},
+        "title": {"type": ["string", "null"]},
+        "tags": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "rights": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["license", "license_url", "attribution", "verification_status"],
+      "properties": {
+        "license": {
+          "enum": [
+            "cc0",
+            "pdm",
+            "local_authorized",
+            "unknown",
+            "cc-by",
+            "cc-by-sa"
+          ]
+        },
+        "license_url": {"type": "string", "format": "uri"},
+        "attribution": {"type": "string"},
+        "verification_status": {
+          "enum": [
+            "provider_declared_pending_review",
+            "user_declared_pending_review",
+            "local_file_pending_review"
+          ]
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["quality_status", "rights_status", "portrait_release_status"],
+      "properties": {
+        "quality_status": {"enum": ["pending", "accepted", "rejected"]},
+        "rights_status": {"enum": ["pending", "accepted", "rejected"]},
+        "portrait_release_status": {"enum": ["not_applicable", "pending", "accepted", "rejected"]},
+        "rejection_reason": {"type": ["string", "null"]},
+        "cv_failure_reason": {"type": ["string", "null"]},
+        "reviewed_at": {"type": ["string", "null"], "format": "date-time"}
+      }
+    }
+  }
+}

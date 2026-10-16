@@ -1,18 +1,24 @@
 package com.example.aicamera.camera
 
 import android.content.Context
+import android.hardware.display.DisplayManager
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
-import android.util.Size
+import android.view.View
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
+import androidx.camera.core.UseCaseGroup
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.example.aicamera.camera.CameraConfig.CameraFace
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -73,6 +79,48 @@ class CameraManager(
     private var cameraSelector: CameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
     private var lifecycleOwner: LifecycleOwner? = null
     private var previewView: PreviewView? = null
+    private var onReady: ((Boolean) -> Unit)? = null
+    private var initializationGeneration = 0L
+    private var bindingAllowed = false
+    private data class PreviewGeometry(
+        val width: Int, val height: Int, val rotation: Int,
+        val layoutDirection: Int, val scaleType: PreviewView.ScaleType
+    )
+    private var boundGeometry: PreviewGeometry? = null
+    private val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
+    private val displayListener = object : DisplayManager.DisplayListener {
+        override fun onDisplayAdded(displayId: Int) = Unit
+        override fun onDisplayRemoved(displayId: Int) = Unit
+        override fun onDisplayChanged(displayId: Int) {
+            // A 180-degree rotation need not change layout size or configuration orientation.
+            if (previewView?.display?.displayId == displayId) {
+                bindUseCases(onlyIfChanged = true, notifyReady = true)
+            }
+        }
+    }
+    private val layoutListener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+        bindUseCases(onlyIfChanged = true, notifyReady = true)
+    }
+    private val attachListener = object : View.OnAttachStateChangeListener {
+        override fun onViewAttachedToWindow(view: View) {
+            bindUseCases(onlyIfChanged = true, notifyReady = true)
+        }
+
+        override fun onViewDetachedFromWindow(view: View) {
+            clearBinding()
+        }
+    }
+    private val lifecycleObserver = LifecycleEventObserver { _, event ->
+        when (event) {
+            Lifecycle.Event.ON_RESUME -> {
+                bindingAllowed = true
+                bindUseCases(onlyIfChanged = true, notifyReady = true)
+            }
+            Lifecycle.Event.ON_PAUSE -> unbind()
+            Lifecycle.Event.ON_DESTROY -> release()
+            else -> Unit
+        }
+    }
 
     /** 推理专用线程池（可重建，避免 release 后不可复用） */
     private var analysisExecutor: ExecutorService = createAnalysisExecutor()
@@ -94,28 +142,33 @@ class CameraManager(
         lifecycleOwner: LifecycleOwner,
         onReady: (success: Boolean) -> Unit = {}
     ) {
+        detachObservers()
+        clearBinding()
+        val generation = ++initializationGeneration
         this.previewView = previewView
         this.lifecycleOwner = lifecycleOwner
+        this.onReady = onReady
+        cameraProvider = null
+        isInitialized = false
+        bindingAllowed = true
+        previewView.addOnLayoutChangeListener(layoutListener)
+        previewView.addOnAttachStateChangeListener(attachListener)
+        displayManager?.registerDisplayListener(displayListener, Handler(Looper.getMainLooper()))
+        lifecycleOwner.lifecycle.addObserver(lifecycleObserver)
 
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
 
         cameraProviderFuture.addListener({
+            // A released/replaced view must not be resurrected by an old future.
+            if (generation != initializationGeneration) return@addListener
             try {
                 cameraProvider = cameraProviderFuture.get()
-
-                // ★ 绑定结果驱动状态，失败不谎报成功
-                val bound = bindUseCases()
-                isInitialized = bound
-                if (bound) {
-                    logInfo("CameraX 初始化成功")
-                } else {
-                    logError("CameraX UseCase 绑定失败")
-                }
-                onReady(bound)
+                // Layout/attachment/resume listeners retry if the ViewPort is not ready.
+                bindUseCases(onlyIfChanged = true, notifyReady = true)
             } catch (e: Exception) {
                 logError("CameraX 初始化失败", e)
                 isInitialized = false
-                onReady(false)
+                this.onReady?.invoke(false)
             }
         }, ContextCompat.getMainExecutor(context))
     }
@@ -123,27 +176,39 @@ class CameraManager(
     // ── UseCase 创建与绑定 ────────────────────────────────────
 
     /** 构建三个 UseCase 并绑定到生命周期，返回是否成功 */
-    private fun bindUseCases(): Boolean {
+    private fun bindUseCases(
+        onlyIfChanged: Boolean = false,
+        notifyReady: Boolean = false,
+        rotation: Int? = null
+    ): Boolean {
         val provider = cameraProvider ?: return false
         val lifecycle = lifecycleOwner ?: return false
         val view = previewView ?: return false
-        val targetRotation = view.display?.rotation ?: android.view.Surface.ROTATION_0
+        if (!bindingAllowed || !view.isAttachedToWindow ||
+            !lifecycle.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return false
+        val targetRotation = rotation ?: view.display?.rotation ?: android.view.Surface.ROTATION_0
+        val viewPort = view.getViewPort(targetRotation) ?: return false
+        val geometry = PreviewGeometry(view.width, view.height, targetRotation, view.layoutDirection, view.scaleType)
+        if (onlyIfChanged && camera != null && geometry == boundGeometry) return true
 
         // 解绑旧的 UseCase（切换摄像头时复用此方法）
+        imageAnalysis?.clearAnalyzer()
         provider.unbindAll()
+        camera = null
+        boundGeometry = null
 
         // ★ 确保 executor 可用（release 后也可重复使用）
         ensureAnalysisExecutor()
 
         // 1. Preview — 实时取景（应用 Pro 参数）
-        preview = Preview.Builder()
+        val newPreview = Preview.Builder()
             .setTargetRotation(targetRotation)
             .also { applyProOptions(it) }
             .build()
             .also { it.setSurfaceProvider(view.surfaceProvider) }
 
         // 2. ImageCapture — 拍照（应用 Pro 参数，保证成片与预览一致）
-        imageCapture = ImageCapture.Builder()
+        val newImageCapture = ImageCapture.Builder()
             .setTargetRotation(targetRotation)
             .also { applyProOptions(it) }
             .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
@@ -151,7 +216,7 @@ class CameraManager(
             .build()
 
         // 3. ImageAnalysis — 帧分析（给 AI 推理用）
-        imageAnalysis = ImageAnalysis.Builder()
+        val newImageAnalysis = ImageAnalysis.Builder()
             .setTargetRotation(targetRotation)
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
@@ -161,15 +226,23 @@ class CameraManager(
                 it.setAnalyzer(analysisExecutor, FrameAnalyzer())
             }
 
-        // 绑定到生命周期
-        return try {
+        preview = newPreview
+        imageCapture = newImageCapture
+        imageAnalysis = newImageAnalysis
+        // CameraX exposes the common visible region through ImageProxy.cropRect.
+        val group = UseCaseGroup.Builder()
+            .setViewPort(viewPort)
+            .addUseCase(newPreview)
+            .addUseCase(newImageCapture)
+            .addUseCase(newImageAnalysis)
+            .build()
+        val bound = try {
             camera = provider.bindToLifecycle(
                 lifecycle,
                 cameraSelector,
-                preview,
-                imageCapture,
-                imageAnalysis
+                group
             )
+            boundGeometry = geometry
             logInfo("UseCase 绑定成功: face=$currentFace")
             true
         } catch (e: Exception) {
@@ -177,6 +250,9 @@ class CameraManager(
             camera = null
             false
         }
+        isInitialized = bound
+        if (notifyReady) onReady?.invoke(bound)
+        return bound
     }
 
     // ── 帧分析回调 ────────────────────────────────────────────
@@ -338,11 +414,9 @@ class CameraManager(
     /** 获取当前 PreviewView（坐标映射参考） */
     fun getPreviewView(): PreviewView? = previewView
 
-    /** 横竖屏变化时同步预览、成片和 AI 分析方向，无需重绑相机。 */
+    /** Rotation changes require a new shared ViewPort as well as target rotation. */
     fun updateTargetRotation(rotation: Int) {
-        preview?.targetRotation = rotation
-        imageCapture?.targetRotation = rotation
-        imageAnalysis?.targetRotation = rotation
+        bindUseCases(onlyIfChanged = true, notifyReady = true, rotation = rotation)
     }
 
     /** 是否为前置摄像头 */
@@ -357,8 +431,12 @@ class CameraManager(
      * ★ 清理 View 引用，防止泄漏。
      */
     fun release() {
-        imageAnalysis?.clearAnalyzer()
-        cameraProvider?.unbindAll()
+        initializationGeneration++
+        bindingAllowed = false
+        detachObservers()
+        onReady = null
+        onFrameAvailable = null
+        clearBinding()
         analysisExecutor.shutdown()
 
         camera = null
@@ -367,20 +445,22 @@ class CameraManager(
         imageAnalysis = null
         previewView = null
         lifecycleOwner = null
+        cameraProvider = null
         isInitialized = false
         logInfo("相机资源已释放")
     }
 
     /** 暂停时解绑相机（可选，切换到后台时释放相机） */
     fun unbind() {
-        cameraProvider?.unbindAll()
-        camera = null
+        bindingAllowed = false
+        clearBinding()
         logInfo("相机已解绑")
     }
 
     /** 恢复时重新绑定（从后台回到前台）。@return 是否绑定成功 */
     fun rebind(): Boolean {
         return if (lifecycleOwner != null && previewView != null) {
+            bindingAllowed = true
             val bound = bindUseCases()
             if (bound) logInfo("相机已重新绑定") else logError("相机重绑失败")
             bound
@@ -391,6 +471,20 @@ class CameraManager(
     }
 
     // ── 内部工具 ──────────────────────────────────────────────
+
+    private fun detachObservers() {
+        displayManager?.unregisterDisplayListener(displayListener)
+        previewView?.removeOnLayoutChangeListener(layoutListener)
+        previewView?.removeOnAttachStateChangeListener(attachListener)
+        lifecycleOwner?.lifecycle?.removeObserver(lifecycleObserver)
+    }
+
+    private fun clearBinding() {
+        imageAnalysis?.clearAnalyzer()
+        cameraProvider?.unbindAll()
+        camera = null
+        boundGeometry = null
+    }
 
     private fun createAnalysisExecutor(): ExecutorService =
         Executors.newSingleThreadExecutor()

@@ -1,16 +1,22 @@
 package com.example.aicamera.guidance.geometry
 
+import com.example.aicamera.guidance.StructureObservation
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.util.Log
 import androidx.camera.core.ImageProxy
+import com.example.aicamera.pipeline.toViewPortBitmap
 import com.google.android.gms.tasks.Tasks
+import com.google.android.gms.tasks.Task
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetector
 import com.google.mlkit.vision.face.FaceDetectorOptions
+import com.google.mlkit.vision.face.Face
 import java.io.Closeable
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.Executor
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -27,8 +33,8 @@ import javax.inject.Singleton
  * - 同步阻塞用 `Tasks.await(timeout)`，在推理工作线程调用（禁止主线程）。
  *
  * ## 为什么只检测人脸
- * v9 模板库中 portrait 类模板 97/728，人像是最需要「主体 vs 目标区」引导的
- * 场景；非人像模板没有可靠主体定义，保持 NONE 比乱指更诚实（docs/10 口径）。
+ * 人像可比较实时人脸与参考图中经过审阅的人脸锚点。
+ * 未提供可验证主体目标的模板不生成主体移动指令（docs/10 口径）。
  * 后续可扩展 ML Kit 主体分割（play-services-mlkit-subject-segmentation）。
  */
 @Singleton
@@ -43,8 +49,8 @@ class FaceSubjectDetector @Inject constructor() : Closeable {
         .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
         .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_NONE)
         .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_NONE)
-        // 0.06：中远距离人像（脸占画面 6%）也能检出 — 自动变焦依赖该信号
         .setMinFaceSize(0.06f)
+        .enableTracking()
         .build()
 
     private val detector: FaceDetector = FaceDetection.getClient(options)
@@ -54,6 +60,11 @@ class FaceSubjectDetector @Inject constructor() : Closeable {
 
     @Volatile
     private var lastBox: NormalizedBox? = null
+    @Volatile private var lastObservation: StructureObservation? = null
+    private var observationId = 0L
+    private var viewportVersion = 0L
+    fun latestObservation(): StructureObservation? = lastObservation
+    private val detectionInFlight = AtomicBoolean(false)
 
     /** 最近一次的检测耗时（ms，性能面板用） */
     @Volatile
@@ -70,31 +81,36 @@ class FaceSubjectDetector @Inject constructor() : Closeable {
     fun detectIfDue(imageProxy: ImageProxy, isFrontCamera: Boolean): NormalizedBox? {
         val now = android.os.SystemClock.elapsedRealtime()
         if (now - lastRunAt < minIntervalMs) return lastBox
+        // A timed-out ML Kit Task is still running; do not enqueue overlapping work.
+        if (!detectionInFlight.compareAndSet(false, true)) return null
         lastRunAt = now
 
         val start = now
         var bitmap: Bitmap? = null
         var scaled: Bitmap? = null
+        var detectionTask: Task<List<Face>>? = null
         try {
             // 1. 构造显示坐标系 Bitmap（转正 + 前摄镜像，与预处理同口径）
-            var bmp = imageProxy.toBitmap()
+            bitmap = imageProxy.toViewPortBitmap()
             val rotation = imageProxy.imageInfo.rotationDegrees
-            if (rotation != 0) bmp = rotate(bmp, rotation)
-            if (isFrontCamera) bmp = mirror(bmp)
-            bitmap = bmp
+            if (rotation != 0) bitmap = rotate(requireNotNull(bitmap), rotation)
+            if (isFrontCamera) bitmap = mirror(requireNotNull(bitmap))
 
             // 2. 缩放到检测分辨率
-            scaled = scaleToMaxSide(bmp, maxImageSide)
+            val detectorBitmap = scaleToMaxSide(requireNotNull(bitmap), maxImageSide)
+            scaled = detectorBitmap
 
             // 3. ML Kit 检测（rotation=0：bitmap 已转正，坐标即显示坐标）
-            val image = InputImage.fromBitmap(scaled, 0)
-            val faces = Tasks.await(detector.process(image), detectTimeoutMs, TimeUnit.MILLISECONDS)
+            val image = InputImage.fromBitmap(detectorBitmap, 0)
+            val task = detector.process(image)
+            detectionTask = task
+            val faces = Tasks.await(task, detectTimeoutMs, TimeUnit.MILLISECONDS)
 
             // 4. 取最大人脸 → 归一化
-            val best = faces.maxByOrNull { it.boundingBox.width() * it.boundingBox.height() }
+            val best = faces.singleOrNull()
             lastBox = best?.let { face ->
-                val w = scaled.width.toFloat()
-                val h = scaled.height.toFloat()
+                val w = detectorBitmap.width.toFloat()
+                val h = detectorBitmap.height.toFloat()
                 NormalizedBox(
                     left = (face.boundingBox.left / w).coerceIn(0f, 1f),
                     top = (face.boundingBox.top / h).coerceIn(0f, 1f),
@@ -102,20 +118,41 @@ class FaceSubjectDetector @Inject constructor() : Closeable {
                     bottom = (face.boundingBox.bottom / h).coerceIn(0f, 1f)
                 )
             }
+            lastObservation = StructureObservation(++observationId, start, viewportVersion,
+                faces.size, lastBox, best?.headEulerAngleY, best?.trackingId)
             return lastBox
         } catch (e: Exception) {
             Log.w(TAG, "人脸检测失败: ${e.message}")
-            return lastBox // 返回缓存，链路不中断
+            lastBox = null
+            lastObservation = StructureObservation(++observationId, start, viewportVersion, 0, null, valid = false)
+            return null // Never guide from an indefinitely stale face after repeated failures.
         } finally {
             lastDetectMs = android.os.SystemClock.elapsedRealtime() - start
-            if (scaled != null && scaled !== bitmap) scaled.recycle()
-            bitmap?.recycle()
+            val ownedBitmap = bitmap
+            val ownedScaled = scaled
+            val cleanup = {
+                try {
+                    if (ownedScaled != null && ownedScaled !== ownedBitmap) ownedScaled.recycle()
+                    ownedBitmap?.recycle()
+                } finally {
+                    detectionInFlight.set(false)
+                }
+            }
+            val pending = detectionTask
+            if (pending != null && !pending.isComplete) {
+                // Tasks.await timeout does not cancel native inference or release its input.
+                pending.addOnCompleteListener(Executor { it.run() }) { cleanup() }
+            } else {
+                cleanup()
+            }
         }
     }
 
     /** 清空缓存（切换摄像头后调用，避免旧朝向的框残留） */
     fun resetCache() {
         lastBox = null
+        lastObservation = null
+        viewportVersion++
         lastRunAt = 0L
     }
 

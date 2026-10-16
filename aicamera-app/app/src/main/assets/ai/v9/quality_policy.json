@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "enabled": false,
+  "encoder_sha256": "f7f76fa326e0bf089eeb98c7df6ca9ca8225719fa80d482919216dff7504a9cf",
+  "head_sha256": "8d6a4357fd997aebd34faad11652c888e4fa7aec6ee108bdce599e26b8cf169a",
+  "enabled_scenes": [],
+  "candidate_scenes": [
+    "portrait"
+  ],
+  "gates": {
+    "minimum_acceptance_clusters": false,
+    "minimum_scene_clusters": true,
+    "teacher_agreement": true,
+    "bootstrap_above_chance": true,
+    "beats_structure_baseline": false,
+    "hard_constraints": true,
+    "severe_defect_non_regression": true,
+    "weight_budget": true
+  },
+  "reasons": [
+    "minimum_acceptance_clusters",
+    "beats_structure_baseline"
+  ],
+  "acceptance_cluster_count": 12,
+  "scene_cluster_counts": {
+    "portrait": 12
+  },
+  "pair_count": 22,
+  "pairwise_agreement": 1.0,
+  "bootstrap_lower95": 1.0,
+  "known_defect_pair_count": 22,
+  "defect_agreement_by_kind": {
+    "defect_blur": 1.0,
+    "defect_overexposure": 1.0
+  },
+  "crop_teacher_pair_count": 0,
+  "crop_source_cluster_count": 0,
+  "crop_pairwise_agreement": null,
+  "coverage": 1.0,
+  "rejection_rate": 0.0,
+  "baseline_pairwise_agreement": 1.0,
+  "hard_constraints_passed": true,
+  "severe_defect_non_regression": true,
+  "metric_semantics": "Agreement with CLIP+MLP weak-teacher rankings stable under JPEG90; ties in student count incorrect. Not human preference accuracy.",
+  "encoder_seen_source": true,
+  "historical_test_used": false,
+  "phone_latency_verified": false,
+  "head_bytes": 178774,
+  "metrics": {
+    "acceptance_cluster_count": 12,
+    "scene_cluster_counts": {
+      "portrait": 12
+    },
+    "pair_count": 22,
+    "pairwise_agreement": 1.0,
+    "bootstrap_lower95": 1.0,
+    "known_defect_pair_count": 22,
+    "defect_agreement_by_kind": {
+      "defect_blur": 1.0,
+      "defect_overexposure": 1.0
+    },
+    "crop_teacher_pair_count": 0,
+    "crop_source_cluster_count": 0,
+    "crop_pairwise_agreement": null,
+    "coverage": 1.0,
+    "rejection_rate": 0.0,
+    "baseline_pairwise_agreement": 1.0,
+    "hard_constraints_passed": true,
+    "severe_defect_non_regression": true
+  }
+}

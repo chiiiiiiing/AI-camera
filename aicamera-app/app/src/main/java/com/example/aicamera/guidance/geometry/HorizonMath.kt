@@ -12,7 +12,7 @@ import kotlin.math.sqrt
  * ## 修复历史
  * - 旧公式 `atan2(-gx, -gy)` 在竖屏正立时输出 ~±180°，倒置时输出 ~0°，
  *   导致倒着拿手机反而更容易通过"水平校准"。审计确认这是 P0 Bug。
- * - 正确公式：`atan2(gx, gy)` — 正立时 0°，顺时针倾斜时 >0°，逆时针 <0°。
+ * - 面向屏幕的纠偏约定：`atan2(-gx, gy)` — 正立时 0°，顺时针倾斜时 >0°，逆时针 <0°。
  * - 同时引入 `isUpright` 判断（gy > 0），180° 倒置绝不能判为水平。
  *
  * ## 坐标系（Android 设备）
@@ -25,6 +25,35 @@ import kotlin.math.sqrt
  */
 object HorizonMath {
 
+    /** Sensor axes stay in the device's natural orientation when its display rotates.
+     * Surface rotation is expressed as quarter turns (0..3); image sensor rotation
+     * is a different quantity and must not be passed here.
+     */
+    fun inDisplayCoordinates(observation: HorizonObservation, rotationQuarterTurns: Int): HorizonObservation {
+        require(rotationQuarterTurns in 0..3)
+        val raw = observation.rollDegrees + rotationQuarterTurns * 90f
+        val roll = ((raw + 180f) % 360f + 360f) % 360f - 180f
+        val pitch = observation.pitchDegrees ?: 0f
+        val uprightGravity = cos(Math.toRadians(roll.toDouble())) *
+            abs(cos(Math.toRadians(pitch.toDouble()))) * 9.8
+        val rawMeasured = observation.rawRollDegrees?.let {
+            val rotated = it + rotationQuarterTurns*90f
+            ((rotated+180f)%360f+360f)%360f-180f
+        }
+        return observation.copy(rollDegrees = roll, isUpright = uprightGravity > 0.5, rawRollDegrees = rawMeasured)
+    }
+
+    /** Gravity cannot establish image-plane roll when the lens points almost vertically.
+     * Use the same 0.5 m/s² noise floor as the upright check, rather than reporting
+     * a flat-lay camera as upside down from an arbitrary atan2(0, 0) result.
+     */
+    fun hasObservableRoll(observation: HorizonObservation): Boolean {
+        if (!observation.rollDegrees.isFinite() || !observation.confidence.isFinite() ||
+            observation.confidence <= 0f) return false
+        val pitch = observation.pitchDegrees ?: return true
+        return pitch.isFinite() && abs(cos(Math.toRadians(pitch.toDouble()))) * 9.8 > 0.5
+    }
+
     /**
      * 从重力向量计算 roll 角和正立状态。
      *
@@ -34,8 +63,9 @@ object HorizonMath {
      * @return [HorizonObservation] 包含 roll、isUpright、confidence
      */
     fun compute(gx: Float, gy: Float, gz: Float): HorizonObservation {
-        // roll = atan2(gx, gy)：正立时 0°，顺时针 > 0
-        val rollRad = atan2(gx.toDouble(), gy.toDouble())
+        // Facing the screen, a clockwise tilt makes the device's x axis point
+        // down: gx is negative. Positive roll must request counterclockwise correction.
+        val rollRad = atan2(-gx.toDouble(), gy.toDouble())
         val rollDeg = Math.toDegrees(rollRad).toFloat()
 
         // pitch = atan2(-gz, sqrt(gx² + gy²))：水平时 0°，上仰 > 0
@@ -73,7 +103,10 @@ data class HorizonObservation(
     val pitchDegrees: Float? = null,
     val yawDegrees: Float? = null,
     val isUpright: Boolean,
-    val confidence: Float
+    val confidence: Float,
+    val observationId: Long = 0L,
+    val sampledAtMs: Long = 0L,
+    val rawRollDegrees: Float? = null
 )
 
 /**

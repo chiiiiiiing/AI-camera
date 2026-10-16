@@ -80,6 +80,7 @@ import com.example.aicamera.guidance.AlignmentFlashOverlay
 import com.example.aicamera.guidance.CompositionSessionController
 import com.example.aicamera.guidance.GuidanceCue
 import com.example.aicamera.guidance.GuidancePhase
+import com.example.aicamera.guidance.toGuidanceCue
 import com.example.aicamera.ui.components.CaptureWorkflowOverlay
 import com.example.aicamera.ui.components.CaptureWorkflowState
 import com.example.aicamera.ui.components.CaptureResultSheet
@@ -99,7 +100,6 @@ import com.example.aicamera.viewmodel.CameraViewModel
 import com.example.aicamera.viewmodel.CommunityViewModel
 import com.example.aicamera.viewmodel.PipelineViewModel
 import com.example.aicamera.viewmodel.RenderViewModel
-import com.example.aicamera.zoom.PortraitAutoZoomPolicy
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -145,12 +145,29 @@ fun CameraScreen(
     val pipelineState by pipelineViewModel.pipelineState.collectAsStateWithLifecycle()
     // ★ 统一构图会话控制器状态（替代旧双工作流）
     val sessionState by renderViewModel.sessionController.state.collectAsStateWithLifecycle()
+    val sessionDecision by renderViewModel.sessionController.decision.collectAsStateWithLifecycle()
     // 将控制器状态映射到 UI overlay 所需的状态枚举
     val hasRealSubject = renderInput.guideLines.any {
-        it.type.name == "SUBJECT_BOX" && it.params["real"] == true
+        it.visible && it.type.name == "SUBJECT_BOX" && it.params["real"] == true &&
+            it.params["anchor_kind"] == "face"
     }
-    val expectsSubject = renderInput.guideLines.any { it.type.name == "SUBJECT_BOX" }
+    val expectsSubject = renderInput.guideLines.any {
+        it.visible && it.type.name == "TARGET_ZONE" && it.params["anchor_kind"] == "face"
+    }
     val workflowState = mapSessionState(sessionState, hasRealSubject, expectsSubject)
+    // The action shown during capture must come from the controller deciding Ready.
+    val workflowCue = when (val current = sessionState) {
+        is CompositionSessionController.State.Adjusting -> current.action.toGuidanceCue()
+        CompositionSessionController.State.Verifying,
+        CompositionSessionController.State.Ready -> GuidanceCue.SUBJECT_ALIGNED
+        else -> GuidanceCue.NONE
+    }
+    val workflowPhase = when (sessionState) {
+        CompositionSessionController.State.Ready -> GuidancePhase.ALIGNED
+        CompositionSessionController.State.Verifying -> GuidancePhase.NEAR
+        is CompositionSessionController.State.Adjusting -> GuidancePhase.ADJUST
+        else -> GuidancePhase.NEUTRAL
+    }
     // 拍照后构图说明标签（null = 不显示）
     var compositionLabel by remember { mutableStateOf<String?>(null) }
     // 拍后结果确认页（不生成伪审美分数）
@@ -302,7 +319,7 @@ fun CameraScreen(
     LaunchedEffect(uiState.isInitialized) {
         if (uiState.isInitialized) {
             pipelineViewModel.connect(cameraViewModel.frameFlow)
-            renderViewModel.connect(pipelineViewModel.pipelineResults)
+            renderViewModel.connect(pipelineViewModel.pipelineResults, pipelineViewModel::requestReplan)
         }
     }
 
@@ -415,19 +432,23 @@ fun CameraScreen(
     }
 
     /** ★ 从当前帧 AI 输出实时提取构图目标中心点（来自 target_zone，不是 subject_box） */
-    fun liveTargetCenter(): Pair<Float, Float> {
+    fun liveTargetCenter(): Pair<Float, Float>? {
         // ★ 修复：target 来自 target_zone（AI/模板指定的构图目标位置）
-        val targetZone = renderInput.guideLines.find { it.type.name == "TARGET_ZONE" }
+        val targetZone = renderInput.guideLines.find {
+            it.visible && it.type.name == "TARGET_ZONE" && it.params["anchor_kind"] == "face"
+        }
         val tcx = (targetZone?.params?.get("center_x") as? Number)?.toFloat()
         val tcy = (targetZone?.params?.get("center_y") as? Number)?.toFloat()
-        if (tcx != null && tcy != null) return tcx to tcy
-
-        return 0.333f to 0.333f
+        if (tcx != null && tcy != null && tcx.isFinite() && tcy.isFinite() &&
+            tcx in 0f..1f && tcy in 0f..1f) return tcx to tcy
+        return null
     }
 
     /** ★ 获取当前真实主体中心点（来自真实检测，非模板占位框） */
     fun liveSubjectCenter(): Pair<Float, Float>? {
-        val subjectBox = renderInput.guideLines.find { it.type.name == "SUBJECT_BOX" }
+        val subjectBox = renderInput.guideLines.find {
+            it.visible && it.type.name == "SUBJECT_BOX" && it.params["anchor_kind"] == "face"
+        }
         // 只取真实检测框（real=true），忽略模板占位
         val isReal = subjectBox?.params?.get("real") == true
         if (!isReal) return null
@@ -437,7 +458,8 @@ fun CameraScreen(
         val sh = (subjectBox?.params?.get("height") as? Number)?.toFloat()
         val scx = if (sx != null && sw != null) sx + sw / 2f else null
         val scy = if (sy != null && sh != null) sy + sh / 2f else null
-        if (scx != null && scy != null) return scx to scy
+        if (scx != null && scy != null && scx.isFinite() && scy.isFinite() &&
+            scx in 0f..1f && scy in 0f..1f) return scx to scy
         return null
     }
 
@@ -467,35 +489,6 @@ fun CameraScreen(
         }
     }
 
-    /**
-     * 根据构图目标区自动计算并执行变焦。
-     * ★ 只使用真实主体框（real=true），禁止 placeholder 驱动 Zoom。
-     */
-    fun autoZoomToComposition(): Float? {
-        // ★ 只取真实主体框
-        val subjectBox = renderInput.guideLines.find {
-            it.type.name == "SUBJECT_BOX" && it.params["real"] == true
-        }
-        if (subjectBox != null) {
-            val sw = (subjectBox.params["width"] as? Number)?.toFloat()
-            val sh = (subjectBox.params["height"] as? Number)?.toFloat()
-            if (sw != null && sh != null && sw > 0f && sh > 0f) {
-                val (minZ, maxZ) = cameraViewModel.zoomRange()
-                val target = PortraitAutoZoomPolicy.targetRatio(
-                    currentRatio = cameraViewModel.actualZoomRatio(),
-                    subjectWidth = sw,
-                    subjectHeight = sh,
-                    deviceMinRatio = minZ,
-                    deviceMaxRatio = maxZ
-                ) ?: return null
-                cameraViewModel.rampZoomTo(target, durationMs = 520L)
-                return target
-            }
-        }
-        // 模板目标区不是实际主体尺寸，不能据此推算焦距。
-        return null
-    }
-
     // ★ 统一会话控制器驱动：ANALYZING → 延迟后通知完成
     LaunchedEffect(sessionState) {
         when (sessionState) {
@@ -506,19 +499,7 @@ fun CameraScreen(
                 renderViewModel.sessionController.onAnalysisComplete()
             }
             is CompositionSessionController.State.Ready -> {
-                // 构图就绪 → 自动变焦（如启用）+ 拍照
-                if (settings.aiAutoZoomEnabled) {
-                    val targetZoom = autoZoomToComposition()
-                    // ★ 等待 CameraX 实际 Zoom 完成（替代固定 delay）
-                    var waited = 0
-                    while (targetZoom != null && waited < 1200) {
-                        val actual = cameraViewModel.actualZoomRatio()
-                        if (kotlin.math.abs(actual - targetZoom) < 0.05f && waited > 300) break
-                        delay(100)
-                        waited += 100
-                    }
-                    delay(200) // 额外稳定帧
-                }
+                // Preserve verified framing; do not guess a new focal length after Ready.
                 compositionLabel = "正在对焦与测光"
                 cameraViewModel.prepareForCapture()
                 compositionLabel = compositionDescription()
@@ -774,14 +755,21 @@ fun CameraScreen(
         if (uiState.isInitialized) {
             val horizonLine = renderInput.guideLines.find { it.type.name == "HORIZON_LEVEL" }
             val horizonAngle = (horizonLine?.params?.get("angle_degrees") as? Number)?.toFloat()
-            val (liveNx, liveNy) = liveTargetCenter()
+            val targetCenter = liveTargetCenter()
             val subjectCenter = liveSubjectCenter()
             CaptureWorkflowOverlay(
                 state = workflowState,
-                cue = guidanceState.cue,
-                phase = guidanceState.phase,
-                targetNx = liveNx,
-                targetNy = liveNy,
+                cue = workflowCue,
+                phase = workflowPhase,
+                feedbackHint = when (sessionDecision.feedback) {
+                    com.example.aicamera.guidance.GuidanceFeedback.WORSENING -> "先保持，刚才的调整没有改善构图"
+                    com.example.aicamera.guidance.GuidanceFeedback.NO_PROGRESS -> "先保持，暂未找到更有效的调整"
+                    com.example.aicamera.guidance.GuidanceFeedback.VERIFYING -> "位置合适，请保持稳定"
+                    com.example.aicamera.guidance.GuidanceFeedback.INSUFFICIENT_EVIDENCE -> "先保持，正在确认可用的构图依据"
+                    else -> null
+                },
+                targetNx = targetCenter?.first,
+                targetNy = targetCenter?.second,
                 horizonAngleDeg = horizonAngle,
                 subjectNx = subjectCenter?.first,
                 subjectNy = subjectCenter?.second,
@@ -1038,7 +1026,7 @@ private fun mapSessionState(
             else -> CaptureWorkflowState.GUIDING
         }
     }
-    is CompositionSessionController.State.Verifying -> CaptureWorkflowState.READY
+    is CompositionSessionController.State.Verifying -> CaptureWorkflowState.GUIDING
     is CompositionSessionController.State.Ready -> CaptureWorkflowState.READY
     is CompositionSessionController.State.Capturing -> CaptureWorkflowState.CAPTURING
     is CompositionSessionController.State.Saved -> CaptureWorkflowState.SAVED

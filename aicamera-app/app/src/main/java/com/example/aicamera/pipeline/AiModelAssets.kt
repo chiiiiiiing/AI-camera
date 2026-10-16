@@ -24,7 +24,7 @@ import java.security.MessageDigest
  * - 由 [AiEngineManager] 在后台线程调用（首次启动或版本升级）
  *
  * ## 完整性
- * 复制后按 `android_onnx_runtime_manifest.json` 中的 sha256 校验 int8 模型，
+ * 复制后按 `android_onnx_runtime_manifest.json` 中的 sha256 校验部署模型，
  * 防止截断/损坏的模型进入推理链路（见 [verifyModelIntegrity]）。
  */
 object AiModelAssets {
@@ -34,11 +34,19 @@ object AiModelAssets {
     private const val VERSION_FILE = "ai_model_version.txt"
 
     /** 资产内容变化时递增，强制旧设备重新复制 */
-    private const val CURRENT_VERSION = "v9-static-int8-onnx-2"
+    private const val CURRENT_VERSION = "v12-multiscene-guidance-1"
 
-    /** 必须的模型文件（fp32 对照模型不进 APK，仅 AI 侧调试用） */
+    // Optional capabilities fail closed in their own readers. A rejected quality head
+    // must never prevent the existing retrieval model from starting.
+    private val OPTIONAL_FILES = listOf(
+        "reference_structures.json", "quality_policy.json", "quality_head.json",
+        "object_detector.onnx", "object_detector_manifest.json",
+        "multi_scene_references.json", "LICENSE.object_detector.txt"
+    )
+
+    /** 必须的部署文件；模型精度由 manifest 记录，不编码在部署文件名中。 */
     private val REQUIRED_FILES = listOf(
-        "student_model.static_int8.onnx",
+        MODEL_FILE,
         "android_onnx_runtime_manifest.json",
         "android_runtime_config.json"
     )
@@ -51,7 +59,7 @@ object AiModelAssets {
     )
 
     /** 模型文件名（sha256 校验对象） */
-    private const val MODEL_FILE = "student_model.static_int8.onnx"
+    private const val MODEL_FILE = "student_model.onnx"
     private const val MANIFEST_FILE = "android_onnx_runtime_manifest.json"
 
     // ── 公开 API ──────────────────────────────────────────────
@@ -62,14 +70,15 @@ object AiModelAssets {
      * @param context App context
      * @return 模型文件所在目录的 File，失败返回 null
      */
+    @Synchronized
     fun ensureModelFiles(context: Context): File? {
         val targetDir = File(context.filesDir, ASSET_BASE)
         val indexDir = File(targetDir, "template_index")
 
         // 检查版本，已是最新则跳过
-        if (isUpToDate(targetDir)) {
+        if (isUpToDate(targetDir) && validate(targetDir, indexDir) != null && verifyModelIntegrity(targetDir)) {
             Log.i(TAG, "AI 模型文件已是最新版本，跳过复制")
-            return validate(targetDir, indexDir)
+            return targetDir
         }
 
         // 清理旧文件
@@ -98,10 +107,22 @@ object AiModelAssets {
             }
         }
 
+        for (fileName in OPTIONAL_FILES) {
+            val targetFile = File(targetDir, fileName)
+            if (!copyAsset(context, "$ASSET_BASE/$fileName", targetFile)) {
+                // Remove a partial file left by an interrupted optional copy.
+                targetFile.delete()
+            }
+        }
+
         if (!allSuccess) {
             Log.e(TAG, "部分 AI 文件复制失败")
             return null
         }
+
+        // A version marker only certifies a complete, verified copy. Missing or corrupted cache
+        // files are recopied on this same startup, not left broken until a manual reinstall.
+        if (validate(targetDir, indexDir) == null || !verifyModelIntegrity(targetDir)) return null
 
         // 写版本标记
         try {
@@ -118,8 +139,8 @@ object AiModelAssets {
      * 验证必需文件完整性（模型与索引均为必需）。
      */
     fun validate(modelDir: File, indexDir: File): File? {
-        val missingModel = REQUIRED_FILES.filter { !File(modelDir, it).exists() }
-        val missingIndex = REQUIRED_INDEX_FILES.filter { !File(indexDir, it).exists() }
+        val missingModel = REQUIRED_FILES.filter { !File(modelDir, it).isFile || File(modelDir, it).length() == 0L }
+        val missingIndex = REQUIRED_INDEX_FILES.filter { !File(indexDir, it).isFile || File(indexDir, it).length() == 0L }
 
         if (missingModel.isNotEmpty()) {
             Log.e(TAG, "缺失模型文件: $missingModel")
@@ -134,21 +155,26 @@ object AiModelAssets {
     }
 
     /**
-     * 按 manifest 中的 sha256 校验 int8 模型完整性。
+     * 按 manifest 中的 sha256 校验部署模型完整性。
      *
-     * @return true = 校验通过或 manifest 未提供 hash（跳过）；false = hash 不匹配（文件损坏）
+     * @return true = 校验通过；缺失或损坏的 manifest / 模型返回 false。
      */
     fun verifyModelIntegrity(modelDir: File): Boolean {
         val expected = expectedModelSha256(modelDir) ?: run {
-            Log.w(TAG, "manifest 未提供 sha256，跳过模型校验")
-            return true
+            Log.w(TAG, "manifest 未提供有效 sha256，模型校验失败")
+            return false
         }
         val modelFile = File(modelDir, MODEL_FILE)
         if (!modelFile.exists()) {
             Log.e(TAG, "模型文件不存在，无法校验")
             return false
         }
-        val actual = sha256(modelFile)
+        val actual = try {
+            sha256(modelFile)
+        } catch (e: Exception) {
+            Log.e(TAG, "读取模型校验失败", e)
+            return false
+        }
         val match = expected.equals(actual, ignoreCase = true)
         if (!match) {
             Log.e(TAG, "模型 sha256 不匹配! 期望 $expected，实际 $actual")
@@ -158,15 +184,20 @@ object AiModelAssets {
         return match
     }
 
-    /** 从 manifest JSON 读取 int8 模型的期望 sha256，读取失败返回 null */
+    /** 新 manifest 使用 deployment_onnx；仅在该字段不存在时兼容旧 manifest。 */
     private fun expectedModelSha256(modelDir: File): String? {
         return try {
             val manifest = File(modelDir, MANIFEST_FILE)
             if (!manifest.exists()) return null
-            JSONObject(manifest.readText())
-                .optJSONObject("static_int8_onnx")
+            val content = JSONObject(manifest.readText())
+            val deployment = if (content.has("deployment_onnx")) {
+                content.optJSONObject("deployment_onnx")
+            } else {
+                content.optJSONObject("static_int8_onnx")
+            }
+            deployment
                 ?.optString("sha256")
-                ?.takeIf { it.isNotBlank() }
+                ?.takeIf { it.matches(Regex("[0-9a-fA-F]{64}")) }
         } catch (e: Exception) {
             Log.w(TAG, "读取 manifest sha256 失败: ${e.message}")
             null
@@ -202,6 +233,22 @@ object AiModelAssets {
     fun getIndexDir(context: Context): File? {
         val dir = File(context.filesDir, "$ASSET_BASE/template_index")
         return if (dir.exists() && File(dir, "templates.embeddings.f32").exists()) dir else null
+    }
+
+    /**
+     * Removes only the app-private, reproducible V9 asset cache after a failed validation/load.
+     * The next [ensureModelFiles] call copies a fresh bundled version. This never touches photos,
+     * user settings, or any directory outside filesDir/ai/v9.
+     */
+    @Synchronized
+    fun invalidateModelFiles(context: Context) {
+        val targetDir = File(context.filesDir, ASSET_BASE)
+        if (!targetDir.exists()) return
+        if (targetDir.deleteRecursively()) {
+            Log.w(TAG, "已失效损坏的 AI 资产缓存，下次启动将重新复制")
+        } else {
+            Log.w(TAG, "无法完整删除损坏的 AI 资产缓存: $targetDir")
+        }
     }
 
     // ── 内部 ──────────────────────────────────────────────────

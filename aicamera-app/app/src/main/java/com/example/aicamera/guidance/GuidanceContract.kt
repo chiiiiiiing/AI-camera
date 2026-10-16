@@ -7,7 +7,7 @@ package com.example.aicamera.guidance
  * 与现有 PipelineResult/FakeInference 桥接。
  */
 
-/** 单次明确的用户移动指令 */
+/** 单次明确的手机移动指令；MOVE 不是主体在屏幕上应移动的方向。 */
 enum class GuidanceCue {
     NONE,
     MOVE_LEFT,

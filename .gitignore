@@ -4,7 +4,6 @@ aicamera-app/app/build/
 aicamera-app/.gradle/
 aicamera-app/.idea/
 aicamera-app/*.iml
-aicamera-app/.idea/
 
 # Local configuration
 aicamera-app/local.properties
@@ -37,3 +36,14 @@ _archive/
 
 # Transient session artifacts
 loop_shturl/
+
+# AI host build and Python test artifacts
+build/
+**/build/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local datasets, checkpoints and generated model packages (never packaged app assets)
+local-data/
+local-output/

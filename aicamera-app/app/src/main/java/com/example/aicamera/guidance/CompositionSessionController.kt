@@ -1,7 +1,7 @@
 package com.example.aicamera.guidance
 
-import com.example.aicamera.guidance.geometry.HorizonObservation
 import com.example.aicamera.guidance.geometry.HorizonPolicy
+import com.example.aicamera.guidance.geometry.GuidanceGeometry
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -81,9 +81,10 @@ class CompositionSessionController {
     /** 帧观测（由几何阶段 + AI 推理合并后输入） */
     data class FrameObservation(
         val frameId: Long = 0,
-        val timestampMs: Long = System.currentTimeMillis(),
+        val timestampMs: Long = System.nanoTime() / 1_000_000L,
         /** 水平角（度），经圆周平滑 */
         val rollDegrees: Float? = null,
+        val rawRollDegrees: Float? = null,
         /** 俯仰角（度），经圆周平滑 */
         val pitchDegrees: Float? = null,
         /** 偏航角（度），经圆周平滑；需磁力计 */
@@ -104,8 +105,27 @@ class CompositionSessionController {
         val expectsSubject: Boolean = false,
         /** 是否有真实主体检测 */
         val hasRealSubject: Boolean = false,
-        /** AI 模型置信度 */
-        val modelConfidence: Float = 0f
+        /** Retrieval availability only; similarity is not aesthetic or alignment confidence. */
+        val modelConfidence: Float = 0f,
+        /** Explicit trusted pose targets; raw IMU observations never imply a zero target. */
+        val pitchTargetDegrees: Float? = null,
+        val yawTargetDegrees: Float? = null,
+        val coordinateAspectRatio: Float = 1f,
+        val subjectObservationId: Long = frameId,
+        val subjectTrackingId: Int? = null,
+        val subjectSampledAtMs: Long = timestampMs,
+        val imuObservationId: Long = frameId,
+        val imuSampledAtMs: Long = timestampMs,
+        val faceCount: Int = if (hasRealSubject) 1 else 0,
+        val viewportVersion: Long = 0,
+        val targetViewportVersion: Long = viewportVersion,
+        val targetId: String? = null,
+        val qualityScore: Float? = null,
+        val qualityAcceptable: Boolean = true,
+        /** FACE and OBJECT use different detectors; a COCO object never counts as a face. */
+        val observedAnchorKind: ObservedAnchorKind = ObservedAnchorKind.FACE,
+        /** False only when a fresh IMU confirms the gravity axis cannot establish image roll. */
+        val rollObservable: Boolean = true
     )
 
     private val _state = MutableStateFlow<State>(State.Idle)
@@ -115,20 +135,33 @@ class CompositionSessionController {
     val action: StateFlow<GuidanceAction> = _action.asStateFlow()
 
     private val horizonPolicy = HorizonPolicy()
+    private val _decision = MutableStateFlow(GuidanceDecision(GuidanceAction.HoldStill, null, null,
+        GuidanceFeedback.INSUFFICIENT_EVIDENCE, 0))
+    val decision: StateFlow<GuidanceDecision> = _decision.asStateFlow()
+    private var lastSubjectId = -1L
+    private var lastImuId = -1L
+    private var viewportVersion: Long? = null
+    private var readySamples = 0
+    private var firstReadyAt = 0L
+    private var lockedTarget: FrameObservation? = null
+    private var previousError: Float? = null
+    private var previousQuality: Float? = null
+    private var worseningCount = 0
+    private var lastImprovedAt = -1L
+    private var replanned = false
+    private var pausedTarget: String? = null
+    private var lastTimestamp = -1L
+    private var lastTrackingId: Int? = null
+    private var lastAcceptedAt = -1L
+    private var lastAnchorKind: ObservedAnchorKind? = null
+
 
     // ── 滞回状态 ──
     private var levelGoodFrames = 0
     private var levelBadFrames = 0
     private var positionGoodFrames = 0
     private var positionBadFrames = 0
-    private var verifyingStartMs = 0L
     private var lastAppliedFrameId: Long = -1
-
-    /** 偏航目标：进入构图引导时锁定当前朝向 */
-    private var yawTargetDeg: Float? = null
-
-    /** 俯仰目标：理想为水平（0°） */
-    private val pitchTargetDeg: Float = 0f
 
     /** 开始分析（快门按下后调用） */
     fun startAnalysis() {
@@ -177,63 +210,166 @@ class CompositionSessionController {
      * ★ 帧序保护：stale frame（frameId <= lastApplied）自动丢弃
      * ★ 单帧不改变状态：所有判定都经过滞回+连续确认
      */
-    fun observe(obs: FrameObservation) {
-        // ── Stale frame 丢弃 ──
-        if (obs.frameId > 0 && obs.frameId <= lastAppliedFrameId) return
-        lastAppliedFrameId = obs.frameId
-
-        val currentState = _state.value
-        when (currentState) {
-            is State.Idle, State.Analyzing, State.Capturing, is State.Saved, is State.Error -> {
-                // 这些状态不消费观测
-                return
-            }
-            is State.Adjusting, State.Verifying, State.Ready -> {
-                // 继续处理
-            }
+    fun observe(input: FrameObservation) {
+        if (input.frameId > 0 && input.frameId <= lastAppliedFrameId) return
+        lastAppliedFrameId = input.frameId
+        if (_state.value !is State.Adjusting && _state.value !is State.Verifying && _state.value !is State.Ready) return
+        if (input.timestampMs < lastTimestamp) { hold(input, GuidanceFeedback.INSUFFICIENT_EVIDENCE); return }
+        lastTimestamp = input.timestampMs
+        if (viewportVersion != input.viewportVersion) {
+            resetCounters(resetFrameSequence = false)
+            viewportVersion = input.viewportVersion
         }
-
-        val action = computeAction(obs)
-
-        when (currentState) {
-            is State.Adjusting -> {
-                if (action is GuidanceAction.Ready) {
-                    // 所有维度对齐 → 进入验证
-                    transitionToVerifying(obs.timestampMs)
-                } else {
-                    _state.value = State.Adjusting(action, computeProgress(obs))
-                }
-                _action.value = action
-            }
-            is State.Verifying -> {
-                if (action is GuidanceAction.Ready) {
-                    val elapsed = obs.timestampMs - verifyingStartMs
-                    if (elapsed >= horizonPolicy.stableDurationMs) {
-                        _state.value = State.Ready
-                        _action.value = GuidanceAction.Ready
-                    }
-                } else {
-                    // 验证期间出现偏差 → 退回调整
-                    _state.value = State.Adjusting(action, computeProgress(obs))
-                    _action.value = action
-                }
-            }
-            is State.Ready -> {
-                // READY 退出保护：单帧越界不退出
-                if (action !is GuidanceAction.Ready) {
-                    _state.value = State.Adjusting(action, computeProgress(obs))
-                    _action.value = action
-                }
-            }
-            else -> {}
+        if (lastTrackingId != input.subjectTrackingId) {
+            resetCounters(resetFrameSequence = false)
+            lastTrackingId = input.subjectTrackingId
         }
+        if ((lastAnchorKind != null && lastAnchorKind != input.observedAnchorKind) ||
+            (input.observedAnchorKind == ObservedAnchorKind.OBJECT && lockedTarget != null && lockedTarget?.targetId != input.targetId)) {
+            val preserveReplan = lastAnchorKind == input.observedAnchorKind && replanned
+            resetCounters(resetFrameSequence = false)
+            replanned=preserveReplan
+            viewportVersion=input.viewportVersion
+            lastTrackingId=input.subjectTrackingId
+        }
+        lastAnchorKind=input.observedAnchorKind
+        lastTimestamp = input.timestampMs
+        if(input.observedAnchorKind == ObservedAnchorKind.OBJECT && input.targetId == null) lockedTarget = null
+        val requiresSubject = input.expectsSubject || input.hasRealSubject
+        val requireRoll = input.observedAnchorKind != ObservedAnchorKind.OBJECT || input.rollObservable
+        val validImu = input.imuObservationId > 0 && input.timestampMs >= input.imuSampledAtMs &&
+            input.timestampMs-input.imuSampledAtMs <= 1500 && (!requireRoll || input.rollDegrees?.isFinite() == true)
+        val maxSubjectAge = if(input.observedAnchorKind == ObservedAnchorKind.OBJECT) 1500 else 750
+        val validSubject = !requiresSubject || ((input.observedAnchorKind == ObservedAnchorKind.OBJECT || input.faceCount == 1) && input.hasRealSubject &&
+            input.subjectObservationId > 0 && input.timestampMs >= input.subjectSampledAtMs &&
+            input.timestampMs-input.subjectSampledAtMs <= maxSubjectAge && input.targetViewportVersion == input.viewportVersion)
+        if (!input.modelConfidence.isFinite() || input.modelConfidence <= 0f || !validImu || !validSubject || !input.qualityAcceptable) {
+            lockedTarget = null
+            hold(input, GuidanceFeedback.INSUFFICIENT_EVIDENCE)
+            return
+        }
+        // Cached evidence may render, but can never confirm progress or Ready a second time.
+        if (input.imuObservationId <= lastImuId || (requiresSubject && input.subjectObservationId <= lastSubjectId)) {
+            // A new bad measurement can revoke Ready even when the other sensor is cached.
+            // Only positive confirmation requires both streams to advance together.
+            val target = lockedTarget ?: input
+            val positionBad = requiresSubject && (!hasPositionEvidence(input.copy(targetCx=target.targetCx,targetCy=target.targetCy)) ||
+                !GuidanceGeometry.isSubjectAligned(input.subjectCx, input.subjectCy,
+                    target.targetCx ?: .5f, target.targetCy ?: .5f, target.targetTolerance, input.coordinateAspectRatio))
+            val wasVerifying = _state.value is State.Ready || _state.value is State.Verifying
+            if ((requireRoll && (abs(input.rawRollDegrees ?: input.rollDegrees ?: Float.NaN) > horizonPolicy.enterLevelToleranceDeg || input.isUpright != true)) || (positionBad && wasVerifying))
+                hold(input, GuidanceFeedback.INSUFFICIENT_EVIDENCE)
+            else if(input.observedAnchorKind == ObservedAnchorKind.OBJECT && input.imuObservationId > lastImuId) {
+                // Fresh IMU may establish level while a detector sample is cached; it never
+                // advances position stability or Ready. This avoids a five-second level delay.
+                if(!requireRoll || (input.isUpright == true && abs(input.rollDegrees ?: Float.NaN)<=horizonPolicy.enterLevelToleranceDeg))
+                    levelGoodFrames++
+                lastImuId=input.imuObservationId
+            }
+            return
+        }
+        if (lastAcceptedAt >= 0 && input.timestampMs-lastAcceptedAt > 1500) {
+            lockedTarget = null; previousError = null; previousQuality = null; worseningCount = 0
+            lastImprovedAt = input.timestampMs
+            hold(input, GuidanceFeedback.INSUFFICIENT_EVIDENCE)
+        }
+        lastAcceptedAt = input.timestampMs
+        lastImuId = input.imuObservationId
+        if (requiresSubject) lastSubjectId = input.subjectObservationId
+        val incomingId = input.targetId ?: "${input.targetCx}:${input.targetCy}:${input.pitchTargetDegrees}:${input.yawTargetDegrees}"
+        if (pausedTarget != null) {
+            if (pausedTarget == incomingId || !replanned) { hold(input, _decision.value.feedback); return }
+            pausedTarget = null
+            previousError = null
+            previousQuality = null
+            lastImprovedAt = input.timestampMs
+            worseningCount = 0
+        }
+        if (lockedTarget == null && (hasPositionEvidence(input) || input.pitchTargetDegrees != null || input.yawTargetDegrees != null))
+            lockedTarget = input
+        val locked = lockedTarget
+        val obs = if (locked == null) input else input.copy(targetCx = locked.targetCx, targetCy = locked.targetCy,
+            targetTolerance = locked.targetTolerance, targetId = locked.targetId,
+            pitchTargetDegrees = locked.pitchTargetDegrees, yawTargetDegrees = locked.yawTargetDegrees)
+        val rawRoll = obs.rawRollDegrees
+        val nextAction = if (requireRoll && rawRoll != null && (!rawRoll.isFinite() || abs(rawRoll) > horizonPolicy.enterLevelToleranceDeg)) {
+            levelGoodFrames = 0; positionGoodFrames = 0
+            when { rawRoll > 0 -> GuidanceAction.RotateCounterClockwise
+                rawRoll < 0 -> GuidanceAction.RotateClockwise
+                else -> GuidanceAction.HoldStill }
+        } else computeAction(obs)
+        val error = measuredError(obs)
+        val previous = previousError
+        val qualityWorse = obs.qualityScore?.let { q -> previousQuality?.let { q < it-.1f } } == true
+        val improving = previous != null && error != null && error < previous-.015f
+        if (lastImprovedAt < 0 || improving) lastImprovedAt = obs.timestampMs
+        if(obs.observedAnchorKind == ObservedAnchorKind.OBJECT &&
+            (nextAction is GuidanceAction.HoldStill || _action.value is GuidanceAction.HoldStill)) lastImprovedAt=obs.timestampMs
+        if (previous != null && error != null && (error > previous+.015f || qualityWorse)) worseningCount++ else worseningCount = 0
+        previousError = error
+        previousQuality = obs.qualityScore?.takeIf { it.isFinite() }
+        val timedOut = nextAction !is GuidanceAction.Ready && nextAction !is GuidanceAction.HoldStill &&
+            obs.timestampMs-lastImprovedAt >= 5000
+        if (worseningCount >= 2 || timedOut) {
+            val feedback = if (worseningCount >= 2) GuidanceFeedback.WORSENING else GuidanceFeedback.NO_PROGRESS
+            val request = timedOut && !replanned
+            if (request) replanned = true
+            pausedTarget = incomingId
+            lockedTarget = null
+            hold(obs, feedback)
+            _decision.value = GuidanceDecision(GuidanceAction.HoldStill, incomingId, error, feedback,
+                obs.subjectObservationId, replanRequested = request)
+            return
+        }
+        if (nextAction is GuidanceAction.Ready) {
+            if (readySamples == 0) firstReadyAt = obs.timestampMs
+            readySamples++
+            if (readySamples >= 3 && obs.timestampMs-firstReadyAt >= 750) {
+                _state.value = State.Ready
+                _action.value = GuidanceAction.Ready
+            } else {
+                _state.value = State.Verifying
+                _action.value = GuidanceAction.HoldStill
+            }
+        } else {
+            readySamples = 0
+            _state.value = State.Adjusting(nextAction, computeProgress(obs))
+            _action.value = nextAction
+        }
+        _decision.value = GuidanceDecision(_action.value, incomingId, error,
+            when { _state.value is State.Ready -> GuidanceFeedback.READY
+                _state.value is State.Verifying -> GuidanceFeedback.VERIFYING
+                improving -> GuidanceFeedback.IMPROVING
+                nextAction is GuidanceAction.HoldStill -> GuidanceFeedback.INSUFFICIENT_EVIDENCE
+                else -> GuidanceFeedback.ADJUSTING }, obs.subjectObservationId)
+    }
+
+    private fun hold(obs: FrameObservation, feedback: GuidanceFeedback) {
+        readySamples = 0; firstReadyAt = 0
+        levelGoodFrames = 0; positionGoodFrames = 0
+        _state.value = State.Adjusting(GuidanceAction.HoldStill, 0f)
+        _action.value = GuidanceAction.HoldStill
+        _decision.value = GuidanceDecision(GuidanceAction.HoldStill, obs.targetId, measuredError(obs), feedback, obs.subjectObservationId)
+    }
+
+    private fun measuredError(obs: FrameObservation): Float? {
+        val roll = if(obs.observedAnchorKind == ObservedAnchorKind.OBJECT && !obs.rollObservable) 0f
+            else obs.rollDegrees?.takeIf { it.isFinite() } ?: return null
+        var error = abs(roll)/14f
+        if (hasPositionEvidence(obs)) {
+            val sx = maxOf(1f, obs.coordinateAspectRatio)
+            val sy = maxOf(1f, 1f/obs.coordinateAspectRatio)
+            error += kotlin.math.hypot((obs.subjectCx!!-obs.targetCx!!)*sx, (obs.subjectCy!!-obs.targetCy!!)*sy)
+        }
+        return error
     }
 
     // ── 内部 ──────────────────────────────────────────────────
 
     private fun computeAction(obs: FrameObservation): GuidanceAction {
         // 1. 倒置检测（最高优先级）
-        if (obs.isUpright == false && obs.rollDegrees != null &&
+        val requireRoll = obs.observedAnchorKind != ObservedAnchorKind.OBJECT || obs.rollObservable
+        if (requireRoll && obs.isUpright == false && obs.rollDegrees != null &&
             abs(obs.rollDegrees) <= horizonPolicy.upsideDownToleranceDeg
         ) {
             levelGoodFrames = 0
@@ -242,25 +378,21 @@ class CompositionSessionController {
         }
 
         // 2. 水平检查
-        val levelOk = obs.rollDegrees != null &&
+        val levelOk = !requireRoll || (obs.rollDegrees != null && obs.rollDegrees.isFinite() &&
                 obs.isUpright == true &&
-                abs(obs.rollDegrees) <= horizonPolicy.enterLevelToleranceDeg
+                abs(obs.rollDegrees) <= horizonPolicy.enterLevelToleranceDeg)
 
         if (levelOk) {
             levelGoodFrames++
             levelBadFrames = 0
-        } else if (obs.rollDegrees != null) {
+        } else {
             levelBadFrames++
             levelGoodFrames = 0
         }
 
         val levelStable = levelGoodFrames >= horizonPolicy.stableFrameCount
-        val levelBadStable = levelBadFrames >= horizonPolicy.exitFrames &&
-                obs.rollDegrees != null &&
-                abs(obs.rollDegrees) > horizonPolicy.exitLevelToleranceDeg
-
         // 水平未达标 → 旋转指令优先
-        if (!levelStable && obs.rollDegrees != null &&
+        if (requireRoll && !levelStable && obs.rollDegrees != null &&
             abs(obs.rollDegrees) > horizonPolicy.enterLevelToleranceDeg
         ) {
             positionGoodFrames = 0
@@ -269,35 +401,43 @@ class CompositionSessionController {
         }
 
         // 3. 俯仰检查（水平已稳）
-        if (levelStable && obs.pitchDegrees != null &&
-            abs(obs.pitchDegrees) > PITCH_TOLERANCE_DEG
+        val pitchDelta = GuidanceGeometry.angleDelta(obs.pitchDegrees, obs.pitchTargetDegrees)
+        if (levelStable && pitchDelta != null &&
+            abs(pitchDelta) > GuidanceGeometry.PITCH_THRESHOLD_DEG
         ) {
             positionGoodFrames = 0
-            return if (obs.pitchDegrees > 0) GuidanceAction.PitchDown
+            return if (pitchDelta > 0) GuidanceAction.PitchDown
             else GuidanceAction.PitchUp
         }
 
         // 4. 偏航检查（水平、俯仰已稳）
-        if (levelStable && obs.yawDegrees != null) {
-            if (yawTargetDeg == null) yawTargetDeg = obs.yawDegrees
-            val delta = normalizeAngle(obs.yawDegrees - yawTargetDeg!!)
-            if (abs(delta) > YAW_TOLERANCE_DEG) {
+        val yawDelta = GuidanceGeometry.angleDelta(obs.yawDegrees, obs.yawTargetDegrees)
+        if (levelStable && yawDelta != null) {
+            if (abs(yawDelta) > GuidanceGeometry.YAW_THRESHOLD_DEG) {
                 positionGoodFrames = 0
-                return if (delta > 0) GuidanceAction.YawRight
+                return if (yawDelta > 0) GuidanceAction.YawRight
                 else GuidanceAction.YawLeft
             }
         }
 
-        // 5. 位置检查（仅在有真实主体 + 模板期望主体时生效）
-        if (obs.hasRealSubject && obs.expectsSubject &&
-            obs.subjectCx != null && obs.subjectCy != null &&
-            obs.targetCx != null && obs.targetCy != null
+        // A portrait template needs a live subject. Level sensors cannot substitute
+        // for detection, and reacquisition must build fresh position stability.
+        if ((obs.expectsSubject && !hasPositionEvidence(obs)) ||
+            (obs.pitchTargetDegrees != null && pitchDelta == null) ||
+            (obs.yawTargetDegrees != null && yawDelta == null)
         ) {
-            val dx = obs.subjectCx - obs.targetCx
-            val dy = obs.subjectCy - obs.targetCy
-            val tolerance = obs.targetTolerance.coerceAtLeast(0.06f)
+            positionGoodFrames = 0
+            positionBadFrames = 0
+            return GuidanceAction.HoldStill
+        }
 
-            val positionOk = abs(dx) <= tolerance && abs(dy) <= tolerance
+        // 5. 位置检查（仅在有真实主体 + 模板期望主体时生效）
+        if (hasPositionEvidence(obs)) {
+            val positionCue = GuidanceGeometry.guidanceCue(
+                obs.subjectCx, obs.subjectCy, true, obs.targetCx!!, obs.targetCy!!, obs.targetTolerance,
+                coordinateAspectRatio = obs.coordinateAspectRatio
+            )
+            val positionOk = positionCue == GuidanceCue.SUBJECT_ALIGNED
 
             if (positionOk && levelStable) {
                 positionGoodFrames++
@@ -312,93 +452,86 @@ class CompositionSessionController {
 
             // 水平已稳 → 平移指令
             if (levelStable) {
-                if (dx > tolerance) return GuidanceAction.MoveLeft
-                if (dx < -tolerance) return GuidanceAction.MoveRight
-                if (dy > tolerance) return GuidanceAction.MoveUp
-                if (dy < -tolerance) return GuidanceAction.MoveDown
+                when (positionCue) {
+                    GuidanceCue.MOVE_LEFT -> return GuidanceAction.MoveLeft
+                    GuidanceCue.MOVE_RIGHT -> return GuidanceAction.MoveRight
+                    GuidanceCue.MOVE_UP -> return GuidanceAction.MoveUp
+                    GuidanceCue.MOVE_DOWN -> return GuidanceAction.MoveDown
+                    else -> {}
+                }
             }
         }
 
-        // 4. 如果没有真实主体/模板不要主体 → 水平达标即 Ready
-        if (levelStable && (!obs.expectsSubject || !obs.hasRealSubject)) {
+        // Level alone cannot certify a pleasing composition. A non-subject
+        // reference needs an explicit, comparable target pose to verify.
+        if (levelStable && !obs.expectsSubject && !hasPositionEvidence(obs) &&
+            (pitchDelta != null || yawDelta != null)
+        ) {
             return GuidanceAction.Ready
         }
 
         // 5. 水平接近中
-        return if (levelOk) GuidanceAction.HoldStill else GuidanceAction.HoldStill
-    }
-
-    private fun transitionToVerifying(nowMs: Long) {
-        verifyingStartMs = nowMs
-        _state.value = State.Verifying
+        return GuidanceAction.HoldStill
     }
 
     private fun computeProgress(obs: FrameObservation): Float {
-        var score = 0f
-        var weight = 0f
-
-        if (obs.rollDegrees != null) {
-            val hScore = (1f - abs(obs.rollDegrees) / horizonPolicy.exitLevelToleranceDeg)
-                .coerceIn(0f, 1f)
-            score += 0.25f * hScore
-            weight += 0.25f
-        }
-
-        if (obs.pitchDegrees != null) {
-            val pScore = (1f - abs(obs.pitchDegrees) / (PITCH_TOLERANCE_DEG * 2f))
-                .coerceIn(0f, 1f)
-            score += 0.2f * pScore
-            weight += 0.2f
-        }
-
-        if (obs.yawDegrees != null && yawTargetDeg != null) {
-            val delta = normalizeAngle(obs.yawDegrees - yawTargetDeg!!)
-            val yScore = (1f - abs(delta) / (YAW_TOLERANCE_DEG * 2f))
-                .coerceIn(0f, 1f)
-            score += 0.15f * yScore
-            weight += 0.15f
-        }
-
-        if (obs.subjectCx != null && obs.subjectCy != null &&
-            obs.targetCx != null && obs.targetCy != null
-        ) {
-            val dist = kotlin.math.sqrt(
-                (obs.subjectCx - obs.targetCx).let { it * it } +
-                        (obs.subjectCy - obs.targetCy).let { it * it }
-            ).toFloat()
-            val pScore = (1f - dist / 0.5f).coerceIn(0f, 1f)
-            score += 0.4f * pScore
-            weight += 0.4f
-        }
-
-        return if (weight > 0f) (score / weight).coerceIn(0f, 1f) else 0f
+        val hasPosition = hasPositionEvidence(obs)
+        if ((obs.expectsSubject && !hasPosition) ||
+            (obs.pitchTargetDegrees != null && GuidanceGeometry.angleDelta(obs.pitchDegrees, obs.pitchTargetDegrees) == null) ||
+            (obs.yawTargetDegrees != null && GuidanceGeometry.angleDelta(obs.yawDegrees, obs.yawTargetDegrees) == null)
+        ) return 0f
+        val cue = GuidanceGeometry.guidanceCue(
+            obs.subjectCx.takeIf { hasPosition }, obs.subjectCy.takeIf { hasPosition }, obs.expectsSubject,
+            targetCx = obs.targetCx ?: 0.5f, targetCy = obs.targetCy ?: 0.5f,
+            targetTolerance = obs.targetTolerance, horizonAngleDeg = obs.rollDegrees.takeIf { obs.rollObservable },
+            pitchAngleDeg = obs.pitchDegrees, yawAngleDeg = obs.yawDegrees,
+            pitchTargetDeg = obs.pitchTargetDegrees, yawTargetDeg = obs.yawTargetDegrees,
+            coordinateAspectRatio = obs.coordinateAspectRatio
+        )
+        val progress = GuidanceGeometry.compositionProgress(
+            obs.subjectCx.takeIf { hasPosition }, obs.subjectCy.takeIf { hasPosition },
+            targetCx = obs.targetCx ?: 0.5f, targetCy = obs.targetCy ?: 0.5f,
+            targetTolerance = obs.targetTolerance, horizonAngleDeg = obs.rollDegrees.takeIf { obs.rollObservable },
+            pitchAngleDeg = obs.pitchDegrees, yawAngleDeg = obs.yawDegrees,
+            pitchTargetDeg = obs.pitchTargetDegrees, yawTargetDeg = obs.yawTargetDegrees,
+            coordinateAspectRatio = obs.coordinateAspectRatio
+        )
+        return GuidanceGeometry.verifiedProgress(cue, progress, obs.expectsSubject, hasPosition,
+            hasCompositionTarget = hasPosition || obs.pitchTargetDegrees != null || obs.yawTargetDegrees != null)
     }
 
-    private fun resetCounters() {
+    private fun hasPositionEvidence(obs: FrameObservation): Boolean = obs.hasRealSubject &&
+        obs.subjectCx != null && obs.subjectCx.isFinite() && obs.subjectCx in 0f..1f &&
+        obs.subjectCy != null && obs.subjectCy.isFinite() && obs.subjectCy in 0f..1f &&
+        GuidanceGeometry.isValidTarget(obs.targetCx, obs.targetCy, obs.targetTolerance) &&
+        obs.coordinateAspectRatio.isFinite() && obs.coordinateAspectRatio > 0f
+
+    private fun resetCounters(resetFrameSequence: Boolean = true) {
         levelGoodFrames = 0
         levelBadFrames = 0
         positionGoodFrames = 0
         positionBadFrames = 0
-        verifyingStartMs = 0L
-        lastAppliedFrameId = -1
-        yawTargetDeg = null
+        lastSubjectId = -1; lastImuId = -1; readySamples = 0; firstReadyAt = 0
+        lockedTarget = null; previousError = null; previousQuality = null; worseningCount = 0
+        lastImprovedAt = -1; pausedTarget = null; replanned = false; lastTimestamp = -1
+        lastAcceptedAt = -1; lastTrackingId = null
+        if (resetFrameSequence) { lastAppliedFrameId = -1; viewportVersion = null; lastAnchorKind = null }
     }
+}
 
-    /**
-     * 将任意角度归一化到 (-180, 180]。
-     */
-    private fun normalizeAngle(deg: Float): Float {
-        var d = deg % 360f
-        if (d > 180f) d -= 360f
-        if (d <= -180f) d += 360f
-        return d
-    }
-
-    companion object {
-        /** 俯仰角容差（度）：超过此值触发俯仰引导 */
-        private const val PITCH_TOLERANCE_DEG = 7.0f
-
-        /** 偏航角容差（度）：超过此值触发偏航引导 */
-        private const val YAW_TOLERANCE_DEG = 12.0f
-    }
+/** The active capture workflow renders the same action that controls readiness. */
+fun CompositionSessionController.GuidanceAction.toGuidanceCue(): GuidanceCue = when (this) {
+    CompositionSessionController.GuidanceAction.HoldStill -> GuidanceCue.NONE
+    CompositionSessionController.GuidanceAction.RotateClockwise -> GuidanceCue.ROLL_CLOCKWISE
+    CompositionSessionController.GuidanceAction.RotateCounterClockwise -> GuidanceCue.ROLL_COUNTERCLOCKWISE
+    CompositionSessionController.GuidanceAction.PitchUp -> GuidanceCue.PITCH_UP
+    CompositionSessionController.GuidanceAction.PitchDown -> GuidanceCue.PITCH_DOWN
+    CompositionSessionController.GuidanceAction.YawLeft -> GuidanceCue.YAW_LEFT
+    CompositionSessionController.GuidanceAction.YawRight -> GuidanceCue.YAW_RIGHT
+    CompositionSessionController.GuidanceAction.MoveLeft -> GuidanceCue.MOVE_LEFT
+    CompositionSessionController.GuidanceAction.MoveRight -> GuidanceCue.MOVE_RIGHT
+    CompositionSessionController.GuidanceAction.MoveUp -> GuidanceCue.MOVE_UP
+    CompositionSessionController.GuidanceAction.MoveDown -> GuidanceCue.MOVE_DOWN
+    CompositionSessionController.GuidanceAction.DeviceUpsideDown -> GuidanceCue.DEVICE_UPSIDE_DOWN
+    CompositionSessionController.GuidanceAction.Ready -> GuidanceCue.SUBJECT_ALIGNED
 }

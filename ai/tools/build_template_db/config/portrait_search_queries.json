@@ -1,0 +1,198 @@
+{
+  "version": 1,
+  "defaults": {
+    "licenses": [
+      "cc0",
+      "pdm"
+    ],
+    "min_long_edge": 960,
+    "min_short_edge": 640,
+    "preferred_long_edge": 1920,
+    "preferred_short_edge": 1080,
+    "mobile_aspect_ratio": 1.3333333333,
+    "aspect_ratio_tolerance": 0.04,
+    "excluded_media_terms": [
+      "painting",
+      "illustration",
+      "drawing",
+      "sketch",
+      "artwork",
+      "poster",
+      "sculpture",
+      "render",
+      "cgi",
+      "avatar",
+      "cosplay",
+      "costume",
+      "selfie",
+      "screenshot",
+      "watermark",
+      "sexy",
+      "sensual",
+      "erotic",
+      "nude",
+      "naked",
+      "lingerie",
+      "boudoir",
+      "pinup",
+      "glamour",
+      "steamy",
+      "sheer",
+      "topless",
+      "shirtless",
+      "cleavage"
+    ],
+    "excluded_ai_terms": [
+      "ai generated",
+      "generated ai",
+      "artificial intelligence",
+      "midjourney",
+      "stable diffusion",
+      "dall e",
+      "dalle",
+      "synthetic image"
+    ],
+    "excluded_portrait_terms": [
+      "minor",
+      "child",
+      "children",
+      "kid",
+      "kids",
+      "baby",
+      "infant",
+      "toddler",
+      "teen",
+      "teenager",
+      "schoolgirl",
+      "schoolboy",
+      "student portrait",
+      "family",
+      "bedroom",
+      "bathroom",
+      "locker room",
+      "changing room",
+      "private",
+      "candid",
+      "paparazzi",
+      "hidden camera",
+      "surveillance",
+      "hospital",
+      "clinic",
+      "medical",
+      "doctor",
+      "nurse",
+      "patient",
+      "surgery",
+      "therapy",
+      "religion",
+      "religious",
+      "church",
+      "temple",
+      "mosque",
+      "prayer",
+      "worship",
+      "priest",
+      "monk",
+      "nun",
+      "politics",
+      "political",
+      "politician",
+      "campaign",
+      "election",
+      "protest",
+      "rally",
+      "military",
+      "police"
+    ]
+  },
+  "categories": [
+    {
+      "photo_type": "portrait",
+      "scene_category": "closeup_portrait",
+      "target_count": 300,
+      "queries": [
+        "professional headshot natural light",
+        "environmental portrait headshot",
+        "natural light headshot photography",
+        "professional portrait face photography"
+      ]
+    },
+    {
+      "photo_type": "portrait",
+      "scene_category": "indoor_portrait",
+      "target_count": 400,
+      "queries": [
+        "window light professional portrait",
+        "studio portrait natural light",
+        "office portrait photography",
+        "environmental portrait indoors"
+      ]
+    },
+    {
+      "photo_type": "portrait",
+      "scene_category": "outdoor_nature_portrait",
+      "target_count": 600,
+      "queries": [
+        "outdoor environmental portrait photography",
+        "forest portrait professional photography",
+        "park portrait natural light",
+        "mountain environmental portrait"
+      ]
+    },
+    {
+      "photo_type": "portrait",
+      "scene_category": "urban_street_portrait",
+      "target_count": 500,
+      "queries": [
+        "urban environmental portrait photography",
+        "city portrait natural light",
+        "street portrait professional photography",
+        "architecture environmental portrait"
+      ]
+    },
+    {
+      "photo_type": "portrait",
+      "scene_category": "golden_hour_portrait",
+      "target_count": 300,
+      "queries": [
+        "golden hour portrait professional photography",
+        "sunset environmental portrait",
+        "backlit portrait natural light",
+        "warm light portrait photography"
+      ]
+    },
+    {
+      "photo_type": "portrait",
+      "scene_category": "couple_portrait",
+      "target_count": 250,
+      "queries": [
+        "couple portrait professional photography",
+        "couple environmental portrait",
+        "two person portrait natural light",
+        "couple outdoor portrait photography"
+      ]
+    },
+    {
+      "photo_type": "portrait",
+      "scene_category": "group_portrait",
+      "target_count": 250,
+      "queries": [
+        "team portrait professional photography",
+        "colleagues group portrait photography",
+        "friends group portrait outdoor",
+        "small group environmental portrait"
+      ]
+    },
+    {
+      "photo_type": "portrait",
+      "scene_category": "travel_portrait",
+      "target_count": 300,
+      "queries": [
+        "travel environmental portrait photography",
+        "landmark portrait professional photography",
+        "viewpoint portrait photography",
+        "bridge environmental portrait"
+      ]
+    }
+  ]
+}

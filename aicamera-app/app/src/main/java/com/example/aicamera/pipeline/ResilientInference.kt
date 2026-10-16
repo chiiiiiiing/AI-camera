@@ -37,46 +37,85 @@ class ResilientInference(
     override val typeName: String
         get() = if (degraded) fallback.typeName else primary.typeName
 
+    override val minInferenceIntervalMs: Long
+        get() = if (degraded) fallback.minInferenceIntervalMs else primary.minInferenceIntervalMs
+
     val isDegraded: Boolean get() = degraded
 
+    @Synchronized
     override fun predict(buffer: ByteBuffer, frame: PreprocessedFrame): Any? {
-        if (degraded) return fallback.predict(buffer, frame)
+        if (degraded) return predictFallback(buffer, frame)
 
-        return try {
-            val output = primary.predict(buffer, frame)
-            consecutiveErrors = 0
-
-            if (isEmptyOutput(output)) {
-                consecutiveEmpty++
-                if (consecutiveEmpty >= EMPTY_BREAKER_THRESHOLD) {
-                    degrade("V9 连续 $EMPTY_BREAKER_THRESHOLD 帧空输出")
-                }
-            } else {
-                consecutiveEmpty = 0
-            }
-            output
+        val output = try {
+            primary.predict(buffer, frame)
         } catch (e: Exception) {
+            consecutiveEmpty = 0
             consecutiveErrors++
             Log.w(CameraConfig.TAG, "[Resilient] V9 推理异常 ($consecutiveErrors/$ERROR_BREAKER_THRESHOLD): ${e.message}")
             if (consecutiveErrors >= ERROR_BREAKER_THRESHOLD) {
                 degrade("V9 连续 $ERROR_BREAKER_THRESHOLD 帧异常 (${e.javaClass.simpleName})")
             }
-            // 本帧立即用 Fake 顶上，指引不中断
-            fallback.predict(buffer, frame)
+            return predictFallback(buffer, frame)
         }
+        consecutiveErrors = 0
+        if (isEmptyOutput(output)) {
+            consecutiveEmpty++
+            if (consecutiveEmpty >= EMPTY_BREAKER_THRESHOLD) {
+                degrade("V9 连续 $EMPTY_BREAKER_THRESHOLD 帧空输出")
+            }
+            // A safe V9 failure contains a grid but no recommendation; fall back immediately,
+            // including the frame which trips the breaker.
+            return predictFallback(buffer, frame)
+        }
+        consecutiveEmpty = 0
+        return output
+    }
+
+    override fun updateStructure(observation: com.example.aicamera.guidance.StructureObservation?) {
+        if (!degraded) primary.updateStructure(observation)
+    }
+    override fun requestReplan() { if (!degraded) primary.requestReplan() }
+
+    @Synchronized
+    override fun resetSession() {
+        consecutiveErrors = 0
+        consecutiveEmpty = 0
+        // A lens/session change clears temporal state without resurrecting a broken primary.
+        try {
+            primary.resetSession()
+        } finally {
+            if (fallback !== primary) fallback.resetSession()
+        }
+    }
+
+    private fun predictFallback(buffer: ByteBuffer, frame: PreprocessedFrame): Any? {
+        val output = fallback.predict(buffer.duplicate().order(buffer.order()).apply { rewind() }, frame)
+        return if (output is FakeInferenceOutput) output.copy(
+            confidence = 0f,
+            compositionProgress = 0f,
+            guidanceCue = com.example.aicamera.guidance.GuidanceCue.NONE,
+            expectsSubject = false,
+            filterRecommendation = null,
+            autoZoomRecommendation = null
+        ) else output
     }
 
     private fun degrade(reason: String) {
         if (degraded) return
         degraded = true
         Log.e(CameraConfig.TAG, "[Resilient] ★ V9 已熔断回退 Fake: $reason")
-        onDegraded(reason)
+        try {
+            onDegraded(reason)
+        } catch (e: Exception) {
+            Log.w(CameraConfig.TAG, "[Resilient] 熔断状态通知失败", e)
+        }
     }
 
-    /** 空输出判定：FakeInferenceOutput 且一条辅助线都没有 */
+    /** V9 returns a zero-confidence grid when embedding/index evaluation fails safely. */
     private fun isEmptyOutput(output: Any?): Boolean {
         if (output == null) return true
-        return output is FakeInferenceOutput && output.guideLines.isEmpty()
+        return output is FakeInferenceOutput &&
+            (output.guideLines.isEmpty() || !output.confidence.isFinite() || output.confidence <= 0f)
     }
 
     companion object {

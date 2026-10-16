@@ -29,7 +29,8 @@ class GuidanceStateMachine(
         anchors: GuidanceAnchors? = null,
     ): GuidanceState {
         val safeProgress = if (progress.isFinite()) progress.coerceIn(0f, 1f) else 0f
-        val isStable = safeProgress >= config.alignedThreshold
+        val alignmentCue = cue == GuidanceCue.NONE || cue == GuidanceCue.SUBJECT_ALIGNED
+        val isStable = alignmentCue && safeProgress >= config.alignedThreshold
 
         if (isStable) {
             val stableFrames = (current.stableFrameCount + 1).coerceAtMost(config.framesToAlign)

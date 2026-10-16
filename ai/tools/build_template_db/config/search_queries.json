@@ -1,0 +1,254 @@
+{
+  "version": 1,
+  "defaults": {
+    "licenses": [
+      "cc0",
+      "pdm"
+    ],
+    "min_long_edge": 960,
+    "min_short_edge": 640,
+    "preferred_long_edge": 1920,
+    "preferred_short_edge": 1080,
+    "mobile_aspect_ratio": 1.3333333333,
+    "aspect_ratio_tolerance": 0.04,
+    "excluded_media_terms": [
+      "painting",
+      "illustration",
+      "drawing",
+      "sketch",
+      "artwork",
+      "poster",
+      "sculpture",
+      "render",
+      "cgi",
+      "sexy",
+      "sensual",
+      "erotic",
+      "nude",
+      "naked",
+      "lingerie",
+      "boudoir",
+      "pinup",
+      "glamour",
+      "steamy",
+      "sheer",
+      "topless",
+      "shirtless",
+      "cleavage"
+    ],
+    "excluded_ai_terms": [
+      "ai generated",
+      "generated ai",
+      "artificial intelligence",
+      "midjourney",
+      "stable diffusion",
+      "dall e",
+      "dalle",
+      "synthetic image"
+    ],
+    "excluded_portrait_terms": [
+      "minor",
+      "child",
+      "children",
+      "kid",
+      "kids",
+      "baby",
+      "infant",
+      "toddler",
+      "teen",
+      "teenager",
+      "schoolgirl",
+      "schoolboy",
+      "student portrait",
+      "bedroom",
+      "bathroom",
+      "locker room",
+      "changing room",
+      "private",
+      "candid",
+      "paparazzi",
+      "hidden camera",
+      "surveillance",
+      "hospital",
+      "clinic",
+      "medical",
+      "doctor",
+      "nurse",
+      "patient",
+      "surgery",
+      "therapy",
+      "religion",
+      "religious",
+      "church",
+      "temple",
+      "mosque",
+      "prayer",
+      "worship",
+      "priest",
+      "monk",
+      "nun",
+      "politics",
+      "political",
+      "politician",
+      "campaign",
+      "election",
+      "protest",
+      "rally",
+      "military",
+      "police"
+    ]
+  },
+  "categories": [
+    {
+      "photo_type": "portrait",
+      "scene_category": "outdoor_nature_portrait",
+      "target_count": 600,
+      "queries": [
+        "beach portrait photography",
+        "forest portrait photography",
+        "flower field portrait",
+        "mountain portrait photography"
+      ]
+    },
+    {
+      "photo_type": "portrait",
+      "scene_category": "urban_street_portrait",
+      "target_count": 500,
+      "queries": [
+        "urban street portrait photography",
+        "city portrait photography",
+        "architecture portrait photography",
+        "night street portrait"
+      ]
+    },
+    {
+      "photo_type": "portrait",
+      "scene_category": "indoor_portrait",
+      "target_count": 400,
+      "queries": [
+        "window light portrait photography",
+        "cafe portrait photography",
+        "home interior portrait",
+        "bookstore portrait photography"
+      ]
+    },
+    {
+      "photo_type": "portrait",
+      "scene_category": "travel_portrait",
+      "target_count": 350,
+      "queries": [
+        "travel landmark portrait photography",
+        "bridge travel portrait",
+        "viewpoint portrait",
+        "tourist portrait photography"
+      ]
+    },
+    {
+      "photo_type": "portrait",
+      "scene_category": "golden_hour_portrait",
+      "target_count": 300,
+      "queries": [
+        "golden hour portrait photography",
+        "sunset silhouette person photography",
+        "backlit portrait sunset photography"
+      ]
+    },
+    {
+      "photo_type": "portrait",
+      "scene_category": "couple_portrait",
+      "target_count": 300,
+      "queries": [
+        "couple portrait photography",
+        "couple travel photo",
+        "couple outdoor portrait photography"
+      ]
+    },
+    {
+      "photo_type": "portrait",
+      "scene_category": "group_portrait",
+      "target_count": 250,
+      "queries": [
+        "group portrait photography",
+        "friends group photo outdoor",
+        "colleagues group portrait photography"
+      ]
+    },
+    {
+      "photo_type": "portrait",
+      "scene_category": "closeup_portrait",
+      "target_count": 300,
+      "queries": [
+        "close up portrait photography",
+        "headshot natural light",
+        "half body portrait photography"
+      ]
+    },
+    {
+      "photo_type": "landscape",
+      "scene_category": "natural_landscape",
+      "target_count": 600,
+      "queries": [
+        "mountain landscape photography",
+        "lake landscape",
+        "coastline landscape",
+        "sunset landscape",
+        "grassland landscape"
+      ]
+    },
+    {
+      "photo_type": "landscape",
+      "scene_category": "urban_landscape",
+      "target_count": 500,
+      "queries": [
+        "city skyline photography",
+        "city night landscape",
+        "urban street landscape",
+        "bridge architecture photography"
+      ]
+    },
+    {
+      "photo_type": "still_life",
+      "scene_category": "food_still_life",
+      "target_count": 350,
+      "queries": [
+        "food still life photography",
+        "dessert photography",
+        "coffee still life",
+        "fruit still life"
+      ]
+    },
+    {
+      "photo_type": "still_life",
+      "scene_category": "plant_still_life",
+      "target_count": 250,
+      "queries": [
+        "flower still life photography",
+        "bouquet still life",
+        "houseplant photography",
+        "leaves still life"
+      ]
+    },
+    {
+      "photo_type": "still_life",
+      "scene_category": "lifestyle_still_life",
+      "target_count": 250,
+      "queries": [
+        "desk still life photography",
+        "books coffee still life",
+        "stationery flat lay",
+        "home objects still life"
+      ]
+    },
+    {
+      "photo_type": "still_life",
+      "scene_category": "creative_composition",
+      "target_count": 250,
+      "queries": [
+        "negative space photography",
+        "frame within frame photography",
+        "symmetry composition photography",
+        "leading lines photography"
+      ]
+    }
+  ]
+}

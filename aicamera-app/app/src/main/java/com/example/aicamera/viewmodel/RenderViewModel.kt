@@ -83,7 +83,10 @@ class RenderViewModel @Inject constructor() : ViewModel() {
     /** ★ 防止重复 connect */
     private var collectJob: Job? = null
 
-    fun connect(pipelineResults: SharedFlow<PipelineResult>) {
+    /** Scheduler frame counters restart on resume; controller observations must keep increasing. */
+    private var observationFrameId: Long = 0
+
+    fun connect(pipelineResults: SharedFlow<PipelineResult>, onRequestReplan: () -> Unit = {}) {
         if (collectJob?.isActive == true) return
 
         collectJob = viewModelScope.launch {
@@ -135,6 +138,21 @@ class RenderViewModel @Inject constructor() : ViewModel() {
 
                     // ★ 同步驱动统一会话控制器（替代双工作流）
                     sessionController.observe(buildFrameObservation(fakeOutput, result))
+                    if (sessionController.decision.value.replanRequested) onRequestReplan()
+                } else {
+                    // A pipeline failure/unknown schema must revoke readiness immediately,
+                    // including when no later frame arrives to clear ALIGNED hysteresis.
+                    resetGuidanceSteps()
+                    _guidanceState.value = GuidanceState()
+                    _stepHint.value = "AI 暂未就绪，可直接拍摄"
+                    _renderInput.value = input
+                    // Reuse the controller's zero-confidence fallback with no invented subject,
+                    // target or sensor readings. Keep Capturing/Saved handling in the controller.
+                    sessionController.observe(CompositionSessionController.FrameObservation(
+                        frameId = nextObservationFrameId(result),
+                        timestampMs = android.os.SystemClock.elapsedRealtime(),
+                        modelConfidence = 0f
+                    ))
                 }
             }
         }
@@ -220,6 +238,7 @@ class RenderViewModel @Inject constructor() : ViewModel() {
         var subjectFrac: Float? = null
         var hasSubject = false
         for (line in output.guideLines) {
+            if (!line.visible) continue
             when (line.type) {
                 "horizon_level" -> {
                     angle = (line.params["angle_degrees"] as? Number)?.toFloat()
@@ -229,9 +248,9 @@ class RenderViewModel @Inject constructor() : ViewModel() {
                 "subject_box" -> {
                     // ★ 只信真实检测框（real=true）：模板占位框会让
                     //   自动变焦对着假主体算出「无需变焦」的错误结论
-                    val isReal = line.params["real"] == true
+                    val isReal = line.params["real"] == true && line.params["anchor_kind"] == "face"
                     val h = (line.params["height"] as? Number)?.toFloat()
-                    if (isReal && h != null && h > 0f) {
+                    if (isReal && h != null && h.isFinite() && h > 0f && h <= 1f) {
                         subjectFrac = h
                         hasSubject = true
                     }
@@ -247,7 +266,8 @@ class RenderViewModel @Inject constructor() : ViewModel() {
             currentZoomRatio = currentZoomRatio,
             minZoomRatio = minZoomRatio,
             maxZoomRatio = maxZoomRatio,
-            nowMs = System.currentTimeMillis()
+            nowMs = System.currentTimeMillis(),
+            recommendationReady = output.confidence.isFinite() && output.confidence > 0f
         )
     }
 
@@ -292,6 +312,11 @@ class RenderViewModel @Inject constructor() : ViewModel() {
         )
     }
 
+    private fun nextObservationFrameId(result: PipelineResult): Long {
+        observationFrameId = maxOf(observationFrameId + 1, result.frameIndex)
+        return observationFrameId
+    }
+
     /** 从管线输出构建统一会话控制器的帧观测 */
     private fun buildFrameObservation(
         output: FakeInferenceOutput,
@@ -300,6 +325,8 @@ class RenderViewModel @Inject constructor() : ViewModel() {
         var roll: Float? = null
         var pitch: Float? = null
         var yaw: Float? = null
+        var pitchTarget: Float? = null
+        var yawTarget: Float? = null
         var isUpright: Boolean? = null
         var subjectCx: Float? = null
         var subjectCy: Float? = null
@@ -307,23 +334,32 @@ class RenderViewModel @Inject constructor() : ViewModel() {
         var targetCx: Float? = null
         var targetCy: Float? = null
         var targetTol = 0.12f
+        var coordinateAspectRatio = 1f
 
         for (line in output.guideLines) {
+            if (!line.visible) continue
             when (line.type) {
                 "horizon_level" -> {
                     roll = (line.params["angle_degrees"] as? Number)?.toFloat()
                     pitch = (line.params["pitch_degrees"] as? Number)?.toFloat()
                     yaw = (line.params["yaw_degrees"] as? Number)?.toFloat()
+                    if (line.params["pose_target_verified"] == true) {
+                        pitchTarget = (line.params["target_pitch_degrees"] as? Number)?.toFloat()?.takeIf { it.isFinite() }
+                        yawTarget = (line.params["target_yaw_degrees"] as? Number)?.toFloat()?.takeIf { it.isFinite() }
+                    }
                     isUpright = line.params["is_upright"] as? Boolean
                 }
                 "subject_box" -> {
-                    val isReal = line.params["real"] == true
+                    val isReal = line.params["real"] == true && line.params["anchor_kind"] == "face"
                     if (isReal) {
                         val x = (line.params["x"] as? Number)?.toFloat()
                         val y = (line.params["y"] as? Number)?.toFloat()
                         val w = (line.params["width"] as? Number)?.toFloat()
                         val h = (line.params["height"] as? Number)?.toFloat()
-                        if (x != null && y != null && w != null && h != null) {
+                        if (x != null && y != null && w != null && h != null &&
+                            x.isFinite() && y.isFinite() && w.isFinite() && h.isFinite() && w > 0f && h > 0f &&
+                            x >= 0f && y >= 0f && x + w <= 1f && y + h <= 1f
+                        ) {
                             subjectCx = x + w / 2f
                             subjectCy = y + h / 2f
                             hasRealSubject = true
@@ -331,17 +367,43 @@ class RenderViewModel @Inject constructor() : ViewModel() {
                     }
                 }
                 "target_zone" -> {
-                    targetCx = (line.params["center_x"] as? Number)?.toFloat()
-                    targetCy = (line.params["center_y"] as? Number)?.toFloat()
-                    targetTol = (line.params["radius"] as? Number)?.toFloat() ?: 0.12f
+                    // The live subject detector observes a face, not the complete body.
+                    if (line.params["anchor_kind"] == "face") {
+                        targetCx = (line.params["center_x"] as? Number)?.toFloat()
+                        targetCy = (line.params["center_y"] as? Number)?.toFloat()
+                        targetTol = (line.params["radius"] as? Number)?.toFloat() ?: 0.12f
+                        coordinateAspectRatio = (line.params["coordinate_aspect_ratio"] as? Number)?.toFloat() ?: 1f
+                    }
                 }
             }
         }
 
+        val scene = output.sceneAnalysis
+        val objectScene = scene?.family == com.example.aicamera.guidance.SceneFamily.FOOD ||
+            scene?.family == com.example.aicamera.guidance.SceneFamily.STILL_LIFE
+        val faceScene = scene == null || scene.family == com.example.aicamera.guidance.SceneFamily.PORTRAIT
+        output.structureObservation?.takeIf { faceScene }?.let { structure ->
+            val rawFace = structure.singleFace(android.os.SystemClock.elapsedRealtime())
+            subjectCx = rawFace?.centerX
+            subjectCy = rawFace?.centerY
+            hasRealSubject = rawFace != null
+        }
+        val observedObject = scene?.objectObservation?.takeIf { objectScene && it.isFresh(android.os.SystemClock.elapsedRealtime()) }
+        val objectTarget = output.objectTarget?.takeIf { target -> observedObject?.let { target.accepts(it) } == true }
+        if (!faceScene) {
+            subjectCx = observedObject?.box?.centerX
+            subjectCy = observedObject?.box?.centerY
+            hasRealSubject = observedObject != null
+            targetCx = objectTarget?.center?.x
+            targetCy = objectTarget?.center?.y
+            targetTol = objectTarget?.tolerance ?: .06f
+            coordinateAspectRatio = observedObject?.aspectRatio ?: 1f
+        }
         return CompositionSessionController.FrameObservation(
-            frameId = result.frameIndex,
-            timestampMs = System.currentTimeMillis(),
+            frameId = nextObservationFrameId(result),
+            timestampMs = android.os.SystemClock.elapsedRealtime(),
             rollDegrees = roll,
+            rawRollDegrees = output.rawRollDegrees,
             pitchDegrees = pitch,
             yawDegrees = yaw,
             isUpright = isUpright,
@@ -350,9 +412,26 @@ class RenderViewModel @Inject constructor() : ViewModel() {
             targetCx = targetCx,
             targetCy = targetCy,
             targetTolerance = targetTol,
-            expectsSubject = output.expectsSubject,
+            expectsSubject = output.expectsSubject || objectTarget != null,
             hasRealSubject = hasRealSubject,
-            modelConfidence = output.confidence
+            modelConfidence = output.confidence,
+            pitchTargetDegrees = pitchTarget,
+            yawTargetDegrees = yawTarget,
+            coordinateAspectRatio = coordinateAspectRatio,
+            subjectObservationId = if(objectScene) observedObject?.observationId ?: 0L else output.structureObservation?.observationId ?: 0L,
+            subjectTrackingId = if(objectScene) observedObject?.trackingId else output.structureObservation?.trackingId.takeIf { faceScene },
+            subjectSampledAtMs = if(objectScene) observedObject?.sampledAtMs ?: 0L else output.structureObservation?.sampledAtMs ?: 0L,
+            imuObservationId = output.imuObservationId,
+            imuSampledAtMs = output.imuSampledAtMs,
+            faceCount = if(faceScene) output.structureObservation?.faceCount ?: 0 else 0,
+            viewportVersion = scene?.viewportVersion ?: output.structureObservation?.viewportVersion ?: -1,
+            targetViewportVersion = objectTarget?.viewportVersion ?: output.compositionTarget?.viewportVersion ?: -2,
+            targetId = objectTarget?.id ?: output.compositionTarget?.id,
+            qualityScore = output.qualityScore,
+            qualityAcceptable = output.qualityAcceptable,
+            observedAnchorKind = if(objectScene) com.example.aicamera.guidance.ObservedAnchorKind.OBJECT
+                else if(faceScene) com.example.aicamera.guidance.ObservedAnchorKind.FACE else com.example.aicamera.guidance.ObservedAnchorKind.NONE,
+            rollObservable = output.rollObservable != false
         )
     }
 }

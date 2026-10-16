@@ -45,72 +45,69 @@ class V9Inference(
     private val filterEngine: FilterRecommendationEngine = FilterRecommendationEngine(),
     private val filterStabilizer: FilterRecommendationStabilizer = FilterRecommendationStabilizer(),
     private val autoZoomEngine: AutoZoomRecommendationEngine = AutoZoomRecommendationEngine(),
-    private val autoZoomStabilizer: AutoZoomRecommendationStabilizer = AutoZoomRecommendationStabilizer()
+    private val autoZoomStabilizer: AutoZoomRecommendationStabilizer = AutoZoomRecommendationStabilizer(),
+    private val sceneContextEstimator: V9SceneContextEstimator = V9SceneContextEstimator()
 ) : IInference, Closeable {
 
     override val typeName: String = "V9-ONNX"
 
-    // ── 稳定切换状态 ──────────────────────────────────────────
-    //
-    // 修复历史死锁（P1-4）：旧实现用「当前模板」计数，新模板领先时计数器
-    // 永远被重置为 1，导致模板选定后永不切换。
-    // 正确做法：给「挑战者候选」单独计数，连续 N 次领先才真正换王。
+    override val minInferenceIntervalMs: Long get() = if (android.os.SystemClock.elapsedRealtime() < slowUntilMs) 1000L else 500L
 
-    /** 当前生效的模板 */
-    private var currentTemplateId: String? = null
+    private val templateStabilizer = V9TemplateStabilizer()
+    private val structureMatcher = V9StructureMatcher()
+    private val multiScene = MultiSceneAnalyzer(index.assetDirectory(), index::getMetadata)
+    private val qualityHead = index.qualityHead()
+    private val cropEvaluator = QualityCropEvaluator()
+    private var structure: com.example.aicamera.guidance.StructureObservation? = null
+    private var slowUntilMs = 0L
+    override fun updateStructure(observation: com.example.aicamera.guidance.StructureObservation?) { structure = observation }
+    override fun requestReplan() { structureMatcher.replan(); multiScene.replan(); templateStabilizer.reset(); cropEvaluator.reset() }
 
-    /** 挑战者候选模板 */
-    private var candidateTemplateId: String? = null
-
-    /** 候选连续领先次数 */
-    private var candidateLeadCount: Int = 0
-
-    /** 低 margin 阈值（top1/top2 margin < 0.01 时不切换） */
-    private val lowMarginThreshold: Float = 0.01f
-
-    /** 稳定切换所需候选连续领先帧数 */
-    private val stableSwitchFrames: Int = 2
 
     // ── IInference 实现 ───────────────────────────────────────
 
+    @Synchronized
     override fun predict(buffer: ByteBuffer, frame: PreprocessedFrame): Any? {
         // Step 1: 获取 Bitmap — 优先使用预处理阶段保留的 224×224 Bitmap，
         //         否则从 buffer 重建（降级路径）
-        val reconstructed = if (frame.originalBitmap == null) {
-            bufferToBitmap(buffer, frame.width, frame.height)
-        } else null
-        val sourceBitmap = frame.originalBitmap ?: reconstructed!!
-
+        val started = android.os.SystemClock.elapsedRealtime()
+        var reconstructed: Bitmap? = null
         try {
+            val sourceBitmap = frame.originalBitmap ?: bufferToBitmap(buffer, frame.width, frame.height)
+                .also { reconstructed = it }
             val nchw = V9EmbeddingRuntime.bitmapToNchw224(sourceBitmap)
             val embedding = runtime.embed(nchw)
 
             // Step 2: 检索 + 规则重排
-            val candidates = index.search(embedding, topK = 8)
+            val candidates = index.search(embedding, topK = 32)
             if (candidates.isEmpty()) {
-                filterStabilizer.reset()
-                autoZoomStabilizer.reset()
+                resetSession()
                 return createEmptyResult(
                     FilterRecommendations.original(),
                     AutoZoomRecommendations.disabled(AutoZoomReason.EMPTY_CANDIDATES)
                 )
             }
-            val reranked = index.rerank(candidates)
-            if (reranked.isEmpty()) {
-                filterStabilizer.reset()
-                autoZoomStabilizer.reset()
-                return createEmptyResult(
-                    FilterRecommendations.original(),
-                    AutoZoomRecommendations.disabled(AutoZoomReason.EMPTY_CANDIDATES)
-                )
-            }
-
-            // Step 3: 从同一张 224x224 bitmap 提取一次统计，供两个离线推荐器复用。
+            // Step 3: 从同一张 224x224 bitmap 提取一次统计，供重排和两个推荐器复用。
             val stats = try {
                 colorStatsExtractor.extract(sourceBitmap)
             } catch (e: Exception) {
                 Log.w(CameraConfig.TAG, "[V9] 颜色统计失败，自动变焦将安全禁用", e)
                 null
+            }
+
+            val sceneContext = stats?.let { sceneContextEstimator.estimate(candidates, it) } ?: SceneContext()
+            val semantic = index.rerank(candidates, sceneContext, limit = 32)
+            val now = android.os.SystemClock.elapsedRealtime()
+            val sceneResult = multiScene.analyze(sourceBitmap, sceneContext, semantic, structure?.viewportVersion ?: -1L,
+                frame.displayAspectRatio ?: 1f, now, frame.sampledAtMs.takeIf { it > 0 } ?: started)
+            val isPortrait = sceneResult.observation.family == com.example.aicamera.guidance.SceneFamily.PORTRAIT
+            val reranked = if (isPortrait) structureMatcher.rank(sceneResult.hits, structure, now) else sceneResult.hits.take(8)
+            if (reranked.isEmpty()) {
+                resetSession()
+                return createEmptyResult(
+                    FilterRecommendations.original(),
+                    AutoZoomRecommendations.disabled(AutoZoomReason.EMPTY_CANDIDATES)
+                )
             }
 
             // Step 4: 推荐滤镜。失败只降级推荐，不影响现有 V9 构图链路。
@@ -155,10 +152,41 @@ class V9Inference(
             }
 
             // Step 6: 现有模板稳定策略继续只负责构图输出。
-            val selectedHit = selectStable(reranked)
+            val selectedHit = templateStabilizer.select(reranked)
             val meta = selectedHit.metadata ?: index.getMetadata(selectedHit.templateId)
             return if (meta != null) {
-                metaToFakeOutput(meta, selectedHit.rerankScore, filterRecommendation, autoZoomRecommendation)
+                val target = if (isPortrait) structureMatcher.target(reranked + semantic.filter { candidate -> reranked.none { it.templateId == candidate.templateId } }, structure, now)
+                    else { structureMatcher.reset(); null }
+                val face = structure?.singleFace(now)
+                val features = QualityHead.features(sourceBitmap, face)
+                val head = qualityHead?.takeIf { meta.sceneCategory in it.scenes || meta.photoType in it.scenes }
+                val qualityScore = head?.score(embedding, features)
+                val crop = if (target == null && head != null && head.cropDiagnosticsEnabled && qualityScore != null && now >= slowUntilMs)
+                    cropEvaluator.evaluate(sourceBitmap, embedding, face, head, qualityScore, now) {
+                        runtime.embed(V9EmbeddingRuntime.bitmapToNchw224(it))
+                    } else null
+                metaToFakeOutput(meta, selectedHit.cosine, frame.displayAspectRatio,
+                    filterRecommendation, autoZoomRecommendation).let { output ->
+                    val lines = output.guideLines.filterNot { it.type == "target_zone" }.toMutableList()
+                    target?.let { lines.add(FakeGuideLine("target_zone", true, mapOf(
+                        "center_x" to it.center.x, "center_y" to it.center.y, "radius" to it.tolerance,
+                        "anchor_kind" to "face", "coordinate_aspect_ratio" to (frame.displayAspectRatio ?: 1f)))) }
+                    sceneResult.target?.let { objectTarget ->
+                        lines.add(FakeGuideLine("target_zone",true,mapOf("center_x" to objectTarget.center.x,
+                            "center_y" to objectTarget.center.y,"radius" to objectTarget.tolerance,"anchor_kind" to "object",
+                            "coordinate_aspect_ratio" to (frame.displayAspectRatio ?: 1f))))
+                    }
+                    sceneResult.observation.objectObservation?.let { observed ->
+                        val b=observed.box
+                        lines.add(FakeGuideLine("subject_box",true,mapOf("x" to b.left,"y" to b.top,"width" to b.width,
+                            "height" to b.height,"real" to true,"anchor_kind" to "object","class_id" to observed.classId,"aligned" to false)))
+                    }
+                    output.copy(guideLines = lines, compositionTarget = target, structureObservation = structure,
+                        sceneAnalysis = sceneResult.observation, objectTarget = sceneResult.target,
+                        expectsSubject = isPortrait,
+                        qualityScore = qualityScore, qualityCrop = crop,
+                        qualityAcceptable = features[2] < .98f && features[3] < .98f)
+                }
             } else {
                 createEmptyResult(filterRecommendation, autoZoomRecommendation)
             }
@@ -171,57 +199,9 @@ class V9Inference(
                 AutoZoomRecommendations.disabled(AutoZoomReason.FALLBACK)
             )
         } finally {
+            val finished = android.os.SystemClock.elapsedRealtime()
+            if (finished-started > 150) slowUntilMs = finished+10_000
             reconstructed?.recycle()
-        }
-    }
-
-    /**
-     * 稳定选择：低 margin 不换、候选连续 [stableSwitchFrames] 次领先才换。
-     */
-    private fun selectStable(reranked: List<SearchHit>): SearchHit {
-        val top1 = reranked.first()
-        val top2 = reranked.getOrNull(1)
-        val margin = if (top2 != null) top1.rerankScore - top2.rerankScore else Float.MAX_VALUE
-        val current = currentTemplateId
-
-        // 首个模板直接生效
-        if (current == null) {
-            currentTemplateId = top1.templateId
-            return top1
-        }
-
-        // 现任仍是 top1 → 清空挑战者
-        if (top1.templateId == current) {
-            candidateTemplateId = null
-            candidateLeadCount = 0
-            return top1
-        }
-
-        // margin 太低 → 不换，但现任若掉出候选列表则允许下一帧重新评估
-        if (margin < lowMarginThreshold) {
-            candidateTemplateId = null
-            candidateLeadCount = 0
-            return reranked.find { it.templateId == current } ?: top1
-        }
-
-        // 挑战者连续领先计数
-        if (candidateTemplateId == top1.templateId) {
-            candidateLeadCount++
-        } else {
-            candidateTemplateId = top1.templateId
-            candidateLeadCount = 1
-        }
-
-        return if (candidateLeadCount >= stableSwitchFrames) {
-            // 换王
-            currentTemplateId = top1.templateId
-            candidateTemplateId = null
-            candidateLeadCount = 0
-            Log.i(CameraConfig.TAG, "[V9] 模板切换 → ${top1.templateId} (score=${"%.3f".format(top1.rerankScore)})")
-            top1
-        } else {
-            // 未稳定，继续用现任
-            reranked.find { it.templateId == current } ?: top1
         }
     }
 
@@ -240,60 +220,32 @@ class V9Inference(
     private fun metaToFakeOutput(
         meta: TemplateMeta,
         score: Float,
+        frameAspectRatio: Float?,
         filterRecommendation: FilterRecommendation,
         autoZoomRecommendation: AutoZoomRecommendation
     ): FakeInferenceOutput {
-        val strategy = compositionTypeToStrategy(meta.compositionType)
+        // Legacy composition labels were generated from scene classes. Only image-reviewed
+        // geometry can supply a target; scene labels cannot locate a face or a horizon.
+        val strategy = CompositionStrategy.ADAPTIVE
         val scene = sceneCategoryToSceneType(meta.sceneCategory)
 
         val guideLines = mutableListOf<FakeGuideLine>()
 
-        // 1. 三分线（几乎所有模板都适用）
-        guideLines.add(
-            FakeGuideLine(
-                type = "rule_of_thirds_grid", visible = true,
-                params = mapOf("vertical_lines" to listOf(0.333f, 0.667f),
-                    "horizontal_lines" to listOf(0.333f, 0.667f))
-            )
-        )
+        // The user's grid setting is independent; the model does not impose a thirds composition.
 
         // 2. 目标区域 — 根据构图类型选位置
-        val targetZone = when (meta.subjectPosition) {
-            "center" -> FakeGuideLine("target_zone", true,
-                mapOf("center_x" to 0.5f, "center_y" to 0.5f, "radius" to 0.15f))
-            else -> FakeGuideLine("target_zone", true,
-                mapOf("center_x" to 0.333f, "center_y" to 0.333f, "radius" to 0.12f))
+        V9ReferencePolicy.faceTarget(meta, score, frameAspectRatio)?.let { anchor ->
+            guideLines.add(FakeGuideLine("target_zone", true,
+                mapOf("center_x" to anchor.x, "center_y" to anchor.y,
+                    "radius" to 0.08f, "anchor_kind" to "face")))
         }
-        guideLines.add(targetZone)
 
         // 3. 水平仪 + 水平参考线（reference_y 合并进同一条线，避免重复绘制）
-        val horizonRefY = when (meta.horizonPosition) {
-            "upper_third" -> 0.333f
-            "lower_third" -> 0.667f
-            "middle" -> 0.5f
-            else -> null
-        }
         val horizonParams = mutableMapOf<String, Any>("angle_degrees" to 0f)
-        if (horizonRefY != null) horizonParams["reference_y"] = horizonRefY
         guideLines.add(FakeGuideLine("horizon_level", true, horizonParams))
 
-        // 4. 主体框（人像模式）
-        if (meta.photoType == "portrait") {
-            guideLines.add(
-                FakeGuideLine("subject_box", true,
-                    mapOf("x" to 0.2f, "y" to 0.25f, "width" to 0.6f, "height" to 0.5f))
-            )
-        }
-
-        // 5. 引导线提示
-        if (meta.leadingLines) {
-            guideLines.add(
-                FakeGuideLine("direction_arrow", true,
-                    mapOf("from_x" to 0.3f, "from_y" to 0.6f, "to_x" to 0.5f, "to_y" to 0.35f))
-            )
-        }
-
-        val progress = score.coerceIn(0f, 1f)
+        // Subject boxes come only from the live geometry detector; template metadata cannot
+        // locate a person in the current preview frame.
 
         return FakeInferenceOutput(
             sceneType = scene,
@@ -302,8 +254,11 @@ class V9Inference(
             luminance = 128f, // V9 不输出亮度
             guideLines = guideLines,
             guidanceCue = GuidanceCue.NONE, // 等 App 侧几何检测后更新
-            compositionProgress = progress
-        )
+            // Similarity is retrieval evidence; only live geometry can report alignment.
+            compositionProgress = 0f,
+            expectsSubject = meta.photoType == "portrait"
+        ).withV9FilterRecommendation(filterRecommendation)
+            .withV9AutoZoomRecommendation(autoZoomRecommendation)
     }
 
     private fun compositionTypeToStrategy(type: String): CompositionStrategy = when (type) {
@@ -327,47 +282,124 @@ class V9Inference(
     ): FakeInferenceOutput {
         return FakeInferenceOutput(
             sceneType = SceneType.NORMAL,
-            compositionStrategy = CompositionStrategy.RULE_OF_THIRDS,
+            compositionStrategy = CompositionStrategy.ADAPTIVE,
             confidence = 0f,
             luminance = 128f,
-            guideLines = listOf(
-                FakeGuideLine("rule_of_thirds_grid", true,
-                    mapOf("vertical_lines" to listOf(0.333f, 0.667f),
-                        "horizontal_lines" to listOf(0.333f, 0.667f)))
-            ),
+            guideLines = emptyList(),
             guidanceCue = GuidanceCue.NONE,
             compositionProgress = 0f
-        )
+        ).withV9FilterRecommendation(filterRecommendation)
+            .withV9AutoZoomRecommendation(autoZoomRecommendation)
     }
 
     // ── 辅助 ──────────────────────────────────────────────────
 
     private fun bufferToBitmap(buffer: ByteBuffer, width: Int, height: Int): Bitmap {
-        buffer.rewind()
+        require(width > 0 && height > 0 && width.toLong() * height <= Int.MAX_VALUE / 12) {
+            "非法帧尺寸: ${width}x${height}"
+        }
+        val input = buffer.duplicate().order(buffer.order()).apply { rewind() }
+        require(input.remaining() >= width * height * 12) { "RGB 帧数据截断" }
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val pixels = IntArray(width * height)
         var i = 0
-        while (buffer.remaining() >= 12 && i < pixels.size) {
-            val r = (buffer.float.coerceIn(0f, 1f) * 255).toInt()
-            val g = (buffer.float.coerceIn(0f, 1f) * 255).toInt()
-            val b = (buffer.float.coerceIn(0f, 1f) * 255).toInt()
+        while (input.remaining() >= 12 && i < pixels.size) {
+            val r = (input.float.coerceIn(0f, 1f) * 255).toInt()
+            val g = (input.float.coerceIn(0f, 1f) * 255).toInt()
+            val b = (input.float.coerceIn(0f, 1f) * 255).toInt()
             pixels[i] = (255 shl 24) or ((r and 0xFF) shl 16) or ((g and 0xFF) shl 8) or (b and 0xFF)
             i++
         }
-        buffer.rewind()
         bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
         return bitmap
     }
 
+    @Synchronized
     override fun close() {
         resetSession()
         runtime.close()
+        multiScene.close()
         Log.i(CameraConfig.TAG, "[V9Inference] 已释放")
     }
 
-    fun resetSession() {
+    @Synchronized
+    override fun resetSession() {
+        templateStabilizer.reset()
+        structureMatcher.reset()
+        multiScene.reset()
+        cropEvaluator.reset()
+        structure = null
+        filterStabilizer.reset()
+        autoZoomStabilizer.reset()
+    }
+}
+
+/** Explicit adapter seam used by the real V9 path; FakeInference never calls it. */
+internal fun FakeInferenceOutput.withV9FilterRecommendation(
+    recommendation: FilterRecommendation
+): FakeInferenceOutput = copy(filterRecommendation = recommendation)
+
+/** Explicit adapter seam used by the real V9 path; FakeInference never calls it. */
+internal fun FakeInferenceOutput.withV9AutoZoomRecommendation(
+    recommendation: AutoZoomRecommendation
+): FakeInferenceOutput = copy(autoZoomRecommendation = recommendation)
+
+/** Keeps the selected template and challenger history consistent with the returned hit. */
+internal class V9TemplateStabilizer(
+    private val lowMarginThreshold: Float = 0.01f,
+    private val stableSwitchFrames: Int = 2
+) {
+    private var currentTemplateId: String? = null
+    private var candidateTemplateId: String? = null
+    private var candidateLeadCount = 0
+
+    fun select(reranked: List<SearchHit>): SearchHit {
+        require(reranked.isNotEmpty())
+        val leader = reranked.first()
+        val current = reranked.find { it.templateId == currentTemplateId }
+        // A scene change can remove the old template completely. Adopt the returned leader
+        // immediately in this case so the next frame stabilizes against what the user saw.
+        if (current == null || leader.templateId == current.templateId) return adopt(leader)
+        val margin = reranked.getOrNull(1)?.let { leader.rerankScore - it.rerankScore }
+            ?: Float.MAX_VALUE
+        if (margin < lowMarginThreshold) {
+            candidateTemplateId = null
+            candidateLeadCount = 0
+            return current
+        }
+        if (candidateTemplateId == leader.templateId) {
+            candidateLeadCount++
+        } else {
+            candidateTemplateId = leader.templateId
+            candidateLeadCount = 1
+        }
+        return if (candidateLeadCount >= stableSwitchFrames) adopt(leader) else current
+    }
+
+    fun reset() {
         currentTemplateId = null
         candidateTemplateId = null
         candidateLeadCount = 0
     }
+
+    private fun adopt(hit: SearchHit): SearchHit {
+        currentTemplateId = hit.templateId
+        candidateTemplateId = null
+        candidateLeadCount = 0
+        return hit
+    }
+}
+
+/** Metadata describes the intended target, never a measured subject bounding box. */
+internal fun v9SubjectTarget(position: String): Pair<Float, Float>? = when (position) {
+    "center" -> 0.5f to 0.5f
+    "left_third" -> 1f / 3f to 0.5f
+    "right_third" -> 2f / 3f to 0.5f
+    "upper_third" -> 0.5f to 1f / 3f
+    "lower_third" -> 0.5f to 2f / 3f
+    "upper_left", "upper_left_third" -> 1f / 3f to 1f / 3f
+    "upper_right", "upper_right_third" -> 2f / 3f to 1f / 3f
+    "lower_left", "lower_left_third" -> 1f / 3f to 2f / 3f
+    "lower_right", "lower_right_third" -> 2f / 3f to 2f / 3f
+    else -> null
 }

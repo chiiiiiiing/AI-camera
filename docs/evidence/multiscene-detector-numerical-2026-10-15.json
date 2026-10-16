@@ -1,0 +1,15 @@
+{
+  "model_sha256": "4b82da9944b88577175ee23a459dce2e26e6e4be573def65b1055dc2d9720186",
+  "fixture_source_sha256": "bfeb78340368e1ae7e61a3482aa67e2d5c17fca72991d6cec5b07c597e29ac3c",
+  "raw_positive_anchors": 9,
+  "detections": 4,
+  "python_official_opencv_decoder_max_abs_error": 4.3127399207421035e-08,
+  "kotlin_python": {
+    "detections": 4,
+    "max_decode_abs_error": 5.036305927852425e-08,
+    "max_preprocessing_abs_error": 0.0
+  },
+  "full_preprocess_float_count": 519168,
+  "full_preprocess_max_abs_error": 7.152557373046875e-07,
+  "scope": "Desktop float32 math and actual-model outputs; no Android native runtime or phone latency measurement."
+}

@@ -27,8 +27,13 @@ data class PipelineState(
     /** 丢帧率 (0.0 ~ 1.0) */
     val dropRate: Float = 0f,
 
-    /** 有效帧率（每秒推理输出帧数，后续由外部计算） */
-    val effectiveFps: Float = 0f
+    /** 有效帧率（每秒管线输出帧数，包含复用模型结果的几何更新帧） */
+    val effectiveFps: Float = 0f,
+    /** Actual model sampling rate; excludes frames that only update geometry. */
+    val modelFps: Float = 0f,
+    /** Rolling model + retrieval latency percentiles; not ONNX-only embedding latency. */
+    val inferenceP50Ms: Long = 0,
+    val inferenceP90Ms: Long = 0
 )
 
 /**
@@ -40,7 +45,9 @@ data class FrameTiming(
     val inferenceMs: Long,
     val parseMs: Long,
     val totalMs: Long,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val modelSampled: Boolean = true,
+    val geometryMs: Long = 0
 )
 
 /**

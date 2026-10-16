@@ -1,8 +1,6 @@
 package com.example.aicamera.pipeline
 
-import android.content.Context
 import android.util.Log
-import com.example.aicamera.camera.CameraConfig
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.File
@@ -10,23 +8,22 @@ import java.io.FileInputStream
 import java.io.InputStreamReader
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.nio.FloatBuffer
 
 /**
- * V9 模板索引 — 加载 728 条模板 embedding + metadata，执行检索和规则重排。
+ * V9 接口模板索引 — 加载随模型重建的已审阅 embedding + metadata，执行检索和规则重排。
  *
  * ## 工作流
  * ```
  * query embedding [512]
- *   → cosine similarity × 728 templates
+ *   → cosine similarity × N reviewed templates
  *   → top 8 candidates
  *   → rule-based reranking (photo_type / scene / composition / lighting)
  *   → top 5 stabilized results
  * ```
  *
  * ## 索引文件（从 assets 复制到 filesDir/ai/v9/template_index/）
- * - templates.embeddings.f32  (728 × 512 float32, ~1.5MB)
- * - templates.metadata.jsonl   (728 行 JSON, ~1.8MB)
+ * - templates.embeddings.f32  (N × 512 float32)
+ * - templates.metadata.jsonl   (N 行 JSON，与 keys 行序一致)
  */
 class V9TemplateIndex(
     private val indexDir: File
@@ -75,6 +72,8 @@ class V9TemplateIndex(
                 throw IllegalStateException("有 ${missingMetadata.size} 个 embedding 缺少 metadata")
             }
 
+            val structures = ReferenceStructures.load(File(indexDir.parentFile, "reference_structures.json"), metadata)
+            structures.forEach { (id, structure) -> metadata[id]?.let { metadata[id] = it.copy(structure = structure) } }
             templateCount = embeddings.size
             Log.i(TAG, "模板索引加载完成: $templateCount 条模板, ${V9EmbeddingRuntime.EMBEDDING_DIM} 维")
             return true
@@ -101,7 +100,11 @@ class V9TemplateIndex(
 
         for (i in 0 until count) {
             val embedding = sliceEmbedding(temp, i, dim)
-            embeddings.add(embedding)
+            if (!V9EmbeddingRuntime.isUsableEmbedding(embedding)) {
+                throw IllegalStateException("第 $i 条 template embedding 非法")
+            }
+            // Normalize once at load, keeping per-frame retrieval a dot-product scan.
+            embeddings.add(V9EmbeddingRuntime.l2Normalize(embedding))
         }
         Log.d(TAG, "从 ${file.name} 加载 ${embeddings.size} 条 embedding")
     }
@@ -126,7 +129,15 @@ class V9TemplateIndex(
                     val composition = annotation?.optJSONObject("composition")
                     val lighting = annotation?.optJSONObject("lighting")
                     val camera = annotation?.optJSONObject("camera")
-                    val visualSummary = annotation?.optString("visual_summary", "")
+                    val annotationMethod = annotation?.optJSONObject("provenance")?.optString("method")
+                    val isUnverifiedDraft = annotationMethod in setOf(
+                        "legacy_scene_rule_draft", "scene_rule_draft", "not_annotated_after_recovery"
+                    )
+                    // These fields were copied from a scene rule or invalidated by a crop.
+                    // They cannot vote as image-level composition, lighting or distance evidence.
+                    // Keep older metadata without explicit provenance compatible.
+                    fun attribute(source: JSONObject?, key: String, legacyDefault: String): String =
+                        if (isUnverifiedDraft) "unknown" else source?.optString(key, legacyDefault) ?: legacyDefault
                     if (templateId.isBlank()) {
                         throw IllegalArgumentException("metadata template_id 为空")
                     }
@@ -138,22 +149,25 @@ class V9TemplateIndex(
                         templateId = templateId,
                         photoType = photoType,
                         sceneCategory = sceneCategory,
-                        compositionType = composition?.optString("type", "rule_of_thirds") ?: "rule_of_thirds",
-                        subjectPosition = composition?.optString("subject_position", "center") ?: "center",
-                        horizonPosition = composition?.optString("horizon_position", "not_visible") ?: "not_visible",
-                        leadingLines = composition?.optBoolean("leading_lines", false) ?: false,
-                        negativeSpace = composition?.optString("negative_space", "medium") ?: "medium",
-                        lightingQuality = lighting?.optString("quality", "soft") ?: "soft",
-                        lightingDirection = lighting?.optString("direction", "front") ?: "front",
-                        cameraAngle = camera?.optString("angle", "eye_level") ?: "eye_level",
-                        cameraDistance = camera?.optString("distance", "medium") ?: "medium",
-                        cameraOrientation = camera?.optString("orientation", "portrait") ?: "portrait",
-                        visualSummary = visualSummary ?: "",
-                        lightingContrast = lighting?.optString("contrast", "medium") ?: "medium",
-                        timeOfDay = lighting?.optString("time_of_day", "unknown") ?: "unknown"
+                        compositionType = attribute(composition, "type", "rule_of_thirds"),
+                        subjectPosition = attribute(composition, "subject_position", "center"),
+                        horizonPosition = attribute(composition, "horizon_position", "not_visible"),
+                        leadingLines = !isUnverifiedDraft && (composition?.optBoolean("leading_lines", false) ?: false),
+                        negativeSpace = attribute(composition, "negative_space", "medium"),
+                        lightingQuality = attribute(lighting, "quality", "soft"),
+                        lightingDirection = attribute(lighting, "direction", "front"),
+                        cameraAngle = attribute(camera, "angle", "eye_level"),
+                        cameraDistance = attribute(camera, "distance", "medium"),
+                        cameraOrientation = attribute(camera, "orientation", "portrait"),
+                        visualSummary = if (isUnverifiedDraft) "" else annotation?.optString("visual_summary", "") ?: "",
+                        lightingContrast = attribute(lighting, "contrast", "medium"),
+                        timeOfDay = attribute(lighting, "time_of_day", "unknown"),
+                        referenceEligible = V9ReferencePolicy.isEligible(json),
+                        faceAnchor = V9ReferencePolicy.parseFaceAnchor(json),
+                        imageSha256 = json.optString("source_sha256")
                     )
                 } catch (e: Exception) {
-                    Log.w(TAG, "解析 metadata 行失败: ${e.message}")
+                    throw IllegalArgumentException("metadata 行非法: ${e.message}", e)
                 }
             }
         }
@@ -170,13 +184,16 @@ class V9TemplateIndex(
      * @return 按 cosine similarity 降序排列的候选列表
      */
     fun search(query: FloatArray, topK: Int = 8): List<SearchHit> {
-        if (topK <= 0 || embeddings.isEmpty()) {
+        if (topK <= 0 || embeddings.isEmpty() || !V9EmbeddingRuntime.isUsableEmbedding(query)) {
             return emptyList()
         }
 
+        val normalizedQuery = V9EmbeddingRuntime.l2Normalize(query.copyOf())
         val best = ArrayList<ScoredIndex>(minOf(topK, embeddings.size))
         for (i in embeddings.indices) {
-            val score = V9EmbeddingRuntime.cosineSimilarity(query, embeddings[i])
+            // Tutorial screenshots/collages are not a camera composition to imitate.
+            if (metadata[templateIds[i]]?.referenceEligible != true) continue
+            val score = V9EmbeddingRuntime.cosineSimilarity(normalizedQuery, embeddings[i]).coerceIn(-1f, 1f)
             if (!score.isFinite()) continue
             insertTopHit(best, ScoredIndex(i, score), topK)
         }
@@ -202,7 +219,8 @@ class V9TemplateIndex(
      */
     fun rerank(
         candidates: List<SearchHit>,
-        context: SceneContext = SceneContext()
+        context: SceneContext = SceneContext(),
+        limit: Int = 5
     ): List<SearchHit> {
         return candidates.asSequence().mapNotNull { hit ->
             val meta = hit.metadata
@@ -239,8 +257,13 @@ class V9TemplateIndex(
             hit.copy(rerankScore = rerankScore).takeIf { it.rerankScore.isFinite() }
         }.sortedWith(
             compareByDescending<SearchHit> { it.rerankScore }.thenBy { it.templateId }
-        ).take(5).toList()
+        ).take(limit.coerceIn(0, 32)).toList()
     }
+
+    fun qualityHead(): QualityHead? = QualityHead.load(indexDir.parentFile)
+
+    /** Optional scene models and hash-bound reference sidecars share this bundle. */
+    fun assetDirectory(): File = indexDir.parentFile
 
     fun getMetadata(templateId: String): TemplateMeta? = metadata[templateId]
 
@@ -276,12 +299,12 @@ class V9TemplateIndex(
         fun sliceEmbedding(flat: FloatArray, row: Int, dim: Int): FloatArray {
             require(row >= 0) { "row 必须 >= 0，当前 $row" }
             require(dim > 0) { "dim 必须 > 0，当前 $dim" }
-            val start = row * dim
+            val start = row.toLong() * dim
             val end = start + dim
-            require(end <= flat.size) {
+            require(end <= flat.size.toLong()) {
                 "第 $row 条 embedding 越界: [$start, $end)，总长度 ${flat.size}"
             }
-            return flat.copyOfRange(start, end)
+            return flat.copyOfRange(start.toInt(), end.toInt())
         }
 
         /** Validates and extracts the producer-authored embedding order from templates.keys.json. */
@@ -298,12 +321,13 @@ class V9TemplateIndex(
                 "templates.keys.json count=$expectedCount, items=${items.length()}"
             }
             val ids = ArrayList<String>(items.length())
+            val seenIds = HashSet<String>(items.length())
             for (index in 0 until items.length()) {
                 val item = items.optJSONObject(index)
                     ?: throw IllegalArgumentException("templates.keys.json items[$index] 非对象")
                 val id = item.optString("template_id", item.optString("photo_id", "")).trim()
                 require(id.isNotEmpty()) { "templates.keys.json items[$index] 缺少 template_id" }
-                require(id !in ids) { "templates.keys.json template_id 重复: $id" }
+                require(seenIds.add(id)) { "templates.keys.json template_id 重复: $id" }
                 ids.add(id)
             }
             return ids
@@ -340,7 +364,11 @@ data class TemplateMeta(
     /** annotation.lighting.contrast; absent legacy rows default to medium. */
     val lightingContrast: String = "medium",
     /** annotation.lighting.time_of_day; absent legacy rows default to unknown. */
-    val timeOfDay: String = "unknown"
+    val timeOfDay: String = "unknown",
+    val referenceEligible: Boolean = false,
+    val faceAnchor: V9FaceAnchor? = null,
+    val imageSha256: String = "",
+    val structure: ReferenceStructure? = null
 )
 
 /** 场景上下文（用于重排），后续可由独立场景分类器填充 */

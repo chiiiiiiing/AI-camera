@@ -1,0 +1,7 @@
+# Isolate this CPU environment from the retrieval training environment.
+# 0.10.35's packaged native runtime attempts undocumented Clearcut telemetry.
+# Keep this offline annotator on the prior Tasks runtime, with compatible NumPy.
+mediapipe==0.10.21
+numpy==1.26.4
+Pillow==12.3.0
+opencv-contrib-python==4.11.0.86

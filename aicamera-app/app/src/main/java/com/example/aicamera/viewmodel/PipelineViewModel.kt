@@ -13,6 +13,7 @@ import com.example.aicamera.pipeline.PipelineState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,6 +41,8 @@ class PipelineViewModel @Inject constructor(
     private val horizonSensor: ImuHorizonSensor,
     geometryStage: GeometryGuidanceStage
 ) : ViewModel() {
+
+    fun requestReplan() = pipeline.requestReplan()
 
     /** AI 引擎装配状态（HUD/调试面板展示用） */
     val aiState: StateFlow<AiEngineManager.State> = aiEngine.state
@@ -87,7 +90,7 @@ class PipelineViewModel @Inject constructor(
         }
     }
 
-    fun connect(frameFlow: SharedFlow<CameraViewModel.FrameData>) {
+    fun connect(frameFlow: Flow<CameraViewModel.FrameData>) {
         // ★ 防重入
         if (collectJob?.isActive == true) return
 
@@ -95,8 +98,7 @@ class PipelineViewModel @Inject constructor(
 
         collectJob = viewModelScope.launch {
             frameFlow.collect { frameData ->
-                if (!pipeline.getState().isRunning) return@collect
-
+                // The scheduler closes rejected frames while paused as well.
                 pipeline.process(
                     imageProxy = frameData.imageProxy,
                     rotation = frameData.rotation,

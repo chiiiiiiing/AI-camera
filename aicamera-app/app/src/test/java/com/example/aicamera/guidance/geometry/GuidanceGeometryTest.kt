@@ -14,6 +14,100 @@ import org.junit.Test
  */
 class GuidanceGeometryTest {
 
+    @Test
+    fun `following phone translation decreases reference error for rear and mirrored front previews`() {
+        val scenes = listOf(.3f to 0f, -.3f to 0f, 0f to .3f, 0f to -.3f)
+        for (frontCamera in listOf(false, true)) for ((sceneX, sceneY) in scenes) {
+            fun preview(phoneX: Float, phoneY: Float): Pair<Float, Float> {
+                // Front lens projection reverses horizontal sensor space. The
+                // existing preprocessing mirror then aligns it to PreviewView.
+                val rawX = .5f + (sceneX - phoneX) * if (frontCamera) -1f else 1f
+                return (if (frontCamera) 1f - rawX else rawX) to (.5f + sceneY - phoneY)
+            }
+            val before = preview(0f, 0f)
+            val cue = GuidanceGeometry.guidanceCue(before.first, before.second, true, targetTolerance = .08f)
+            val movement = when (cue) {
+                GuidanceCue.MOVE_LEFT -> -.05f to 0f
+                GuidanceCue.MOVE_RIGHT -> .05f to 0f
+                GuidanceCue.MOVE_UP -> 0f to -.05f
+                GuidanceCue.MOVE_DOWN -> 0f to .05f
+                else -> error("Expected an actionable phone movement")
+            }
+            val after = preview(movement.first, movement.second)
+            assertTrue(kotlin.math.hypot(after.first - .5f, after.second - .5f) <
+                kotlin.math.hypot(before.first - .5f, before.second - .5f))
+            assertTrue(GuidanceGeometry.compositionProgress(after.first, after.second)!! >
+                GuidanceGeometry.compositionProgress(before.first, before.second)!!)
+        }
+    }
+
+    @Test
+    fun `45 degree food viewpoint is not forced level without an explicit pitch target`() {
+        assertEquals(GuidanceCue.NONE, GuidanceGeometry.guidanceCue(null, null, false,
+            horizonAngleDeg = 0f, pitchAngleDeg = -45f, yawAngleDeg = 120f))
+        assertEquals(1f, GuidanceGeometry.compositionProgress(null, null,
+            horizonAngleDeg = 0f, pitchAngleDeg = -45f, yawAngleDeg = 120f)!!, 0f)
+        assertNull(GuidanceGeometry.compositionProgress(null, null,
+            pitchAngleDeg = -45f, yawAngleDeg = 120f))
+    }
+
+    @Test
+    fun `flat lay gravity does not invent level or upside down evidence`() {
+        assertTrue(!HorizonMath.hasObservableRoll(HorizonMath.compute(0f, 0f, 9.8f)))
+        assertTrue(HorizonMath.hasObservableRoll(HorizonMath.compute(0f, 6.93f, 6.93f)))
+        assertTrue(!HorizonMath.hasObservableRoll(HorizonObservation(0f, isUpright = true, confidence = 0f)))
+    }
+
+    @Test
+    fun `explicit target pitch is compared to target not zero`() {
+        assertEquals(GuidanceCue.NONE, GuidanceGeometry.guidanceCue(null, null, false,
+            pitchAngleDeg = -45f, pitchTargetDeg = -45f))
+        assertEquals(GuidanceCue.PITCH_DOWN, GuidanceGeometry.guidanceCue(null, null, false,
+            pitchAngleDeg = -20f, pitchTargetDeg = -45f))
+        assertEquals(GuidanceCue.NONE, GuidanceGeometry.guidanceCue(null, null, false,
+            yawAngleDeg = -179f, yawTargetDeg = 179f))
+    }
+
+    @Test
+    fun `diagonal point outside circular target is not aligned`() {
+        val cue = GuidanceGeometry.guidanceCue(0.59f, 0.59f, true,
+            targetCx = 0.5f, targetCy = 0.5f, targetTolerance = 0.12f)
+        assertTrue(cue == GuidanceCue.MOVE_RIGHT || cue == GuidanceCue.MOVE_DOWN)
+        assertTrue(!GuidanceGeometry.isSubjectAligned(0.59f, 0.59f, 0.5f, 0.5f, 0.12f))
+    }
+
+    @Test
+    fun `portrait target radius uses shorter frame dimension for both axes`() {
+        // 100x200 frame: vertical error .09 = 18 pixels, larger than a 12px circle.
+        assertTrue(!GuidanceGeometry.isSubjectAligned(.5f, .59f, .5f, .5f, .12f, .5f))
+        assertTrue(GuidanceGeometry.isSubjectAligned(.59f, .5f, .5f, .5f, .12f, .5f))
+        assertEquals(GuidanceCue.MOVE_DOWN, GuidanceGeometry.guidanceCue(.5f, .59f, true,
+            coordinateAspectRatio = .5f))
+        assertTrue(GuidanceGeometry.compositionProgress(.5f, .59f, coordinateAspectRatio = .5f)!! < 1f)
+    }
+
+    @Test
+    fun `progress increases toward target and reaches one throughout the circular radius`() {
+        fun progress(x: Float): Float {
+            val cue = GuidanceGeometry.guidanceCue(x, 0.5f, true, targetTolerance = 0.08f)
+            return GuidanceGeometry.verifiedProgress(cue,
+                GuidanceGeometry.compositionProgress(x, 0.5f, targetTolerance = 0.08f), true, true)
+        }
+        assertTrue(progress(0.8f) < progress(0.7f))
+        assertTrue(progress(0.7f) < progress(0.6f))
+        assertEquals(1f, progress(0.57f), 0f)
+        assertEquals(GuidanceCue.SUBJECT_ALIGNED, GuidanceGeometry.guidanceCue(0.57f, 0.5f, true,
+            targetTolerance = 0.08f))
+    }
+
+    @Test
+    fun `invalid target cannot be replaced with invented centered target`() {
+        assertEquals(GuidanceCue.SUBJECT_TARGET,
+            GuidanceGeometry.guidanceCue(0.5f, 0.5f, true, targetCx = Float.NaN))
+        assertNull(GuidanceGeometry.compositionProgress(0.5f, 0.5f, targetTolerance = -1f))
+        assertTrue(!GuidanceGeometry.isSubjectAligned(0.5f, 0.5f, 0.5f, 0.5f, -1f))
+    }
+
     // ── ROLL 指令 ─────────────────────────────────────────────
 
     @Test
@@ -92,20 +186,9 @@ class GuidanceGeometryTest {
     }
 
     @Test
-    fun `subject too far right gives MOVE_LEFT`() {
+    fun `subject too far right gives MOVE_RIGHT`() {
         val cue = GuidanceGeometry.guidanceCue(
             subjectCx = 0.7f, subjectCy = 0.333f,
-            expectsSubject = true,
-            targetCx = 0.333f, targetCy = 0.333f, targetTolerance = 0.12f,
-            horizonAngleDeg = 0f
-        )
-        assertEquals(GuidanceCue.MOVE_LEFT, cue)
-    }
-
-    @Test
-    fun `subject too far left gives MOVE_RIGHT`() {
-        val cue = GuidanceGeometry.guidanceCue(
-            subjectCx = 0.1f, subjectCy = 0.333f,
             expectsSubject = true,
             targetCx = 0.333f, targetCy = 0.333f, targetTolerance = 0.12f,
             horizonAngleDeg = 0f
@@ -114,25 +197,36 @@ class GuidanceGeometryTest {
     }
 
     @Test
-    fun `subject too low gives MOVE_UP`() {
+    fun `subject too far left gives MOVE_LEFT`() {
+        val cue = GuidanceGeometry.guidanceCue(
+            subjectCx = 0.1f, subjectCy = 0.333f,
+            expectsSubject = true,
+            targetCx = 0.333f, targetCy = 0.333f, targetTolerance = 0.12f,
+            horizonAngleDeg = 0f
+        )
+        assertEquals(GuidanceCue.MOVE_LEFT, cue)
+    }
+
+    @Test
+    fun `subject too low gives MOVE_DOWN`() {
         val cue = GuidanceGeometry.guidanceCue(
             subjectCx = 0.333f, subjectCy = 0.8f,
             expectsSubject = true,
             targetCx = 0.333f, targetCy = 0.333f, targetTolerance = 0.12f,
             horizonAngleDeg = 0f
         )
-        assertEquals(GuidanceCue.MOVE_UP, cue)
+        assertEquals(GuidanceCue.MOVE_DOWN, cue)
     }
 
     @Test
-    fun `subject too high gives MOVE_DOWN`() {
+    fun `subject too high gives MOVE_UP`() {
         val cue = GuidanceGeometry.guidanceCue(
             subjectCx = 0.333f, subjectCy = 0.05f,
             expectsSubject = true,
             targetCx = 0.333f, targetCy = 0.333f, targetTolerance = 0.12f,
             horizonAngleDeg = 0f
         )
-        assertEquals(GuidanceCue.MOVE_DOWN, cue)
+        assertEquals(GuidanceCue.MOVE_UP, cue)
     }
 
     @Test
@@ -170,7 +264,7 @@ class GuidanceGeometryTest {
     }
 
     @Test
-    fun `no signals at all returns null (caller falls back to template score)`() {
+    fun `no signals at all returns null and stays unverified`() {
         val p = GuidanceGeometry.compositionProgress(
             subjectCx = null, subjectCy = null,
             horizonAngleDeg = null
@@ -211,7 +305,7 @@ class GuidanceGeometryTest {
     fun `other cues are not boosted`() {
         assertEquals(
             0.73f,
-            GuidanceGeometry.progressWithAlignedBoost(GuidanceCue.MOVE_LEFT, 0.73f),
+            GuidanceGeometry.progressWithAlignedBoost(GuidanceCue.MOVE_RIGHT, 0.73f),
             1e-4f
         )
         assertEquals(

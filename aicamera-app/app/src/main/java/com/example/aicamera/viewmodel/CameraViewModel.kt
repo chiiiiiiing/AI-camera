@@ -28,6 +28,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -84,8 +87,14 @@ class CameraViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(CameraUiState())
     val uiState: StateFlow<CameraUiState> = _uiState.asStateFlow()
 
-    private val _frameFlow = MutableSharedFlow<FrameData>(replay = 0, extraBufferCapacity = 2)
-    val frameFlow: SharedFlow<FrameData> = _frameFlow.asSharedFlow()
+    // Frames have a single owner; release undelivered frames when the receiver cancels.
+    private val frameChannel = Channel<FrameData>(
+        capacity = 1,
+        onUndeliveredElement = { frame ->
+            try { frame.imageProxy.close() } catch (_: Exception) {}
+        }
+    )
+    val frameFlow: Flow<FrameData> = frameChannel.receiveAsFlow()
 
     data class FrameData(
         val imageProxy: ImageProxy,
@@ -158,8 +167,7 @@ class CameraViewModel @Inject constructor(
                         rotation = imageProxy.imageInfo.rotationDegrees,
                         isFrontCamera = cameraManager.isFrontCamera()
                     )
-                    val emitted = _frameFlow.tryEmit(frameData)
-                    if (!emitted) {
+                    if (frameChannel.trySend(frameData).isFailure) {
                         // ★ Buffer 满或下游未连接，关闭帧防止 CameraX 阻塞
                         imageProxy.close()
                     }
@@ -519,6 +527,10 @@ class CameraViewModel @Inject constructor(
 
     fun onPause() {
         cameraManager.unbind()
+        while (true) {
+            val pending = frameChannel.tryReceive().getOrNull() ?: break
+            pending.imageProxy.close()
+        }
     }
 
     fun onResume() {
@@ -531,5 +543,6 @@ class CameraViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         cameraManager.release()
+        frameChannel.cancel()
     }
 }
