@@ -431,7 +431,9 @@ class RenderViewModel @Inject constructor() : ViewModel() {
             qualityAcceptable = output.qualityAcceptable,
             observedAnchorKind = if(objectScene) com.example.aicamera.guidance.ObservedAnchorKind.OBJECT
                 else if(faceScene) com.example.aicamera.guidance.ObservedAnchorKind.FACE else com.example.aicamera.guidance.ObservedAnchorKind.NONE,
-            rollObservable = output.rollObservable != false
+            rollObservable = output.rollObservable != false,
+            executionQuality = output.executionQuality,
+            executionQualityRequired = output.sceneAnalysis != null
         )
     }
 }

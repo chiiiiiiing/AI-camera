@@ -167,6 +167,9 @@ def validate(asset_root):
     config = read_json(asset_root / "android_runtime_config.json")
     core = config.get("core_recommendation")
     if core is None:
+        from validate_framing_preference_assets import validate as validate_framing
+        validate_framing(asset_root, config)
+        require("framing_preference" not in config, "framing preference requires the core recommendation profile")
         from validate_multiscene_assets import FILES
         require("multi_scene_recommendation" not in config
                 and not any((asset_root / name).exists() for name in FILES.values()),
@@ -187,6 +190,8 @@ def validate(asset_root):
     result.update(validate_quality(asset_root / "quality_policy.json", asset_root, model_sha))
     from validate_multiscene_assets import validate as validate_multiscene
     result.update(validate_multiscene(asset_root, config, {r["template_id"]: r for r in metadata}))
+    from validate_framing_preference_assets import validate as validate_framing
+    result.update(validate_framing(asset_root, config, model_sha))
     return {"core_profile": True, **result}
 
 

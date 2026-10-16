@@ -13,6 +13,7 @@ MODEL_BYTES = 3_800_954
 MODEL_BUDGET = 4 * 1024 * 1024
 LICENSE_SHA256 = "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
 PREPROCESSING = "viewport_rgb224_bilinear416_bgr_mean_std_v1"
+NATIVE_PREPROCESSING = "viewport_native_letterbox416_bgr_mean_std_v2"
 LAYOUT = "rgb224_rec601_grid3_forward_edges_v1"
 ALLOWED_CLASSES = {39, 40, 41, *range(45, 56), 73, 74, 77}
 FILES = {"detector": "object_detector.onnx", "references": "multi_scene_references.json",
@@ -68,7 +69,7 @@ def validate(asset_root: Path, config=None, metadata=None):
     manifest = read_json(asset_root / FILES["detector_manifest"])
     public(manifest)
     require(manifest.get("model_sha256") == MODEL_SHA256, "detector manifest model identity mismatch")
-    require(manifest.get("preprocessing") == PREPROCESSING
+    require(manifest.get("preprocessing") in {PREPROCESSING, NATIVE_PREPROCESSING}
             and manifest.get("source_commit") == "47534e27c9851bb1128ccc0102f1145e27f23f98"
             and manifest.get("license") == "Apache-2.0", "detector provenance/preprocessing mismatch")
     license_file = asset_root / "LICENSE.object_detector.txt"
@@ -78,17 +79,20 @@ def validate(asset_root: Path, config=None, metadata=None):
         rows = [json.loads(line) for line in (asset_root / "template_index/templates.metadata.jsonl")
                 .read_text(encoding="utf-8").splitlines() if line.strip()]
         metadata = {row["template_id"]: row for row in rows}
-    references = validate_references(asset_root / FILES["references"], metadata)
+    references = validate_references(asset_root / FILES["references"], metadata, manifest["preprocessing"])
     return {"multiscene_enabled": True, "object_detector_bytes": model.stat().st_size, **references}
 
 
-def validate_references(path, metadata):
+def validate_references(path, metadata, expected_preprocessing=None):
     doc = read_json(path)
     public(doc)
     require(doc.get("schema_version") == 1 and doc.get("coordinate_space") == "exif_upright_full_frame",
             "invalid multiscene coordinate/schema contract")
     require(doc.get("model_sha256") == MODEL_SHA256, "reference detector mismatch")
-    require(doc.get("preprocessing") == PREPROCESSING and doc.get("layout_algorithm") == LAYOUT
+    preprocessing = doc.get("preprocessing")
+    require(preprocessing in {PREPROCESSING, NATIVE_PREPROCESSING}
+            and (expected_preprocessing is None or preprocessing == expected_preprocessing)
+            and doc.get("layout_algorithm") == LAYOUT
             and doc.get("object_policy") == "single_complete_coco_still_life_v1", "unsupported multiscene preprocessing/policy")
     require(doc.get("human_reviewed") is False and doc.get("aesthetic_ground_truth") is False,
             "automatic detector/layout cannot claim human beauty labels")
@@ -126,6 +130,12 @@ def validate_references(path, metadata):
             values = layout.get(key)
             require(isinstance(values, list) and len(values) == (27 if key == "rgb_mean_grid" else 9)
                     and all(number(x) for x in values), "invalid scene layout")
+        review = row.get("object_review")
+        if review is not None and preprocessing == NATIVE_PREPROCESSING:
+            observed = hashlib.sha256(json.dumps(objects, sort_keys=True, separators=(",", ":"),
+                                                ensure_ascii=False, allow_nan=False).encode("utf-8")).hexdigest()
+            require(review.get("preprocessing") == preprocessing and review.get("objects_sha256") == observed,
+                    "visual evidence refers to different preprocessing/observations")
         if row["object_eligible"]:
             require(not row["synthetic"] and row.get("photo_type") == "still_life", "only real still-life objects may guide framing")
             require(row.get("scene_category") in {"food_still_life", "lifestyle_still_life"}

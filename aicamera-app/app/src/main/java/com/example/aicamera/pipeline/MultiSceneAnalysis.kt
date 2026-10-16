@@ -35,7 +35,7 @@ internal class MultiSceneReferences private constructor(
             val root = JSONObject(refs.readText())
             require(root.getInt("schema_version") == 1 && root.getString("coordinate_space") == "exif_upright_full_frame")
             require(root.getString("model_sha256") == sha(model))
-            require(root.getString("preprocessing") == NanoDetRuntime.PREPROCESSING &&
+            require(root.getString("preprocessing") == NanoDetRuntime.NATIVE_PREPROCESSING &&
                 root.getString("layout_algorithm") == "rgb224_rec601_grid3_forward_edges_v1" &&
                 root.getString("object_policy") == "single_complete_coco_still_life_v1" &&
                 root.getString("object_review_policy") == "hash_bound_ai_visual_object_review_v1" &&
@@ -74,6 +74,8 @@ internal class MultiSceneReferences private constructor(
                     val review=r.optJSONObject("object_review")
                     val reviewed=review!=null && review.optString("template_id")==id && review.optString("image_sha256")==meta.imageSha256 &&
                         review.optString("model_sha256")==root.getString("model_sha256") && review.optString("method")=="ai_visual_review" &&
+                        review.optString("preprocessing")==NanoDetRuntime.NATIVE_PREPROCESSING &&
+                        review.optString("objects_sha256").matches(Regex("[a-f0-9]{64}")) &&
                         !review.optBoolean("human_reviewed",true) && review.optString("status")=="accepted"
                     val primary = if (reviewed && r.optBoolean("object_eligible", false) && meta.sceneCategory in setOf("food_still_life","lifestyle_still_life"))
                         MultiScenePolicy.dominant(objects) else null
@@ -199,7 +201,8 @@ internal class MultiSceneAnalyzer(directory: File, metadata: (String) -> Templat
     private var sceneSamples=0
     private var viewport=Long.MIN_VALUE
 
-    fun analyze(bitmap: Bitmap, context: SceneContext, hits: List<SearchHit>, viewportVersion: Long, aspect: Float, nowMs: Long, sampledAtMs: Long = nowMs): MultiSceneResult {
+    fun analyze(bitmap: Bitmap, context: SceneContext, hits: List<SearchHit>, viewportVersion: Long, aspect: Float, nowMs: Long, sampledAtMs: Long = nowMs,
+        frame: PreprocessedFrame? = null): MultiSceneResult {
         if(viewport!=viewportVersion) { reset(); viewport=viewportVersion }
         val candidate=MultiScenePolicy.family(context)
         if(candidate==pending) sceneSamples++ else { pending=candidate; sceneSamples=1 }
@@ -210,18 +213,23 @@ internal class MultiSceneAnalyzer(directory: File, metadata: (String) -> Templat
         val pixels=IntArray(bitmap.width*bitmap.height); bitmap.getPixels(pixels,0,bitmap.width,0,0,bitmap.width,bitmap.height)
         val layout=MultiScenePolicy.layout(pixels,bitmap.width,bitmap.height)
         val objectScene=scene==SceneFamily.FOOD || scene==SceneFamily.STILL_LIFE
-        if(objectScene && refs!=null && nowMs>=cooldownUntil && (lastDetectionAt==Long.MIN_VALUE || nowMs-lastDetectionAt>=1000)) {
+        val nativeAvailable=frame?.analysisBitmap!=null && frame.detectionBitmap!=null && frame.detectionTransform!=null
+        if(objectScene && !nativeAvailable) { previous=null;previousAppearance=null;locked=null }
+        if(objectScene && nativeAvailable && refs!=null && nowMs>=cooldownUntil && (lastDetectionAt==Long.MIN_VALUE || nowMs-lastDetectionAt>=1000)) {
             lastDetectionAt=nowMs
             try {
                 if(!detectorAttempted) { detectorAttempted=true; detector=NanoDetRuntime(refs.modelFile) }
-                val detections=detector?.detect(bitmap).orEmpty()
+                val detections=frame?.let { detector?.detectNative(it) }.orEmpty()
                 val finished=android.os.SystemClock.elapsedRealtime()
                 val primary=if(finished-nowMs<=250 && finished-sampledAtMs<=750) MultiScenePolicy.dominant(detections)
                     ?.takeUnless{MultiScenePolicy.hasUncertainCompetitor(it,detections)} else null
                 if(finished-nowMs>250) cooldownUntil=finished+5000
                 val before=previous
                 if(primary==null) { previous=null; locked=null } else {
-                    val signature=MultiScenePolicy.appearance(pixels,bitmap.width,bitmap.height,primary.box)
+                    val native=frame!!.analysisBitmap!!
+                    val nativePixels=IntArray(native.width*native.height)
+                    native.getPixels(nativePixels,0,native.width,0,0,native.width,native.height)
+                    val signature=MultiScenePolicy.appearance(nativePixels,native.width,native.height,primary.box)
                     val same=before!=null && before.classId==primary.classId && nowMs-before.sampledAtMs<=2500 &&
                         MultiScenePolicy.overlap(before.box,primary.box)>=.50f &&
                         MultiScenePolicy.sameAppearance(previousAppearance,signature) &&

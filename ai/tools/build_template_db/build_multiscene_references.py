@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 import html
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -19,7 +20,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageOps
 
 from build_reference_structures import read_rows, sha256, upright_image, write_json
-from multiscene_detector import PREPROCESSING, _bilinear
+from multiscene_detector import PREPROCESSING, NATIVE_PREPROCESSING, _bilinear
 
 LAYOUT_ALGORITHM = "rgb224_rec601_grid3_forward_edges_v1"
 OBJECT_POLICY = "single_complete_coco_still_life_v1"
@@ -99,8 +100,14 @@ def object_eligibility(row: dict, objects: list[dict]) -> tuple[bool, list[str],
     return not reasons, reasons, primary_index
 
 
+def observation_sha256(objects: list[dict]) -> str:
+    return hashlib.sha256(json.dumps(objects, sort_keys=True, separators=(",", ":"),
+                                    ensure_ascii=False, allow_nan=False).encode("utf-8")).hexdigest()
+
+
 def reviewed_object_eligibility(row: dict, objects: list[dict], review: dict | None,
-                                model_hash: str, required: bool = True) -> tuple[bool, list[str], int | None]:
+                                model_hash: str, required: bool = True,
+                                preprocessing: str = PREPROCESSING) -> tuple[bool, list[str], int | None]:
     eligible, reasons, primary = object_eligibility(row, objects)
     if review is not None:
         if (review.get("template_id") != row["template_id"] or
@@ -110,6 +117,12 @@ def reviewed_object_eligibility(row: dict, objects: list[dict], review: dict | N
                 review.get("human_reviewed") is not False or
                 review.get("status") not in {"accepted", "excluded"}):
             raise ValueError(f"Object review identity/method mismatch: {row['template_id']}")
+        if preprocessing == NATIVE_PREPROCESSING and (
+                review.get("preprocessing") != preprocessing or
+                review.get("objects_sha256") != observation_sha256(objects)):
+            raise ValueError(f"Object review observation/preprocessing mismatch: {row['template_id']}")
+        if review["status"] == "accepted" and review.get("reason_codes"):
+            raise ValueError("Accepted object review cannot carry rejection reasons")
         if review["status"] == "excluded":
             reasons.append("object_visual_review_excluded")
             reasons.extend(review.get("reason_codes", []))
@@ -219,7 +232,8 @@ def write_comparisons(output: Path, source_rows: list[dict], records: list[dict]
     (output / "comparisons.html").write_text(page, encoding="utf-8", newline="\n")
 
 
-def automatic_evaluation(source_rows: list[dict], records: list[dict], detector) -> dict:
+def automatic_evaluation(source_rows: list[dict], records: list[dict], detector,
+                         preprocessing: str = PREPROCESSING) -> dict:
     """Fixed diagnostic transformations, not selection against held-out labels."""
     by_id = {row["template_id"]: row for row in source_rows}
     tested, seen = [], set()
@@ -232,7 +246,8 @@ def automatic_evaluation(source_rows: list[dict], records: list[dict], detector)
         primary = record["objects"][record["primary_object_index"]]
         x, y, w, h = primary["bbox"]
         expected = [1 - x - w, y, w, h]
-        mirrored = canonical_objects(detector.detect(ImageOps.mirror(image)))
+        detect = detector.detect_native if preprocessing == NATIVE_PREPROCESSING else detector.detect
+        mirrored = canonical_objects(detect(ImageOps.mirror(image)))
         candidates = [o for o in mirrored if o["class_id"] == primary["class_id"] and o["confidence"] >= .5]
         best_iou = max((box_iou(expected, o["bbox"]) for o in candidates), default=0.)
         # Full frame is always a candidate. Crops are true pixel rectangles; this
@@ -271,8 +286,11 @@ def automatic_evaluation(source_rows: list[dict], records: list[dict], detector)
 
 
 def build(source_manifest: Path, model: Path, output: Path,
-          object_review: Path | None = None, reuse_sidecar: Path | None = None) -> dict:
+          object_review: Path | None = None, reuse_sidecar: Path | None = None,
+          preprocessing: str = NATIVE_PREPROCESSING) -> dict:
     from multiscene_detector import NanoDetDetector
+    if preprocessing not in {PREPROCESSING, NATIVE_PREPROCESSING}:
+        raise ValueError("Unsupported detector preprocessing")
     if output.exists() and any(output.iterdir()):
         raise ValueError("Output must be empty; retain existing experiment evidence.")
     sources = [r for r in read_rows(source_manifest) if r.get("reference_eligible")]
@@ -292,7 +310,7 @@ def build(source_manifest: Path, model: Path, output: Path,
     if reuse_sidecar:
         previous = json.loads(reuse_sidecar.read_text(encoding="utf-8"))
         if (previous.get("model_sha256") != model_hash or
-                previous.get("preprocessing") != PREPROCESSING or
+                previous.get("preprocessing") != preprocessing or
                 previous.get("layout_algorithm") != LAYOUT_ALGORITHM):
             raise ValueError("Cached observations have incompatible model/preprocessing/layout")
         reused = {row["template_id"]: row for row in previous["records"]}
@@ -303,6 +321,7 @@ def build(source_manifest: Path, model: Path, output: Path,
             raise ValueError(f"Reference hash mismatch: {row['template_id']}")
     output.mkdir(parents=True, exist_ok=True)
     detector = NanoDetDetector(model)
+    detect = detector.detect_native if preprocessing == NATIVE_PREPROCESSING else detector.detect
     records, durations = [], []
     for i, row in enumerate(sources):
         image = upright_image(Path(row["image_path"]))
@@ -317,10 +336,11 @@ def build(source_manifest: Path, model: Path, output: Path,
             objects = cached["objects"]
         else:
             start = time.perf_counter()
-            objects = canonical_objects(detector.detect(image))
+            objects = canonical_objects(detect(image))
             durations.append((time.perf_counter() - start) * 1000)
         review = reviews.get(row["template_id"])
-        eligible, reasons, primary_index = reviewed_object_eligibility(row, objects, review, model_hash, required=object_review is not None)
+        eligible, reasons, primary_index = reviewed_object_eligibility(
+            row, objects, review, model_hash, required=object_review is not None, preprocessing=preprocessing)
         records.append({"template_id": row["template_id"], "image_sha256": row["image_sha256"],
                         "coordinate_space": "exif_upright_full_frame",
                         "image_width": image.width, "image_height": image.height,
@@ -332,7 +352,7 @@ def build(source_manifest: Path, model: Path, output: Path,
         if (i + 1) % 50 == 0:
             print(f"Measured {i + 1}/{len(sources)} references", flush=True)
     sidecar = {"schema_version": 1, "coordinate_space": "exif_upright_full_frame",
-               "model_sha256": model_hash, "preprocessing": PREPROCESSING, "object_policy": OBJECT_POLICY,
+               "model_sha256": model_hash, "preprocessing": preprocessing, "object_policy": OBJECT_POLICY,
                "object_review_policy": OBJECT_REVIEW_POLICY if object_review else "unreviewed_diagnostic_only",
                "object_review_sha256": sha256(object_review) if object_review else None,
                "layout_algorithm": LAYOUT_ALGORITHM, "human_reviewed": False,
@@ -340,7 +360,7 @@ def build(source_manifest: Path, model: Path, output: Path,
     write_json(output / "multi_scene_references.json", sidecar)
     report = coverage_report(records)
     report.update({"source_manifest_sha256": sha256(source_manifest), "model_sha256": model_hash,
-                   "object_policy": OBJECT_POLICY, "layout_algorithm": LAYOUT_ALGORITHM,
+                   "object_policy": OBJECT_POLICY, "preprocessing": preprocessing, "layout_algorithm": LAYOUT_ALGORITHM,
                    "object_review_policy": sidecar["object_review_policy"],
                    "object_review_counts": dict(Counter(r["status"] for r in reviews.values())),
                    "reuse_sidecar_sha256": sha256(reuse_sidecar) if reuse_sidecar else None,
@@ -349,7 +369,7 @@ def build(source_manifest: Path, model: Path, output: Path,
                         "samples": len(durations), "cached_observations": reuse_sidecar is not None,
                         "includes_pre_and_postprocess": True, "is_phone_benchmark": False}})
     write_json(output / "coverage-report.json", report)
-    write_json(output / "automatic-evaluation.json", automatic_evaluation(sources, records, detector))
+    write_json(output / "automatic-evaluation.json", automatic_evaluation(sources, records, detector, preprocessing))
     write_comparisons(output, sources, records)
     print(json.dumps(report, ensure_ascii=True), flush=True)
     return report
@@ -362,8 +382,9 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--object-review", type=Path, help="Hash-bound AI visual review; missing review cannot become an action reference.")
     parser.add_argument("--reuse-sidecar", type=Path, help="Reuse pinned raw detections while preserving the original diagnostic run.")
+    parser.add_argument("--preprocessing", choices=[PREPROCESSING, NATIVE_PREPROCESSING], default=NATIVE_PREPROCESSING)
     args = parser.parse_args()
-    build(args.source_manifest, args.model, args.output, args.object_review, args.reuse_sidecar)
+    build(args.source_manifest, args.model, args.output, args.object_review, args.reuse_sidecar, args.preprocessing)
     return 0
 
 

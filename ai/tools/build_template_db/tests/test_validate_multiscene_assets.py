@@ -102,6 +102,21 @@ class MultiSceneAssetGateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "content hash"):
             gate.validate_references(self.path, self.metadata)
 
+    def test_native_contract_requires_new_review_and_matching_detector_input(self):
+        self.doc["preprocessing"] = gate.NATIVE_PREPROCESSING
+        with self.assertRaisesRegex(ValueError, "preprocessing/observations"):
+            self.validate()
+        review = self.row["object_review"]
+        review["preprocessing"] = gate.NATIVE_PREPROCESSING
+        review["objects_sha256"] = hashlib.sha256(json.dumps(self.row["objects"], sort_keys=True,
+            separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")).hexdigest()
+        self.assertEqual(1, self.validate()["object_eligible_count"])
+        with self.assertRaisesRegex(ValueError, "preprocessing/policy"):
+            gate.validate_references(self.path, self.metadata, gate.PREPROCESSING)
+        self.row["objects"][0]["bbox"][0] += .01
+        with self.assertRaisesRegex(ValueError, "preprocessing/observations"):
+            self.validate()
+
 
 class MultiScenePackagingPathTests(unittest.TestCase):
     def test_removing_core_profile_cannot_bypass_multiscene_validation(self):

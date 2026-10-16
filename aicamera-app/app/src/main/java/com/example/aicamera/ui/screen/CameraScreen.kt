@@ -502,6 +502,10 @@ fun CameraScreen(
                 // Preserve verified framing; do not guess a new focal length after Ready.
                 compositionLabel = "正在对焦与测光"
                 cameraViewModel.prepareForCapture()
+                // AF/AE may finish after a new bad frame or after observations expire.
+                // Compose cancellation alone cannot close the state/recomposition race.
+                if (!renderViewModel.sessionController.confirmReadyForCapture(
+                        android.os.SystemClock.elapsedRealtime())) return@LaunchedEffect
                 compositionLabel = compositionDescription()
                 renderViewModel.sessionController.startCapture()
                 cameraViewModel.takePhoto(saveToGallery = settings.saveOriginal)
@@ -762,8 +766,14 @@ fun CameraScreen(
                 cue = workflowCue,
                 phase = workflowPhase,
                 feedbackHint = when (sessionDecision.feedback) {
-                    com.example.aicamera.guidance.GuidanceFeedback.WORSENING -> "先保持，刚才的调整没有改善构图"
+                    com.example.aicamera.guidance.GuidanceFeedback.WORSENING -> when {
+                        "observed_subject_margin_regressed" in sessionDecision.reasons -> "先保持，主体太靠近画面边缘"
+                        "subject_sharpness_regressed" in sessionDecision.reasons -> "先保持，主体清晰度下降"
+                        "subject_highlights_regressed" in sessionDecision.reasons -> "先保持，主体亮部细节减少"
+                        else -> "先保持，刚才的调整没有改善构图"
+                    }
                     com.example.aicamera.guidance.GuidanceFeedback.NO_PROGRESS -> "先保持，暂未找到更有效的调整"
+                    com.example.aicamera.guidance.GuidanceFeedback.SCENE_CHANGED -> "画面发生变化，先保持重新确认"
                     com.example.aicamera.guidance.GuidanceFeedback.VERIFYING -> "位置合适，请保持稳定"
                     com.example.aicamera.guidance.GuidanceFeedback.INSUFFICIENT_EVIDENCE -> "先保持，正在确认可用的构图依据"
                     else -> null

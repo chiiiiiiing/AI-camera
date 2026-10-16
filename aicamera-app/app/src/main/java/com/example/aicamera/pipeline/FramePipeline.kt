@@ -123,7 +123,7 @@ class FramePipeline(
                             inferenceMs = SystemClock.elapsedRealtime() - inferenceStart
                         }
                     } finally {
-                        preprocessed.originalBitmap?.recycle()
+                        preprocessed.recycleBitmaps()
                     }
                 }
 

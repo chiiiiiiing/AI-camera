@@ -8,6 +8,7 @@ from build_multiscene_references import (
     crop_preserves_objects, layout_descriptor, object_eligibility, retained_fraction,
     reviewed_object_eligibility,
     live_uncertain_competitors, live_uncertainty_replay,
+    observation_sha256, NATIVE_PREPROCESSING,
 )
 
 
@@ -139,6 +140,23 @@ class MultiSceneReferenceTests(unittest.TestCase):
                                           "object_eligible": True, "objects": objects, "primary_object_index": 0}])
         self.assertEqual(report["rejected"], 1)
         self.assertTrue(report["not_query_coverage_or_accuracy"])
+
+    def test_native_review_cannot_be_reused_after_input_or_detection_changes(self):
+        row = ref(template_id="one", image_sha256="a" * 64)
+        objects = [obj()]
+        review = {"template_id": "one", "image_sha256": "a" * 64, "model_sha256": "b" * 64,
+                  "method": "ai_visual_review", "human_reviewed": False, "status": "accepted", "reason_codes": [],
+                  "preprocessing": NATIVE_PREPROCESSING, "objects_sha256": observation_sha256(objects)}
+        self.assertTrue(reviewed_object_eligibility(row, objects, review, "b"*64,
+                                                   preprocessing=NATIVE_PREPROCESSING)[0])
+        for changed_review, changed_objects in [
+            ({k: v for k, v in review.items() if k != "preprocessing"}, objects),
+            (review, [obj(box=[.25, .3, .3, .3])]),
+            (review, [obj(confidence=.91)]),
+        ]:
+            with self.subTest(changed_review=changed_review), self.assertRaisesRegex(ValueError, "observation/preprocessing"):
+                reviewed_object_eligibility(row, changed_objects, changed_review, "b"*64,
+                                             preprocessing=NATIVE_PREPROCESSING)
 
 
 if __name__ == "__main__":

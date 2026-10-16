@@ -181,7 +181,9 @@ data class FakeInferenceOutput(
     val rawRollDegrees: Float? = null,
     val sceneAnalysis: com.example.aicamera.guidance.SceneAnalysisObservation? = null,
     val objectTarget: com.example.aicamera.guidance.ObjectCompositionTarget? = null,
-    val rollObservable: Boolean? = null
+    val rollObservable: Boolean? = null,
+    val executionQuality: com.example.aicamera.guidance.ExecutionQualityEvidence? = null,
+    val framingComparison: FramingComparisonResult? = null
 )
 
 data class FakeGuideLine(
