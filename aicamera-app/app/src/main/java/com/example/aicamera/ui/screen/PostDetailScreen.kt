@@ -1,5 +1,6 @@
 package com.example.aicamera.ui.screen
 
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -17,6 +18,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -28,6 +31,8 @@ import com.example.aicamera.ui.theme.BrandOnSurface
 import com.example.aicamera.ui.theme.BrandOnSurfaceMuted
 import com.example.aicamera.ui.theme.BrandPink
 import com.example.aicamera.viewmodel.CommunityViewModel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.map
 
 @Composable
@@ -46,10 +51,21 @@ fun PostDetailDialog(
     val isFollowing by remember(post.author, currentUser) {
         viewModel.getFollowing(currentUser).map { list -> list.contains(post.author) }
     }.collectAsState(initial = false)
+    val isLiked by remember(post.id, currentUser) {
+        viewModel.observeIsLiked(post.id, currentUser)
+    }.collectAsState(initial = false)
     var input by remember { mutableStateOf("") }
     var isSending by remember { mutableStateOf(false) }  // ★ 防重复发送
+    var commentsLoading by remember(post.id) { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val filterStore = remember(context) { CustomFilterStore(context) }
+
+    // 评论首次加载的短暂过渡，避免把未加载完成的空列表误判为「暂无评论」
+    LaunchedEffect(post.id) {
+        delay(500)
+        commentsLoading = false
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -119,7 +135,18 @@ fun PostDetailDialog(
                                 color = BrandOnSurface.copy(alpha = 0.85f), lineHeight = 20.sp)
                             Spacer(Modifier.height(10.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("赞 ${post.likes}", fontSize = 13.sp, color = BrandPink)
+                                Text(
+                                    text = "赞 ${post.likes}",
+                                    fontSize = 13.sp,
+                                    color = if (isLiked) BrandPink else BrandOnSurfaceMuted,
+                                    fontWeight = if (isLiked) FontWeight.SemiBold else FontWeight.Normal,
+                                    modifier = Modifier
+                                        .semantics {
+                                            contentDescription =
+                                                if (isLiked) "取消点赞 ${post.author}" else "点赞 ${post.author}"
+                                        }
+                                        .clickable { viewModel.toggleLike(post.id, currentUser) }
+                                )
                                 Spacer(Modifier.size(16.dp))
                                 // ★ 收藏切换
                                 Text(
@@ -131,21 +158,20 @@ fun PostDetailDialog(
                                     }
                                 )
                                 Spacer(Modifier.size(16.dp))
-                                Text("评论 ${post.commentsCount}", fontSize = 13.sp,
+                                Text("评论 ${comments.size}", fontSize = 13.sp,
                                     color = BrandOnSurfaceMuted)
                             }
                         }
                     }
                     item {
-                        Text("评论 (${post.commentsCount})",
+                        Text("评论 (${comments.size})",
                             fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
                             color = BrandOnSurface,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                     }
                     if (comments.isEmpty()) {
                         item {
-                            // ★ 修复：commentsCount > 0 但评论未加载时不显示「暂无评论」
-                            val hint = if (post.commentsCount > 0) "加载评论中..."
+                            val hint = if (commentsLoading) "加载评论中..."
                             else "暂无评论，来说两句吧"
                             Text(hint, fontSize = 13.sp,
                                 color = BrandOnSurfaceMuted,
@@ -193,9 +219,15 @@ fun PostDetailDialog(
                         fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
                         modifier = Modifier.clickable(enabled = canSend) {
                             isSending = true
-                            viewModel.addComment(post.id, currentUser, input.trim())
-                            input = ""
-                            isSending = false
+                            scope.launch {
+                                val ok = viewModel.addComment(post.id, currentUser, input.trim())
+                                isSending = false
+                                if (ok) {
+                                    input = ""
+                                } else {
+                                    Toast.makeText(context, "评论发送失败，请重试", Toast.LENGTH_SHORT).show()
+                                }
+                            }
                         })
                 }
             }

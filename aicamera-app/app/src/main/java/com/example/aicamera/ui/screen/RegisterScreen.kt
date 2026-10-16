@@ -57,6 +57,8 @@ fun RegisterScreen(
     var countdown by remember { mutableIntStateOf(0) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
+    var sendingCode by remember { mutableStateOf(false) }
+    var agreed by remember { mutableStateOf(false) }
 
     LaunchedEffect(countdown) {
         if (countdown > 0) {
@@ -66,15 +68,16 @@ fun RegisterScreen(
     }
 
     val targetValid = PHONE_RE.matches(target) || EMAIL_RE.matches(target)
-    val formValid = username.length >= 2 && password.length >= 6 && targetValid && verifyCode.length == 6
+    val formValid = agreed && username.length in 2..20 && password.length >= 6 && targetValid && verifyCode.length == 6
 
     fun requestCode() {
-        if (countdown > 0 || isLoading) return
+        if (countdown > 0 || sendingCode) return
         if (!targetValid) {
             errorMessage = "请先输入正确的手机号或邮箱"
             return
         }
         errorMessage = null
+        sendingCode = true
         scope.launch {
             when (val r = authRepo.requestCode(target.trim(), "register")) {
                 is AuthRepository.CodeResult.Sent -> {
@@ -83,6 +86,7 @@ fun RegisterScreen(
                 }
                 is AuthRepository.CodeResult.Error -> errorMessage = r.message
             }
+            sendingCode = false
         }
     }
 
@@ -105,9 +109,12 @@ fun RegisterScreen(
             }
             when (result) {
                 is AuthRepository.RegisterResult.Success -> {
-                    authRepo.login(username.trim(), password)
+                    val loginResult = authRepo.login(target.trim(), password)
                     isLoading = false
-                    onRegisterSuccess()
+                    when (loginResult) {
+                        is AuthRepository.LoginResult.Success -> onRegisterSuccess()
+                        is AuthRepository.LoginResult.Error -> errorMessage = loginResult.message
+                    }
                 }
                 is AuthRepository.RegisterResult.Error -> {
                     isLoading = false
@@ -128,6 +135,7 @@ fun RegisterScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
+                .imePadding()
                 .padding(horizontal = 52.dp)
                 .align(Alignment.Center),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -186,7 +194,8 @@ fun RegisterScreen(
                 trailingContent = {
                     VerificationButton(
                         secondsRemaining = countdown,
-                        enabled = countdown == 0
+                        enabled = countdown == 0 && !sendingCode,
+                        sending = sendingCode
                     ) { requestCode() }
                 }
             )
@@ -229,7 +238,11 @@ fun RegisterScreen(
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            AgreementText(prefix = "注册同意")
+            AgreementText(
+                prefix = "注册同意",
+                checked = agreed,
+                onCheckedChange = { agreed = it }
+            )
 
             Spacer(modifier = Modifier.height(24.dp))
         }

@@ -3,6 +3,7 @@ package com.example.aicamera.ui.auth
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -14,6 +15,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
@@ -61,6 +64,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import com.example.aicamera.R
 import com.example.aicamera.ui.theme.BrandChineseTextStyle
+import com.example.aicamera.ui.theme.BrandError
 import com.example.aicamera.ui.theme.BrandEnglishTextStyle
 import com.example.aicamera.ui.theme.BrandOnSurface
 import com.example.aicamera.ui.theme.BrandOnSurfaceMuted
@@ -119,7 +123,7 @@ fun AuthField(
     var focused by remember { mutableStateOf(false) }
     val lineColor by animateColorAsState(
         targetValue = when {
-            error != null -> Color(0xFFC76464)
+            error != null -> BrandError
             focused -> BrandPurple
             else -> BrandOnSurface.copy(alpha = 0.82f)
         },
@@ -170,7 +174,7 @@ fun AuthField(
                     modifier = Modifier
                         .semantics { this.contentDescription = "切换密码可见性" }
                         .clickable(onClick = onTogglePasswordVisibility)
-                        .padding(horizontal = 6.dp, vertical = 10.dp),
+                        .padding(horizontal = 14.dp, vertical = 14.dp),
                 )
             } else {
                 trailingContent?.invoke()
@@ -180,7 +184,7 @@ fun AuthField(
         AnimatedVisibility(error != null) {
             Text(
                 text = error.orEmpty(),
-                color = Color(0xFFC76464),
+                color = BrandError,
                 fontSize = 11.sp,
                 modifier = Modifier.padding(top = 4.dp),
             )
@@ -312,12 +316,18 @@ private fun PasswordVisibilityButton(
 fun VerificationButton(
     secondsRemaining: Int,
     enabled: Boolean,
+    sending: Boolean = false,
     onClick: () -> Unit,
 ) {
-    val label = if (secondsRemaining > 0) "${secondsRemaining}s" else "获取验证码"
+    val label = when {
+        sending -> "发送中…"
+        secondsRemaining > 0 -> "${secondsRemaining}s"
+        else -> "获取验证码"
+    }
     Box(
         modifier = Modifier
             .background(Color.White.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+            .defaultMinSize(minHeight = 44.dp, minWidth = 48.dp)
             .semantics {
                 role = Role.Button
                 contentDescription = label
@@ -332,12 +342,33 @@ fun VerificationButton(
 }
 
 @Composable
-fun AgreementText(prefix: String) {
-    Text(
-        text = "$prefix《用户服务协议》",
-        color = BrandOnSurfaceMuted,
-        fontSize = 11.sp,
-    )
+fun AgreementText(
+    prefix: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    val context = LocalContext.current
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+        )
+        Text(
+            text = prefix,
+            color = BrandOnSurfaceMuted,
+            fontSize = 12.sp,
+        )
+        Text(
+            text = "《用户服务协议》",
+            color = BrandPurple,
+            fontSize = 12.sp,
+            modifier = Modifier
+                .clickable {
+                    Toast.makeText(context, "用户服务协议（演示）", Toast.LENGTH_SHORT).show()
+                }
+                .padding(vertical = 4.dp),
+        )
+    }
 }
 
 @Composable

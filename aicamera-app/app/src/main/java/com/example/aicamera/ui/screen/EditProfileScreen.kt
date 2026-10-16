@@ -1,6 +1,7 @@
 package com.example.aicamera.ui.screen
 
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -53,8 +54,8 @@ import com.example.aicamera.ui.theme.BrandPurple
 /**
  * 编辑资料页 — 视觉移植自队友 frontend/ ui/profile/EditProfileScreen.kt。
  *
- * 功能保持原样：头像更换、昵称、简介、网站；
- * 保存逻辑不变：写入简介 + 头像 Uri 后返回。
+ * 功能：头像更换、昵称、简介；保存时写入昵称 + 简介 + 头像 Uri 后返回。
+ * 昵称 2–20 字符校验，不合法时提示并阻止保存。
  */
 private val EditProfileBackground = Brush.verticalGradient(
     listOf(
@@ -75,9 +76,7 @@ fun EditProfileScreen(
 
     var username by remember { mutableStateOf(authRepo.currentUsername ?: "") }
     var bio by remember { mutableStateOf(authRepo.currentBio ?: "") }
-    var website by remember { mutableStateOf("") }
     var avatarUri by remember { mutableStateOf<Uri?>(authRepo.currentAvatarUri?.let { Uri.parse(it) }) }
-    var isSaving by remember { mutableStateOf(false) }
 
     val avatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) avatarUri = uri
@@ -155,32 +154,20 @@ fun EditProfileScreen(
             )
         }
 
-        Spacer(Modifier.height(16.dp))
-
-        EditSection(title = "展示信息") {
-            AuthField(
-                value = website,
-                onValueChange = { website = it },
-                placeholder = "https://",
-                contentDescription = "网站输入框",
-                icon = AuthFieldIcon.PHONE,
-                keyboardType = KeyboardType.Uri,
-                imeAction = ImeAction.Done,
-            )
-        }
-
         Spacer(Modifier.height(26.dp))
         BrandPrimaryButton(
-            label = if (isSaving) "保存中..." else "保存资料",
-            enabled = !isSaving,
+            label = "保存资料",
+            enabled = true,
             onClick = {
-                // ★ 保存头像、昵称、简介
-                isSaving = true
-                authRepo.updateUsername(username)
-                authRepo.updateBio(bio)
-                avatarUri?.let { authRepo.saveAvatarUri(it.toString()) }
-                isSaving = false
-                onBack()
+                val trimmed = username.trim()
+                if (trimmed.length in 2..20) {
+                    authRepo.updateUsername(trimmed)
+                    authRepo.updateBio(bio)
+                    avatarUri?.let { authRepo.saveAvatarUri(it.toString()) }
+                    onBack()
+                } else {
+                    Toast.makeText(context, "昵称需要 2-20 个字符", Toast.LENGTH_SHORT).show()
+                }
             },
         )
         Spacer(Modifier.height(28.dp))

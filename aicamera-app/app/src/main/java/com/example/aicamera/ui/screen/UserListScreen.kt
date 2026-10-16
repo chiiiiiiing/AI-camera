@@ -8,11 +8,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -20,6 +24,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -29,6 +36,7 @@ import com.example.aicamera.ui.theme.BrandOnSurface
 import com.example.aicamera.ui.theme.BrandOnSurfaceMuted
 import com.example.aicamera.ui.theme.BrandPink
 import com.example.aicamera.viewmodel.CommunityViewModel
+import kotlinx.coroutines.delay
 
 /**
  * 粉丝 / 关注列表页。
@@ -55,6 +63,11 @@ fun UserListScreen(
         else viewModel.getFollowing(username)
     }
     val users by usersFlow.collectAsState(initial = emptyList())
+    var loading by remember(username, listType) { mutableStateOf(true) }
+    LaunchedEffect(username, listType) {
+        delay(400)
+        loading = false
+    }
 
     Column(
         modifier = Modifier
@@ -91,7 +104,14 @@ fun UserListScreen(
         }
         Spacer(Modifier.height(18.dp))
 
-        if (users.isEmpty()) {
+        if (loading) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = BrandPink)
+            }
+        } else if (users.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -158,10 +178,16 @@ private fun UserListItem(
                 modifier = Modifier
                     .clip(RoundedCornerShape(12.dp))
                     .background(if (isFollowing) Color.Transparent else BrandPink.copy(alpha = 0.12f))
-                    .clickable {
+                    .semantics {
+                        contentDescription =
+                            if (isFollowing) "取消关注 $username" else "关注 $username"
+                    }
+                    .clickable(role = Role.Button) {
                         viewModel.toggleFollow(currentUser, username)
                     }
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .defaultMinSize(minWidth = 48.dp, minHeight = 44.dp)
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = if (isFollowing) "已关注" else "+ 关注",

@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.aicamera.guidance.GuidanceCue
@@ -92,6 +93,8 @@ fun CaptureWorkflowOverlay(
     showHorizon: Boolean = true,
     overlayAlpha: Float = 1f,
     guideLines: List<GuideLine> = emptyList(),
+    /** 底部工具栏高度，用于抬高底部对齐的引导文案，避免被工具栏遮挡。 */
+    bottomBarHeight: Dp = 0.dp,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -152,7 +155,8 @@ fun CaptureWorkflowOverlay(
                     cue = cue,
                     feedbackHint = feedbackHint,
                     aligned = phase == GuidancePhase.ALIGNED ||
-                        cue == GuidanceCue.SUBJECT_ALIGNED
+                        cue == GuidanceCue.SUBJECT_ALIGNED,
+                    bottomBarHeight = bottomBarHeight
                 )
             } else {
                 FallbackGuidance(cue = cue, phase = phase, feedbackHint = feedbackHint)
@@ -390,7 +394,8 @@ private fun CenterPointGuidance(
     subjectNx: Float, subjectNy: Float,
     cue: GuidanceCue?,
     feedbackHint: String? = null,
-    aligned: Boolean
+    aligned: Boolean,
+    bottomBarHeight: Dp = 0.dp
 ) {
     val infinite = rememberInfiniteTransition(label = "guide_dot")
     val pulse by infinite.animateFloat(
@@ -446,9 +451,11 @@ private fun CenterPointGuidance(
             drawCircle(targetColor, targetR * 0.6f, Offset(tx, ty))
         }
 
-        // 底部提示
+        // 底部提示（抬高避开底部工具栏，加半透明深色圆角底提升亮场景可读性）
         Column(
-            modifier = Modifier.align(Alignment.BottomCenter),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = bottomBarHeight + 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
@@ -456,7 +463,10 @@ private fun CenterPointGuidance(
                 color = if (aligned) GuideAligned else BrandPink,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
             )
         }
     }

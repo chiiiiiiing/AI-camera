@@ -33,6 +33,7 @@ import com.example.aicamera.ui.auth.BrandPrimaryButton
 import com.example.aicamera.ui.auth.LightSystemBars
 import com.example.aicamera.ui.auth.VerificationButton
 import com.example.aicamera.ui.theme.BrandBackgroundGradient
+import com.example.aicamera.ui.theme.BrandError
 import com.example.aicamera.ui.theme.BrandOnSurface
 import com.example.aicamera.ui.theme.BrandOnSurfaceMuted
 import com.example.aicamera.ui.theme.BrandPurple
@@ -69,6 +70,8 @@ fun LoginScreen(
     var countdown by remember { mutableIntStateOf(0) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
+    var sendingCode by remember { mutableStateOf(false) }
+    var agreed by remember { mutableStateOf(false) }
 
     LaunchedEffect(countdown) {
         if (countdown > 0) {
@@ -79,7 +82,7 @@ fun LoginScreen(
 
     val accountValid = account.isNotBlank() &&
             (PHONE_RE.matches(account) || EMAIL_RE.matches(account) || (!codeMode && account.length >= 2))
-    val formValid = if (codeMode) {
+    val formValid = agreed && if (codeMode) {
         accountValid && (PHONE_RE.matches(account) || EMAIL_RE.matches(account)) && verifyCode.length == 6
     } else {
         accountValid && password.length >= 6
@@ -104,12 +107,13 @@ fun LoginScreen(
     }
 
     fun requestCode() {
-        if (countdown > 0 || isLoading) return
+        if (countdown > 0 || sendingCode) return
         if (!(PHONE_RE.matches(account) || EMAIL_RE.matches(account))) {
             errorMessage = "请先输入正确的手机号或邮箱"
             return
         }
         errorMessage = null
+        sendingCode = true
         scope.launch {
             when (val r = authRepo.requestCode(account.trim(), "login")) {
                 is AuthRepository.CodeResult.Sent -> {
@@ -118,6 +122,7 @@ fun LoginScreen(
                 }
                 is AuthRepository.CodeResult.Error -> errorMessage = r.message
             }
+            sendingCode = false
         }
     }
 
@@ -132,6 +137,7 @@ fun LoginScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
+                .imePadding()
                 .padding(horizontal = 52.dp)
                 .align(Alignment.Center),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -168,7 +174,8 @@ fun LoginScreen(
                     trailingContent = {
                         VerificationButton(
                             secondsRemaining = countdown,
-                            enabled = countdown == 0
+                            enabled = countdown == 0 && !sendingCode,
+                            sending = sendingCode
                         ) { requestCode() }
                     }
                 )
@@ -216,14 +223,14 @@ fun LoginScreen(
                     fontSize = 13.sp,
                     color = BrandOnSurfaceMuted,
                     fontWeight = FontWeight.Medium,
-                    modifier = Modifier.clickable { onNavigateToForgotPassword?.invoke() }
+                    modifier = Modifier.clickable { onNavigateToForgotPassword?.invoke() }.padding(vertical = 4.dp)
                 )
                 Text(
                     text = "注册账号",
                     fontSize = 13.sp,
                     color = BrandOnSurfaceMuted,
                     fontWeight = FontWeight.Medium,
-                    modifier = Modifier.clickable { onNavigateToRegister() }
+                    modifier = Modifier.clickable { onNavigateToRegister() }.padding(vertical = 4.dp)
                 )
             }
 
@@ -271,7 +278,11 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            AgreementText(prefix = "登录同意")
+            AgreementText(
+                prefix = "登录同意",
+                checked = agreed,
+                onCheckedChange = { agreed = it }
+            )
 
             Spacer(modifier = Modifier.height(24.dp))
         }
@@ -340,4 +351,4 @@ private fun QQIcon(modifier: Modifier = Modifier, tint: Color) {
 
 internal val PHONE_RE = Regex("^1\\d{10}$")
 internal val EMAIL_RE = Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")
-internal val ERROR_RED = androidx.compose.ui.graphics.Color(0xFFC76464)
+internal val ERROR_RED = BrandError
