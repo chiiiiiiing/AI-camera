@@ -1,0 +1,281 @@
+{
+  "schemaVersion": "genwow.pose-template/0.1",
+  "synthetic": true,
+  "manuallyAnnotated": true,
+  "source": "v7 reference-informed SVG, not a detected person",
+  "viewBox": [
+    40,
+    0,
+    240,
+    455
+  ],
+  "coordinateSpace": "svg-viewBox-absolute",
+  "leftRightConvention": "person-anatomical-left-right; must verify visual reference orientation",
+  "poses": {
+    "target_up": {
+      "keypoints": {
+        "left_shoulder": {
+          "x": 129,
+          "y": 112,
+          "confidence": null
+        },
+        "left_elbow": {
+          "x": 78,
+          "y": 80,
+          "confidence": null
+        },
+        "left_wrist": {
+          "x": 157,
+          "y": 28,
+          "confidence": null
+        },
+        "right_shoulder": {
+          "x": 230,
+          "y": 112,
+          "confidence": null
+        },
+        "right_elbow": {
+          "x": 237,
+          "y": 193,
+          "confidence": null
+        },
+        "right_wrist": {
+          "x": 243,
+          "y": 249,
+          "confidence": null
+        },
+        "left_hip": {
+          "x": 143,
+          "y": 205,
+          "confidence": null
+        },
+        "right_hip": {
+          "x": 216,
+          "y": 205,
+          "confidence": null
+        },
+        "left_knee": {
+          "x": 112,
+          "y": 337,
+          "confidence": null
+        },
+        "right_knee": {
+          "x": 213,
+          "y": 337,
+          "confidence": null
+        },
+        "left_ankle": {
+          "x": 91,
+          "y": 425,
+          "confidence": null
+        },
+        "right_ankle": {
+          "x": 205,
+          "y": 431,
+          "confidence": null
+        }
+      },
+      "reviewStatus": "illustrative-needs-pose-model-review"
+    },
+    "current_down": {
+      "keypoints": {
+        "left_shoulder": {
+          "x": 118,
+          "y": 116,
+          "confidence": null
+        },
+        "left_elbow": {
+          "x": 100,
+          "y": 182,
+          "confidence": null
+        },
+        "left_wrist": {
+          "x": 91,
+          "y": 244,
+          "confidence": null
+        },
+        "right_shoulder": {
+          "x": 230,
+          "y": 112,
+          "confidence": null
+        },
+        "right_elbow": {
+          "x": 237,
+          "y": 193,
+          "confidence": null
+        },
+        "right_wrist": {
+          "x": 243,
+          "y": 249,
+          "confidence": null
+        },
+        "left_hip": {
+          "x": 143,
+          "y": 205,
+          "confidence": null
+        },
+        "right_hip": {
+          "x": 216,
+          "y": 205,
+          "confidence": null
+        },
+        "left_knee": {
+          "x": 112,
+          "y": 337,
+          "confidence": null
+        },
+        "right_knee": {
+          "x": 213,
+          "y": 337,
+          "confidence": null
+        },
+        "left_ankle": {
+          "x": 91,
+          "y": 425,
+          "confidence": null
+        },
+        "right_ankle": {
+          "x": 205,
+          "y": 431,
+          "confidence": null
+        }
+      },
+      "reviewStatus": "illustrative-needs-pose-model-review"
+    },
+    "current_low": {
+      "keypoints": {
+        "left_shoulder": {
+          "x": 118,
+          "y": 115,
+          "confidence": null
+        },
+        "left_elbow": {
+          "x": 88,
+          "y": 156,
+          "confidence": null
+        },
+        "left_wrist": {
+          "x": 69,
+          "y": 132,
+          "confidence": null
+        },
+        "right_shoulder": {
+          "x": 230,
+          "y": 112,
+          "confidence": null
+        },
+        "right_elbow": {
+          "x": 237,
+          "y": 193,
+          "confidence": null
+        },
+        "right_wrist": {
+          "x": 243,
+          "y": 249,
+          "confidence": null
+        },
+        "left_hip": {
+          "x": 143,
+          "y": 205,
+          "confidence": null
+        },
+        "right_hip": {
+          "x": 216,
+          "y": 205,
+          "confidence": null
+        },
+        "left_knee": {
+          "x": 112,
+          "y": 337,
+          "confidence": null
+        },
+        "right_knee": {
+          "x": 213,
+          "y": 337,
+          "confidence": null
+        },
+        "left_ankle": {
+          "x": 91,
+          "y": 425,
+          "confidence": null
+        },
+        "right_ankle": {
+          "x": 205,
+          "y": 431,
+          "confidence": null
+        }
+      },
+      "reviewStatus": "illustrative-needs-pose-model-review"
+    },
+    "current_mid": {
+      "keypoints": {
+        "left_shoulder": {
+          "x": 128,
+          "y": 113,
+          "confidence": null
+        },
+        "left_elbow": {
+          "x": 87,
+          "y": 104,
+          "confidence": null
+        },
+        "left_wrist": {
+          "x": 153,
+          "y": 46,
+          "confidence": null
+        },
+        "right_shoulder": {
+          "x": 230,
+          "y": 112,
+          "confidence": null
+        },
+        "right_elbow": {
+          "x": 237,
+          "y": 193,
+          "confidence": null
+        },
+        "right_wrist": {
+          "x": 243,
+          "y": 249,
+          "confidence": null
+        },
+        "left_hip": {
+          "x": 143,
+          "y": 205,
+          "confidence": null
+        },
+        "right_hip": {
+          "x": 216,
+          "y": 205,
+          "confidence": null
+        },
+        "left_knee": {
+          "x": 112,
+          "y": 337,
+          "confidence": null
+        },
+        "right_knee": {
+          "x": 213,
+          "y": 337,
+          "confidence": null
+        },
+        "left_ankle": {
+          "x": 91,
+          "y": 425,
+          "confidence": null
+        },
+        "right_ankle": {
+          "x": 205,
+          "y": 431,
+          "confidence": null
+        }
+      },
+      "reviewStatus": "illustrative-needs-pose-model-review"
+    }
+  },
+  "notes": [
+    "Anchors are visually estimated for UI fixtures only. Do not train or score production poses from these annotations without review.",
+    "SVG coordinates are not camera coordinates. Runtime must map through camera crop, preview rotation, mirroring and subject transform.",
+    "The source silhouette is stylized and may not anatomically match landmark positions."
+  ]
+}

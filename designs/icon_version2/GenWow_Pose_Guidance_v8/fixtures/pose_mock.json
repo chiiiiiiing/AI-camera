@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "genwow-pose-fixture/3",
+  "synthetic": true,
+  "reference": "user-supplied visual design screenshot",
+  "targetPose": "up",
+  "visualStates": [
+    "target",
+    "current",
+    "adjusting",
+    "approaching",
+    "near",
+    "verifying",
+    "aligned",
+    "tracking_lost"
+  ],
+  "keypointRequirements": [
+    "shoulder",
+    "elbow",
+    "wrist"
+  ],
+  "notes": "State sequence is illustration-only, not an AI pose inference or timed transition. Target/current paths are editable illustration templates; use runtime validated pose data for actual guidance."
+}
