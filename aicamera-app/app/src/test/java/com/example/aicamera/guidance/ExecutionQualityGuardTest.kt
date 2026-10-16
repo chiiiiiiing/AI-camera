@@ -22,6 +22,21 @@ class ExecutionQualityGuardTest {
         assertEquals(ExecutionComparison.CONTEXT_CHANGED,g.compare(sample(2).copy(meanLuma=.62f)))
         assertEquals(ExecutionComparison.COMPARABLE,g.compare(sample(3).copy(meanLuma=.62f)))
     }
+    @Test fun `exposure change cannot erase persistent subject highlight or sharpness loss`() {
+        val losses=listOf(sample(2).copy(meanLuma=.62f,subjectHighlights=.2f),
+            sample(2).copy(lumaStd=.30f,subjectSharpness=.06f))
+        for(changed in losses) {
+            val g=ExecutionQualityGuard();g.compare(sample(1))
+            assertEquals(ExecutionComparison.CONTEXT_CHANGED,g.compare(changed))
+            assertEquals(ExecutionComparison.QUALITY_REGRESSED,g.compare(changed.copy(observationId=3,sampledAtMs=1500,subjectObservationId=3)))
+        }
+    }
+    @Test fun `transient exposure damage can recover without replacing the original baseline`() {
+        val g=ExecutionQualityGuard();g.compare(sample(1))
+        assertEquals(ExecutionComparison.CONTEXT_CHANGED,g.compare(sample(2).copy(meanLuma=.62f,subjectHighlights=.2f)))
+        assertEquals(ExecutionComparison.CONTEXT_CHANGED,g.compare(sample(3)))
+        assertEquals(ExecutionComparison.COMPARABLE,g.compare(sample(4)))
+    }
     @Test fun `subject movement without background motion cannot count as camera execution`() {
         val g=ExecutionQualityGuard();g.compare(sample(1))
         val moved=sample(2).copy(subjectBox=NormalizedBox(.35f,.3f,.75f,.7f),backgroundDx=0f,backgroundDy=0f,comparedObservationId=1)
@@ -138,6 +153,15 @@ class ExecutionQualityGuardTest {
         assertEquals(GuidanceFeedback.SCENE_CHANGED,c.decision.value.feedback)
         for(i in 10L..20)c.observe(observation(i).copy(executionQuality=sample(i).copy(meanLuma=.62f)))
         assertEquals(CompositionSessionController.State.Ready,c.state.value)
+    }
+    @Test fun `stable overexposed subject cannot regain ready after an exposure change`() {
+        val c=active();for(i in 1L..8)c.observe(observation(i))
+        assertEquals(CompositionSessionController.State.Ready,c.state.value)
+        c.observe(observation(9).copy(executionQuality=sample(9).copy(meanLuma=.62f,subjectHighlights=.2f)))
+        assertEquals(GuidanceFeedback.SCENE_CHANGED,c.decision.value.feedback)
+        for(i in 10L..20)c.observe(observation(i).copy(executionQuality=sample(i).copy(meanLuma=.62f,subjectHighlights=.2f)))
+        assertEquals(GuidanceFeedback.WORSENING,c.decision.value.feedback)
+        assertFalse(c.state.value is CompositionSessionController.State.Ready)
     }
     @Test fun `asynchronous autofocus return must recheck ready and freshness`() {
         val c=active();for(i in 1L..10)c.observe(observation(i))

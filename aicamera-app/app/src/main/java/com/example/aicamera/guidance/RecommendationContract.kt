@@ -168,17 +168,24 @@ class ExecutionQualityGuard {
         // Accumulate signed residuals: bounded detector jitter cancels, persistent small
         // subject drift does not. A per-step threshold would miss a slow autonomous subject.
         val unverifiedMotion=kotlin.math.hypot(unverifiedDx,unverifiedDy)>.012f
-        // Exposure/scene/scale changes invalidate attribution. Never celebrate the AE settling
-        // or an independently moving subject as the user's successful camera adjustment.
+        // A different subject/view invalidates the original technical baseline.
         if(current.viewportVersion!=last.viewportVersion || current.family!=last.family ||
             current.subjectTrackingId!=last.subjectTrackingId || (a==null)!=(b==null) ||
-            current.sampledAtMs-last.sampledAtMs>2000 || kotlin.math.abs(current.meanLuma-last.meanLuma)>.08f ||
-            kotlin.math.abs(current.lumaStd-last.lumaStd)>.07f ||
+            current.sampledAtMs-last.sampledAtMs>2000 ||
             (a!=null && b!=null && (b.width/a.width !in .8f..1.25f || b.height/a.height !in .8f..1.25f))) {
             baseline=current
             preferenceBaseline=current.takeIf{it.preferenceScore!=null}
             motionAnchor=current;unverifiedDx=0f;unverifiedDy=0f
             lastReasons=listOf("comparison_context_changed")
+            return ExecutionComparison.CONTEXT_CHANGED
+        }
+        if(kotlin.math.abs(current.meanLuma-last.meanLuma)>.08f || kotlin.math.abs(current.lumaStd-last.lumaStd)>.07f) {
+            // AE settling is not evidence of successful camera execution. Hold the transient
+            // frame, but retain the pre-action technical baseline: persistent lost highlights
+            // or blur must not become the new acceptable state merely because AE stabilized.
+            preferenceBaseline=current.takeIf{it.preferenceScore!=null}
+            motionAnchor=current;unverifiedDx=0f;unverifiedDy=0f
+            lastReasons=listOf("photometric_context_changed")
             return ExecutionComparison.CONTEXT_CHANGED
         }
         val start=baseline ?: last
