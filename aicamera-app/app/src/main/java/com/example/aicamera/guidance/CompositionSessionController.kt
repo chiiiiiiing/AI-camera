@@ -128,7 +128,9 @@ class CompositionSessionController {
         val rollObservable: Boolean = true,
         val executionQuality: ExecutionQualityEvidence? = null,
         /** Enabled by the real model path; legacy/fake geometry fixtures cannot invent image evidence. */
-        val executionQualityRequired: Boolean = false
+        val executionQualityRequired: Boolean = false,
+        val subjectBox: com.example.aicamera.guidance.geometry.NormalizedBox? = null,
+        val guidanceLimitations: List<String> = emptyList()
     )
 
     private val _state = MutableStateFlow<State>(State.Idle)
@@ -386,8 +388,25 @@ class CompositionSessionController {
                 _state.value is State.Verifying -> GuidanceFeedback.VERIFYING
                 improving -> GuidanceFeedback.IMPROVING
                 nextAction is GuidanceAction.HoldStill -> GuidanceFeedback.INSUFFICIENT_EVIDENCE
-                else -> GuidanceFeedback.ADJUSTING }, obs.subjectObservationId,reasons=executionGuard.lastReasons)
+                else -> GuidanceFeedback.ADJUSTING }, obs.subjectObservationId,
+            reasons=(executionGuard.lastReasons + obs.guidanceLimitations).distinct(),
+            displayEvidence = if (nextAction !is GuidanceAction.HoldStill || _state.value is State.Verifying)
+                displayEvidence(obs) else null)
         if(_state.value is State.Ready)lastCaptureEvidence=obs
+    }
+
+    private fun displayEvidence(obs: FrameObservation): GuidanceDisplayEvidence {
+        fun point(x: Float?, y: Float?) = if (x != null && y != null && x.isFinite() && y.isFinite() &&
+            x in 0f..1f && y in 0f..1f) NormalizedPoint(x, y) else null
+        var expiry = minOf(obs.timestampMs + if (_state.value is State.Ready) 750L else 1500L,
+            obs.imuSampledAtMs + 1500L)
+        if (obs.expectsSubject || obs.hasRealSubject) expiry = minOf(expiry,
+            obs.subjectSampledAtMs + if (obs.observedAnchorKind == ObservedAnchorKind.OBJECT) 1500L else 750L)
+        if (obs.executionQualityRequired) expiry = minOf(expiry, (obs.executionQuality?.sampledAtMs ?: 0L) + 1500L)
+        return GuidanceDisplayEvidence(obs.timestampMs, expiry, obs.viewportVersion, obs.observedAnchorKind,
+            if (obs.hasRealSubject) point(obs.subjectCx, obs.subjectCy) else null,
+            obs.subjectBox.takeIf { obs.hasRealSubject }, point(obs.targetCx, obs.targetCy),
+            obs.targetTolerance, obs.rollDegrees?.takeIf { obs.rollObservable && it.isFinite() })
     }
 
     private fun hold(obs: FrameObservation, feedback: GuidanceFeedback) {
@@ -396,7 +415,7 @@ class CompositionSessionController {
         _state.value = State.Adjusting(GuidanceAction.HoldStill, 0f)
         _action.value = GuidanceAction.HoldStill
         _decision.value = GuidanceDecision(GuidanceAction.HoldStill, obs.targetId, measuredError(obs), feedback, obs.subjectObservationId,
-            reasons=executionGuard.lastReasons)
+            reasons=(executionGuard.lastReasons + obs.guidanceLimitations).distinct())
     }
 
     private fun measuredError(obs: FrameObservation): Float? {

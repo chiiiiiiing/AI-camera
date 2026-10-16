@@ -7,6 +7,16 @@ import org.junit.Test
 
 class PhotographyRulesTest {
     private val layout=SceneLayout(List(9){.5f},List(9){.02f},.5f,0f,0f)
+    @Test fun `invalid geometry and incomplete layout cannot propose a crop`() {
+        assertFalse(PhotographyRules.preserves(NormalizedBox(Float.NaN,0f,1f,1f),null))
+        assertEquals(1,PhotographyRules.candidates(SceneFamily.FOOD,NormalizedBox(.3f,.3f,.7f,.7f),
+            layout.copy(edgeGrid=emptyList())).size)
+    }
+    @Test fun `scene limitations do not invent a landscape or complete plant target`() {
+        assertEquals(listOf("no_verified_landscape_target"),MultiScenePolicy.guidanceLimitations(SceneFamily.NATURAL_LANDSCAPE,null,false,true))
+        assertEquals(listOf("unverified_complete_plant"),MultiScenePolicy.guidanceLimitations(SceneFamily.PLANT,null,false,true))
+        assertEquals(listOf("object_unstable_or_ambiguous"),MultiScenePolicy.guidanceLimitations(SceneFamily.FOOD,null,false,true))
+    }
     @Test fun `current framing is always an option and candidate budget is bounded`() {
         for(scene in SceneFamily.entries) {
             val candidates=PhotographyRules.candidates(scene,NormalizedBox(.3f,.3f,.7f,.7f),layout)

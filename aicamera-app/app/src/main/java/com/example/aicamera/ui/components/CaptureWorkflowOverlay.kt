@@ -54,10 +54,10 @@ import com.example.aicamera.ui.theme.GuideWarning
  * 构图-拍摄工作流状态。
  *
  * IDLE      → 正常预览
- * ANALYZING → 快门按下后正在分析画面（波纹 + 文字，自动缩到最小焦段）
+ * ANALYZING → 快门按下后正在分析画面（波纹 + 文字）
  * ROTATING  → 分析完成，显示旋转指引 → 用户端平手机
  * GUIDING   → 旋转到位：双点连线指引 → 用户平移对齐
- * READY     → 对齐完成，自动变焦，显示构图说明，自动拍照
+ * READY     → 控制器连续验证完成，对焦曝光后重新确认，再拍摄
  */
 enum class CaptureWorkflowState {
     IDLE, ANALYZING, ROTATING, GUIDING, READY, CAPTURING, SAVED, UPSIDE_DOWN, NO_SUBJECT
@@ -79,6 +79,8 @@ fun CaptureWorkflowOverlay(
     state: CaptureWorkflowState,
     cue: GuidanceCue?,
     phase: GuidancePhase,
+    paused: Boolean = false,
+    verifying: Boolean = false,
     feedbackHint: String? = null,
     targetNx: Float? = null,
     targetNy: Float? = null,
@@ -106,6 +108,7 @@ fun CaptureWorkflowOverlay(
         if (state != CaptureWorkflowState.IDLE) {
             WorkflowProgress(
                 state = state,
+                statusHint = when { paused -> "暂缓引导，请保持"; verifying -> "正在确认稳定性"; else -> null },
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(top = 108.dp)
@@ -145,14 +148,15 @@ fun CaptureWorkflowOverlay(
             enter = fadeIn(tween(300)),
             exit = fadeOut(tween(200))
         ) {
-            if (targetNx != null && targetNy != null && subjectNx != null && subjectNy != null) {
+            if (paused || verifying) {
+                HoldingGuidance(feedbackHint ?: "先保持", paused)
+            } else if (showSubjectBox && showTargetZone && targetNx != null && targetNy != null && subjectNx != null && subjectNy != null) {
                 CenterPointGuidance(
                     targetNx = targetNx, targetNy = targetNy,
                     subjectNx = subjectNx, subjectNy = subjectNy,
                     cue = cue,
                     feedbackHint = feedbackHint,
-                    aligned = phase == GuidancePhase.ALIGNED ||
-                        cue == GuidanceCue.SUBJECT_ALIGNED
+                    aligned = state == CaptureWorkflowState.READY
                 )
             } else {
                 FallbackGuidance(cue = cue, phase = phase, feedbackHint = feedbackHint)
@@ -163,9 +167,9 @@ fun CaptureWorkflowOverlay(
         AnimatedVisibility(
             visible = state == CaptureWorkflowState.READY,
             enter = fadeIn(tween(300)),
-            exit = fadeOut(tween(200))
+            exit = fadeOut(tween(0))
         ) {
-            ReadyOverlay(targetNx = targetNx, targetNy = targetNy)
+            ReadyOverlay()
         }
 
         AnimatedVisibility(
@@ -219,7 +223,7 @@ private fun WorkflowGuideLines(
                     GuideLineType.SUBJECT_BOX -> if (showSubjectBox) {
                         val box = GuideLineParser.parseSubjectBox(line.params)
                         drawRoundRect(
-                            color = (if (box.aligned) GuideAligned else BrandPink).copy(alpha = opacity),
+                            color = (if (state == CaptureWorkflowState.READY) GuideAligned else BrandPink).copy(alpha = opacity),
                             topLeft = Offset(box.x * size.width, box.y * size.height),
                             size = Size(box.width * size.width, box.height * size.height),
                             cornerRadius = CornerRadius(10.dp.toPx()),
@@ -256,7 +260,7 @@ private fun WorkflowGuideLines(
 }
 
 @Composable
-private fun WorkflowProgress(state: CaptureWorkflowState, modifier: Modifier = Modifier) {
+private fun WorkflowProgress(state: CaptureWorkflowState, statusHint: String? = null, modifier: Modifier = Modifier) {
     val activeStep = when (state) {
         CaptureWorkflowState.ANALYZING -> 0
         CaptureWorkflowState.ROTATING,
@@ -268,11 +272,11 @@ private fun WorkflowProgress(state: CaptureWorkflowState, modifier: Modifier = M
     val finalReady = state == CaptureWorkflowState.READY ||
         state == CaptureWorkflowState.CAPTURING ||
         state == CaptureWorkflowState.SAVED
-    val statusText = when (state) {
+    val statusText = statusHint ?: when (state) {
         CaptureWorkflowState.ANALYZING -> "正在识别主体与构图"
         CaptureWorkflowState.ROTATING -> "第 1 步：调整手机姿态"
-        CaptureWorkflowState.GUIDING -> "第 2 步：移动主体到目标"
-        CaptureWorkflowState.NO_SUBJECT -> "请先让人物进入画面"
+        CaptureWorkflowState.GUIDING -> "微调取景"
+        CaptureWorkflowState.NO_SUBJECT -> "请让主体回到画面内"
         CaptureWorkflowState.UPSIDE_DOWN -> "请先翻转手机"
         CaptureWorkflowState.READY -> "构图达标，保持稳定"
         CaptureWorkflowState.CAPTURING -> "正在拍摄"
@@ -464,11 +468,22 @@ private fun CenterPointGuidance(
 
 /** fallback：无 AI 目标位置时用简洁文字 */
 private fun phoneMoveHint(cue: GuidanceCue?): String = when (cue) {
-    GuidanceCue.MOVE_LEFT -> "手机稍向左移，让脸进入参考圆"
-    GuidanceCue.MOVE_RIGHT -> "手机稍向右移，让脸进入参考圆"
-    GuidanceCue.MOVE_UP -> "手机稍向上移，让脸进入参考圆"
-    GuidanceCue.MOVE_DOWN -> "手机稍向下移，让脸进入参考圆"
+    GuidanceCue.MOVE_LEFT -> "手机稍向左移，让主体接近目标"
+    GuidanceCue.MOVE_RIGHT -> "手机稍向右移，让主体接近目标"
+    GuidanceCue.MOVE_UP -> "手机稍向上移，让主体接近目标"
+    GuidanceCue.MOVE_DOWN -> "手机稍向下移，让主体接近目标"
     else -> "对照参考位置调整取景，随时可以拍摄"
+}
+
+@Composable
+private fun HoldingGuidance(hint: String, paused: Boolean) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.background(Color.Black.copy(alpha = .65f), RoundedCornerShape(16.dp)).padding(16.dp)) {
+        Text(if (paused) "先保持" else "正在验证", color = if(paused) GuideWarning else Color.White,
+            fontSize = 17.sp, fontWeight = FontWeight.Medium)
+        Spacer(Modifier.height(8.dp))
+        Text(hint, color = Color.White, fontSize = 14.sp, textAlign = TextAlign.Center)
+    }
 }
 
 @Composable
@@ -739,7 +754,7 @@ private fun NoSubjectOverlay() {
 // ═══════════════════════════════════════════════════════════════
 
 @Composable
-private fun ReadyOverlay(targetNx: Float? = null, targetNy: Float? = null) {
+private fun ReadyOverlay() {
     val infinite = rememberInfiniteTransition(label = "ready")
     val pulse by infinite.animateFloat(
         initialValue = 0.5f,
@@ -752,30 +767,6 @@ private fun ReadyOverlay(targetNx: Float? = null, targetNy: Float? = null) {
     )
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        // ── 目标取景框：提示用户 AI 建议的构图范围 ──
-        if (targetNx != null && targetNy != null) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val cx = targetNx * size.width
-                val cy = targetNy * size.height
-                val radius = size.minDimension * 0.18f
-                val path = Path().apply {
-                    addOval(
-                        androidx.compose.ui.geometry.Rect(
-                            left = cx - radius,
-                            top = cy - radius,
-                            right = cx + radius,
-                            bottom = cy + radius
-                        )
-                    )
-                }
-                drawPath(
-                    path = path,
-                    color = GuideAligned.copy(alpha = 0.4f + 0.4f * pulse),
-                    style = Stroke(width = 2.dp.toPx())
-                )
-            }
-        }
-
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = "●",

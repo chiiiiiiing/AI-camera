@@ -13,7 +13,7 @@ import java.nio.ByteOrder
 /**
  * 帧预处理器 — YUV → 转正 → (前摄)镜像 → RGB → Float Tensor。
  *
- * ## 处理流程（与 v9 接入协议严格对齐，见 docs/09、10）
+ * ## 处理流程（见 docs/09-AI接入包说明.md 与 docs/引导动画制作与接入规范.md）
  * ```
  * ImageProxy (YUV_420_888)
  *     │

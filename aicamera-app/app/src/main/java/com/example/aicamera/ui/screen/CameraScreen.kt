@@ -80,7 +80,7 @@ import com.example.aicamera.guidance.AlignmentFlashOverlay
 import com.example.aicamera.guidance.CompositionSessionController
 import com.example.aicamera.guidance.GuidanceCue
 import com.example.aicamera.guidance.GuidancePhase
-import com.example.aicamera.guidance.toGuidanceCue
+import com.example.aicamera.guidance.GuidancePresentation
 import com.example.aicamera.ui.components.CaptureWorkflowOverlay
 import com.example.aicamera.ui.components.CaptureWorkflowState
 import com.example.aicamera.ui.components.CaptureResultSheet
@@ -140,34 +140,24 @@ fun CameraScreen(
     val customFilters by cameraViewModel.customFilters.collectAsStateWithLifecycle()
     val customActive by cameraViewModel.customFilterActive.collectAsStateWithLifecycle()
     val configuration = LocalConfiguration.current
-    val guidanceState by renderViewModel.guidanceState.collectAsStateWithLifecycle()
     val renderInput by renderViewModel.renderInput.collectAsStateWithLifecycle()
     val pipelineState by pipelineViewModel.pipelineState.collectAsStateWithLifecycle()
     // ★ 统一构图会话控制器状态（替代旧双工作流）
     val sessionState by renderViewModel.sessionController.state.collectAsStateWithLifecycle()
     val sessionDecision by renderViewModel.sessionController.decision.collectAsStateWithLifecycle()
-    // 将控制器状态映射到 UI overlay 所需的状态枚举
-    val hasRealSubject = renderInput.guideLines.any {
-        it.visible && it.type.name == "SUBJECT_BOX" && it.params["real"] == true &&
-            it.params["anchor_kind"] == "face"
+    var presentationTime by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
+    LaunchedEffect(sessionDecision, sessionState) {
+        presentationTime = android.os.SystemClock.elapsedRealtime()
+        sessionDecision.displayEvidence?.let {
+            delay((it.expiresAtMs - presentationTime + 1L).coerceAtLeast(1L))
+            presentationTime = android.os.SystemClock.elapsedRealtime()
+        }
     }
-    val expectsSubject = renderInput.guideLines.any {
-        it.visible && it.type.name == "TARGET_ZONE" && it.params["anchor_kind"] == "face"
-    }
-    val workflowState = mapSessionState(sessionState, hasRealSubject, expectsSubject)
-    // The action shown during capture must come from the controller deciding Ready.
-    val workflowCue = when (val current = sessionState) {
-        is CompositionSessionController.State.Adjusting -> current.action.toGuidanceCue()
-        CompositionSessionController.State.Verifying,
-        CompositionSessionController.State.Ready -> GuidanceCue.SUBJECT_ALIGNED
-        else -> GuidanceCue.NONE
-    }
-    val workflowPhase = when (sessionState) {
-        CompositionSessionController.State.Ready -> GuidancePhase.ALIGNED
-        CompositionSessionController.State.Verifying -> GuidancePhase.NEAR
-        is CompositionSessionController.State.Adjusting -> GuidancePhase.ADJUST
-        else -> GuidancePhase.NEUTRAL
-    }
+    val presentation = GuidancePresentation.from(sessionState, sessionDecision,
+        maxOf(presentationTime, android.os.SystemClock.elapsedRealtime()))
+    val workflowState = mapSessionState(presentation.state)
+    val workflowCue = presentation.cue
+    val workflowPhase = presentation.phase
     // 拍照后构图说明标签（null = 不显示）
     var compositionLabel by remember { mutableStateOf<String?>(null) }
     // 拍后结果确认页（不生成伪审美分数）
@@ -262,18 +252,14 @@ fun CameraScreen(
         onDispose { shutterSound.release() }
     }
 
-    // ── 构图达标反馈：进入 ALIGNED 相位瞬间 → 震动 + 绿边闪烁 ──
+    // Feedback follows the controller's live Ready lease, never the legacy geometry phase.
     val haptic = LocalHapticFeedback.current
     var showAlignFlash by remember { mutableStateOf(false) }
-    var prevGuidancePhase by remember { mutableStateOf(GuidancePhase.NEUTRAL) }
-    LaunchedEffect(guidanceState.phase) {
-        val entered = guidanceState.phase == GuidancePhase.ALIGNED &&
-                prevGuidancePhase != GuidancePhase.ALIGNED
-        if (entered) {
+    LaunchedEffect(presentation.ready) {
+        if (presentation.ready) {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             showAlignFlash = true
-        }
-        prevGuidancePhase = guidanceState.phase
+        } else showAlignFlash = false
     }
 
     // 订阅 focusCircle → Compose 对焦框及曝光条（旧 View 叠加层已卸载）
@@ -429,38 +415,6 @@ fun CameraScreen(
         } else {
             renderViewModel.sessionController.startAnalysis()
         }
-    }
-
-    /** ★ 从当前帧 AI 输出实时提取构图目标中心点（来自 target_zone，不是 subject_box） */
-    fun liveTargetCenter(): Pair<Float, Float>? {
-        // ★ 修复：target 来自 target_zone（AI/模板指定的构图目标位置）
-        val targetZone = renderInput.guideLines.find {
-            it.visible && it.type.name == "TARGET_ZONE" && it.params["anchor_kind"] == "face"
-        }
-        val tcx = (targetZone?.params?.get("center_x") as? Number)?.toFloat()
-        val tcy = (targetZone?.params?.get("center_y") as? Number)?.toFloat()
-        if (tcx != null && tcy != null && tcx.isFinite() && tcy.isFinite() &&
-            tcx in 0f..1f && tcy in 0f..1f) return tcx to tcy
-        return null
-    }
-
-    /** ★ 获取当前真实主体中心点（来自真实检测，非模板占位框） */
-    fun liveSubjectCenter(): Pair<Float, Float>? {
-        val subjectBox = renderInput.guideLines.find {
-            it.visible && it.type.name == "SUBJECT_BOX" && it.params["anchor_kind"] == "face"
-        }
-        // 只取真实检测框（real=true），忽略模板占位
-        val isReal = subjectBox?.params?.get("real") == true
-        if (!isReal) return null
-        val sx = (subjectBox?.params?.get("x") as? Number)?.toFloat()
-        val sy = (subjectBox?.params?.get("y") as? Number)?.toFloat()
-        val sw = (subjectBox?.params?.get("width") as? Number)?.toFloat()
-        val sh = (subjectBox?.params?.get("height") as? Number)?.toFloat()
-        val scx = if (sx != null && sw != null) sx + sw / 2f else null
-        val scy = if (sy != null && sh != null) sy + sh / 2f else null
-        if (scx != null && scy != null && scx.isFinite() && scy.isFinite() &&
-            scx in 0f..1f && scy in 0f..1f) return scx to scy
-        return null
     }
 
     /** 从 AI 输出提取中文构图说明（如"三分构图 · 明亮场景"） */
@@ -709,7 +663,7 @@ fun CameraScreen(
                     cameraViewModel.setZoom(it)
                 },
                 isCapturing = uiState.isCapturing,
-                aligned = guidanceState.phase == GuidancePhase.ALIGNED,
+                aligned = presentation.ready,
                 proEnabled = settings.proModeEnabled,
                 onTogglePro = {
                     showFilterPanel = false
@@ -757,38 +711,25 @@ fun CameraScreen(
 
         // ── ★ 构图-拍摄工作流叠加层（目标点每帧实时更新） ──
         if (uiState.isInitialized) {
-            val horizonLine = renderInput.guideLines.find { it.type.name == "HORIZON_LEVEL" }
-            val horizonAngle = (horizonLine?.params?.get("angle_degrees") as? Number)?.toFloat()
-            val targetCenter = liveTargetCenter()
-            val subjectCenter = liveSubjectCenter()
+            val evidence = presentation.evidence
             CaptureWorkflowOverlay(
                 state = workflowState,
                 cue = workflowCue,
                 phase = workflowPhase,
-                feedbackHint = when (sessionDecision.feedback) {
-                    com.example.aicamera.guidance.GuidanceFeedback.WORSENING -> when {
-                        "observed_subject_margin_regressed" in sessionDecision.reasons -> "先保持，主体太靠近画面边缘"
-                        "subject_sharpness_regressed" in sessionDecision.reasons -> "先保持，主体清晰度下降"
-                        "subject_highlights_regressed" in sessionDecision.reasons -> "先保持，主体亮部细节减少"
-                        else -> "先保持，刚才的调整没有改善构图"
-                    }
-                    com.example.aicamera.guidance.GuidanceFeedback.NO_PROGRESS -> "先保持，暂未找到更有效的调整"
-                    com.example.aicamera.guidance.GuidanceFeedback.SCENE_CHANGED -> "画面发生变化，先保持重新确认"
-                    com.example.aicamera.guidance.GuidanceFeedback.VERIFYING -> "位置合适，请保持稳定"
-                    com.example.aicamera.guidance.GuidanceFeedback.INSUFFICIENT_EVIDENCE -> "先保持，正在确认可用的构图依据"
-                    else -> null
-                },
-                targetNx = targetCenter?.first,
-                targetNy = targetCenter?.second,
-                horizonAngleDeg = horizonAngle,
-                subjectNx = subjectCenter?.first,
-                subjectNy = subjectCenter?.second,
+                paused = presentation.paused,
+                verifying = presentation.verifying,
+                feedbackHint = presentation.hint,
+                targetNx = evidence?.target?.x,
+                targetNy = evidence?.target?.y,
+                horizonAngleDeg = evidence?.rollDegrees,
+                subjectNx = evidence?.subject?.x,
+                subjectNy = evidence?.subject?.y,
                 showGrid = settings.showGrid,
                 showSubjectBox = settings.showSubjectBox,
                 showTargetZone = settings.showTargetZone,
                 showHorizon = settings.showHorizon,
                 overlayAlpha = settings.overlayAlpha,
-                guideLines = renderInput.guideLines,
+                guideLines = presentation.guideLines,
                 modifier = Modifier.fillMaxSize()
             )
         }

@@ -9,7 +9,7 @@ import org.junit.Test
 /**
  * GuidanceGeometry 纯逻辑单元测试。
  *
- * 覆盖 docs/10 第 6 节的指令映射约定：
+ * 覆盖 docs/引导动画制作与接入规范.md 的方向与坐标约定：
  * ROLL 优先 → SUBJECT_TARGET（期望主体但无检测）→ 容差内 ALIGNED → 四向 MOVE。
  */
 class GuidanceGeometryTest {

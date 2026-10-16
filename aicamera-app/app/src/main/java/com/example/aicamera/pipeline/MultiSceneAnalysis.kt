@@ -89,6 +89,20 @@ internal class MultiSceneReferences private constructor(
 
 /** Pure policy and pixel kernel are shared by live analysis and deterministic regression tests. */
 internal object MultiScenePolicy {
+    /** Missing semantic evidence is explicit; it never invents a horizon or complete plant. */
+    fun guidanceLimitations(family: SceneFamily, live: ObjectObservation?, hasTarget: Boolean,
+        nativeAvailable: Boolean): List<String> = when (family) {
+        SceneFamily.FOOD, SceneFamily.STILL_LIFE -> when {
+            !nativeAvailable -> listOf("object_input_unavailable")
+            live == null -> listOf("object_unstable_or_ambiguous")
+            !hasTarget -> listOf("no_compatible_object_reference")
+            else -> emptyList()
+        }
+        SceneFamily.NATURAL_LANDSCAPE, SceneFamily.URBAN_LANDSCAPE -> listOf("no_verified_landscape_target")
+        SceneFamily.PLANT -> listOf("unverified_complete_plant")
+        SceneFamily.UNKNOWN -> listOf("scene_unconfirmed")
+        SceneFamily.PORTRAIT -> emptyList()
+    }
     // COCO boxes for plants/vases do not reliably contain an entire plant/bouquet.
     val objectClasses = setOf(39,40,41,45,46,47,48,49,50,51,52,53,54,55,73,74,77)
     fun dominant(detections: List<ObjectDetection>): ObjectDetection? {
@@ -272,7 +286,8 @@ internal class MultiSceneAnalyzer(directory: File, metadata: (String) -> Templat
                 }
             }
         }
-        return MultiSceneResult(SceneAnalysisObservation(++observationId,sampledAtMs,viewportVersion,scene,layout,live,detector!=null),locked,ranked)
+        return MultiSceneResult(SceneAnalysisObservation(++observationId,sampledAtMs,viewportVersion,scene,layout,live,detector!=null,
+            MultiScenePolicy.guidanceLimitations(scene,live,locked!=null,nativeAvailable)),locked,ranked)
     }
     fun replan() { excludedId=locked?.id; locked=null }
     fun reset() { previous=null; previousAppearance=null; locked=null; excludedId=null; scene=SceneFamily.UNKNOWN; pending=SceneFamily.UNKNOWN; sceneSamples=0; viewport=Long.MIN_VALUE }

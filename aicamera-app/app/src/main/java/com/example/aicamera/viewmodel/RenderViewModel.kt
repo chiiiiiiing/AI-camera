@@ -433,7 +433,16 @@ class RenderViewModel @Inject constructor() : ViewModel() {
                 else if(faceScene) com.example.aicamera.guidance.ObservedAnchorKind.FACE else com.example.aicamera.guidance.ObservedAnchorKind.NONE,
             rollObservable = output.rollObservable != false,
             executionQuality = output.executionQuality,
-            executionQualityRequired = output.sceneAnalysis != null
+            executionQualityRequired = output.sceneAnalysis != null,
+            subjectBox = if (objectScene) observedObject?.box else if (faceScene)
+                output.structureObservation?.singleFace(android.os.SystemClock.elapsedRealtime()) else null,
+            guidanceLimitations = if (scene?.isFresh(android.os.SystemClock.elapsedRealtime()) == true) {
+                if (faceScene) when {
+                    output.structureObservation?.faceCount != 1 -> listOf("single_face_required")
+                    output.compositionTarget == null -> listOf("no_compatible_portrait_reference")
+                    else -> emptyList()
+                } else scene.guidanceLimitations
+            } else emptyList()
         )
     }
 }

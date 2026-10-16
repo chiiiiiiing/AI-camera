@@ -34,7 +34,7 @@ import javax.inject.Singleton
  *
  * ## 为什么只检测人脸
  * 人像可比较实时人脸与参考图中经过审阅的人脸锚点。
- * 未提供可验证主体目标的模板不生成主体移动指令（docs/10 口径）。
+ * 未提供可验证主体目标的模板不生成主体移动指令（见 docs/引导动画制作与接入规范.md）。
  * 后续可扩展 ML Kit 主体分割（play-services-mlkit-subject-segmentation）。
  */
 @Singleton

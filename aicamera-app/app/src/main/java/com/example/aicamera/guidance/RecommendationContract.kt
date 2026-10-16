@@ -53,8 +53,24 @@ data class GuidanceDecision(
     val feedback: GuidanceFeedback,
     val observationId: Long,
     val replanRequested: Boolean = false,
-    val reasons: List<String> = emptyList()
+    val reasons: List<String> = emptyList(),
+    /** Geometry from the same accepted observation and locked target as this decision. */
+    val displayEvidence: GuidanceDisplayEvidence? = null
 )
+
+data class GuidanceDisplayEvidence(
+    val observedAtMs: Long,
+    val expiresAtMs: Long,
+    val viewportVersion: Long,
+    val anchorKind: ObservedAnchorKind,
+    val subject: NormalizedPoint?,
+    val subjectBox: NormalizedBox?,
+    val target: NormalizedPoint?,
+    val targetRadius: Float,
+    val rollDegrees: Float?
+) {
+    fun isFresh(nowMs: Long) = nowMs >= observedAtMs && nowMs <= expiresAtMs
+}
 
 enum class SceneFamily { UNKNOWN, PORTRAIT, FOOD, STILL_LIFE, PLANT, NATURAL_LANDSCAPE, URBAN_LANDSCAPE }
 enum class ObservedAnchorKind { FACE, OBJECT, NONE }
@@ -110,7 +126,8 @@ data class SceneAnalysisObservation(
     val family: SceneFamily,
     val layout: SceneLayout,
     val objectObservation: ObjectObservation? = null,
-    val detectorAvailable: Boolean = false
+    val detectorAvailable: Boolean = false,
+    val guidanceLimitations: List<String> = emptyList()
 ) {
     fun isFresh(nowMs: Long): Boolean = observationId > 0 && nowMs >= sampledAtMs && nowMs-sampledAtMs <= 1500
 }

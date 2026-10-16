@@ -45,6 +45,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_validate_multiscene_assets.py'
           python -m unittest discover -s tests -p 'test_validate_framing_preference_assets.py'
           python -m unittest discover -s tests -p 'test_framing_preference.py'
+          python -m unittest discover -s tests -p 'test_pairwise_preference_v2.py'
           python -m unittest discover -s tests -p 'test_build_multiscene_references.py'
           python -m unittest discover -s tests -p 'test_run_core_recommendation.py'
           python -m unittest discover -s tests -p 'test_build_reference_structures.py'
