@@ -58,10 +58,14 @@ class V9Inference(
     private val multiScene = MultiSceneAnalyzer(index.assetDirectory(), index::getMetadata)
     private val qualityHead = index.qualityHead()
     private val cropEvaluator = QualityCropEvaluator()
+    private val framingModel = FramingPreferenceModel.load(index.assetDirectory())
+    private val framingEvaluator = FramingCandidateEvaluator()
+    private val executionAnalyzer = ExecutionImageAnalyzer()
+    private var preferenceNextAt=0L
     private var structure: com.example.aicamera.guidance.StructureObservation? = null
     private var slowUntilMs = 0L
     override fun updateStructure(observation: com.example.aicamera.guidance.StructureObservation?) { structure = observation }
-    override fun requestReplan() { structureMatcher.replan(); multiScene.replan(); templateStabilizer.reset(); cropEvaluator.reset() }
+    override fun requestReplan() { structureMatcher.replan(); multiScene.replan(); templateStabilizer.reset(); cropEvaluator.reset(); framingEvaluator.reset(); executionAnalyzer.reset() }
 
 
     // ── IInference 实现 ───────────────────────────────────────
@@ -98,8 +102,9 @@ class V9Inference(
             val sceneContext = stats?.let { sceneContextEstimator.estimate(candidates, it) } ?: SceneContext()
             val semantic = index.rerank(candidates, sceneContext, limit = 32)
             val now = android.os.SystemClock.elapsedRealtime()
+            val analysisBitmap = frame.analysisBitmap ?: sourceBitmap
             val sceneResult = multiScene.analyze(sourceBitmap, sceneContext, semantic, structure?.viewportVersion ?: -1L,
-                frame.displayAspectRatio ?: 1f, now, frame.sampledAtMs.takeIf { it > 0 } ?: started)
+                frame.displayAspectRatio ?: 1f, now, frame.sampledAtMs.takeIf { it > 0 } ?: started, frame)
             val isPortrait = sceneResult.observation.family == com.example.aicamera.guidance.SceneFamily.PORTRAIT
             val reranked = if (isPortrait) structureMatcher.rank(sceneResult.hits, structure, now) else sceneResult.hits.take(8)
             if (reranked.isEmpty()) {
@@ -161,6 +166,38 @@ class V9Inference(
                 val features = QualityHead.features(sourceBitmap, face)
                 val head = qualityHead?.takeIf { meta.sceneCategory in it.scenes || meta.photoType in it.scenes }
                 val qualityScore = head?.score(embedding, features)
+                // A live crop gets its own spatial features. It is never interpreted as the
+                // result of walking/panning into unseen background or changing perspective.
+                // A still-fresh cached box may detect a negative change in its measured region.
+                // The controller still requires a new detector sample for positive confirmation.
+                val observedObject=sceneResult.observation.objectObservation?.takeIf { it.isFresh(now) }
+                val measuredSubject=if(isPortrait) face else observedObject?.box
+                val measuredTracking=if(isPortrait) structure?.trackingId else observedObject?.trackingId
+                val pixels=IntArray(analysisBitmap.width*analysisBitmap.height)
+                analysisBitmap.getPixels(pixels,0,analysisBitmap.width,0,0,analysisBitmap.width,analysisBitmap.height)
+                val preference=framingModel?.takeIf { frame.analysisBitmap!=null && now>=preferenceNextAt && now>=slowUntilMs &&
+                    FramingPreferenceModel.scene(sceneResult.observation.family) in it.scenes }
+                var preferenceEmbedding:FloatArray?=null
+                var preferenceScore:Float?=null
+                if(preference!=null) {
+                    val preferenceStart=android.os.SystemClock.elapsedRealtime()
+                    preferenceNextAt=now+2000
+                    val vector=runtime.embed(FramingPreferenceModel.nchw224(pixels,analysisBitmap.width,analysisBitmap.height))
+                    val finished=android.os.SystemClock.elapsedRealtime()
+                    if(finished-preferenceStart<=150 && finished-started<=750) {
+                        preferenceEmbedding=vector
+                        preferenceScore=preference.score(vector,FramingPreferenceModel.features(pixels,analysisBitmap.width,
+                            analysisBitmap.height,measuredSubject,sceneResult.observation.family))
+                    } else preferenceNextAt=finished+10_000
+                }
+                val execution=frame.analysisBitmap?.let { executionAnalyzer.observe(pixels,analysisBitmap.width,analysisBitmap.height,
+                    frame.sampledAtMs,sceneResult.observation.viewportVersion,sceneResult.observation.family,measuredTracking,
+                    measuredSubject,preferenceScore,preference?.modelId.takeIf{preferenceScore!=null},
+                    if(isPortrait) structure?.observationId else observedObject?.observationId) }
+                val framing=if(preferenceEmbedding!=null) framingEvaluator.evaluate(analysisBitmap,
+                    measuredSubject,sceneResult.observation.family,sceneResult.observation.layout,preference,now,preferenceEmbedding) {
+                        runtime.embed(FramingPreferenceModel.nchw224(it))
+                    } else null
                 val crop = if (target == null && head != null && head.cropDiagnosticsEnabled && qualityScore != null && now >= slowUntilMs)
                     cropEvaluator.evaluate(sourceBitmap, embedding, face, head, qualityScore, now) {
                         runtime.embed(V9EmbeddingRuntime.bitmapToNchw224(it))
@@ -185,6 +222,7 @@ class V9Inference(
                         sceneAnalysis = sceneResult.observation, objectTarget = sceneResult.target,
                         expectsSubject = isPortrait,
                         qualityScore = qualityScore, qualityCrop = crop,
+                        executionQuality = execution, framingComparison = framing,
                         qualityAcceptable = features[2] < .98f && features[3] < .98f)
                 }
             } else {
@@ -328,6 +366,9 @@ class V9Inference(
         structureMatcher.reset()
         multiScene.reset()
         cropEvaluator.reset()
+        framingEvaluator.reset()
+        executionAnalyzer.reset()
+        preferenceNextAt=0L
         structure = null
         filterStabilizer.reset()
         autoZoomStabilizer.reset()

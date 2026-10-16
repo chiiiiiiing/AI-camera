@@ -19,6 +19,7 @@ import com.example.aicamera.camera.CameraConfig.CameraFace
 import com.example.aicamera.camera.CameraConfig.FlashMode
 import com.example.aicamera.camera.CameraControls
 import com.example.aicamera.camera.CameraManager
+import com.example.aicamera.camera.awaitCapturePreparation
 import com.example.aicamera.filter.BitmapFilterApplier
 import com.example.aicamera.filter.PresetFilter
 import com.example.aicamera.filter.CustomFilterConfig
@@ -39,14 +40,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
-import kotlin.coroutines.resume
-import kotlin.coroutines.suspendCoroutine
 import javax.inject.Inject
 
 /**
@@ -338,31 +336,21 @@ class CameraViewModel @Inject constructor(
 
     /**
      * 自动拍照前重新进行一次中心 AF + AE 测光。
-     * 某些手机不返回成功状态，因此 1.4 秒超时后会降级继续拍摄，绝不无限卡住。
+     * 1.4 秒超时取消等待。自动拍摄由调用方重新检查构图和画面证据。
      */
     suspend fun prepareForCapture(timeoutMs: Long = 1400L): CaptureReadiness {
         val camera = cameraManager.camera ?: return CaptureReadiness.UNAVAILABLE
         val preview = cameraManager.getPreviewView() ?: return CaptureReadiness.UNAVAILABLE
         if (preview.width <= 0 || preview.height <= 0) return CaptureReadiness.UNAVAILABLE
-        return withTimeoutOrNull(timeoutMs) {
-            suspendCoroutine { continuation ->
-                val point = preview.meteringPointFactory.createPoint(
-                    preview.width / 2f,
-                    preview.height / 2f
-                )
-                val action = FocusMeteringAction.Builder(
-                    point,
-                    FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE
-                ).setAutoCancelDuration(3, TimeUnit.SECONDS).build()
-                val future = camera.cameraControl.startFocusAndMetering(action)
-                future.addListener({
-                    val result = runCatching { future.get() }.getOrNull()
-                    continuation.resume(
-                        if (result?.isFocusSuccessful == true) CaptureReadiness.FOCUSED
-                        else CaptureReadiness.NOT_FOCUSED
-                    )
-                }, ContextCompat.getMainExecutor(appContext))
-            }
+        val point = preview.meteringPointFactory.createPoint(preview.width / 2f, preview.height / 2f)
+        val action = FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE)
+            .setAutoCancelDuration(3, TimeUnit.SECONDS).build()
+        val future = camera.cameraControl.startFocusAndMetering(action)
+        return awaitCapturePreparation(timeoutMs, cancel = { future.cancel(true) }) { complete ->
+            future.addListener({
+                val result = runCatching { future.get() }.getOrNull()
+                complete(if (result?.isFocusSuccessful == true) CaptureReadiness.FOCUSED else CaptureReadiness.NOT_FOCUSED)
+            }, ContextCompat.getMainExecutor(appContext))
         } ?: CaptureReadiness.TIMED_OUT
     }
 

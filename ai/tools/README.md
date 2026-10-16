@@ -4,6 +4,9 @@
 
 - `build_template_db/`：模板数据处理、蒸馏数据构建、模型导出和量化、embedding 生成、索引校验与评估，以及对应测试。
 - `validate_android_v9_assets.py`：检查已打包模型与索引的契约，并从实际向量重新计算库内 leave-one-out top5 同场景指标。
+- `evaluate_native_detector_input.py`：固定来源簇的新旧检测输入、镜像一致性及覆盖诊断，不宣称检测准确率。
+- `build_template_db/run_framing_preference.py`：复现冻结 V1 取景偏好实验，三个候选只用验证集选择、一次验收、独立部署审查。已完成实验须 `--reuse-completed`；本轮模型失败，不能启用。
+- `package_framing_preference.py` / `validate_framing_preference_assets.py`：在项目 `local-output` 内暂存、验证可选评分分支；未通过的权重保留本地，正式配置绑定关闭原因。
 - `benchmark_android_v9_engine.sh`：通过 `adb` 收集已经运行的相机预览进程的内存与渲染证据。脚本不安装或启动应用；模型延迟仍需结合端侧采样统计。
 
 本次恢复的是工具源码及测试，不包含训练图片、教师 checkpoint、原始标注或未跟踪的大模型。执行合成数据测试和打包资产 gate 不需要本地训练图库，也不会下载模型或调用云服务。训练和重建操作必须另外提供数据路径与对应依赖。

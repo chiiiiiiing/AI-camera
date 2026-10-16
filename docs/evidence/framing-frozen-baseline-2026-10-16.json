@@ -1,0 +1,57 @@
+{
+  "base_commit": "e1d61fdb2780e3036a549ecb591ccb0dbf952c9c",
+  "frozen_assets": [
+    {
+      "file": "student_model.onnx",
+      "git_content_sha256": "f7f76fa326e0bf089eeb98c7df6ca9ca8225719fa80d482919216dff7504a9cf",
+      "working_file_sha256": "f7f76fa326e0bf089eeb98c7df6ca9ca8225719fa80d482919216dff7504a9cf",
+      "comparison": "exact bytes",
+      "unchanged": true
+    },
+    {
+      "file": "model_evaluation.json",
+      "git_content_sha256": "29be770ca1cf0ac9ede1db464d8352e699ef1b500be2c355412a81e3e02c26b3",
+      "working_file_sha256": "29be770ca1cf0ac9ede1db464d8352e699ef1b500be2c355412a81e3e02c26b3",
+      "comparison": "Git LF text normalization",
+      "unchanged": true
+    },
+    {
+      "file": "quality_policy.json",
+      "git_content_sha256": "081480b103c40d246bdfb8e69a657fd89d66bca476ef06c9e38825ccbd79bfaa",
+      "working_file_sha256": "081480b103c40d246bdfb8e69a657fd89d66bca476ef06c9e38825ccbd79bfaa",
+      "comparison": "Git LF text normalization",
+      "unchanged": true
+    },
+    {
+      "file": "reference_structures.json",
+      "git_content_sha256": "37e629dd662539ee7bb995ff204eb7937a4c32bbd2aefc0b7a9cae753d28f747",
+      "working_file_sha256": "37e629dd662539ee7bb995ff204eb7937a4c32bbd2aefc0b7a9cae753d28f747",
+      "comparison": "Git LF text normalization",
+      "unchanged": true
+    },
+    {
+      "file": "template_index/templates.embeddings.f32",
+      "git_content_sha256": "27878732f318504328ec6220f1ac421da18b7c9d6f1c6c211845625cd3a2fb8e",
+      "working_file_sha256": "27878732f318504328ec6220f1ac421da18b7c9d6f1c6c211845625cd3a2fb8e",
+      "comparison": "exact bytes",
+      "unchanged": true
+    },
+    {
+      "file": "template_index/templates.keys.json",
+      "git_content_sha256": "55155f892b9ddb5d1a54a444c39ec009e2be11cad205c3673111cfc887abfc60",
+      "working_file_sha256": "cc2c73a8421d42e1435bb40f9bf1df43be02d0e7a1a39b6d07eb0d32ad29857a",
+      "comparison": "Git LF text normalization",
+      "unchanged": true
+    },
+    {
+      "file": "template_index/templates.metadata.jsonl",
+      "git_content_sha256": "1052a17daed4e178198a79d198119a5bbc7e6bfba8b7a3c23420b3034e3335a1",
+      "working_file_sha256": "ac221fd32cb7cc706d9ae63d6123935eded6bc9d1d84456d0909586fa79fcd4a",
+      "comparison": "Git LF text normalization",
+      "unchanged": true
+    }
+  ],
+  "old_acceptance_retuned": false,
+  "physical_device_tested": false,
+  "human_aesthetic_improvement_verified": false
+}

@@ -93,7 +93,7 @@ class MultiSceneAnalysisTest {
         assertTrue(index.load())
         val refs=MultiSceneReferences.load(assets,index::getMetadata)
         assertNotNull(refs)
-        assertEquals(setOf("new_batch_01010","new_batch_01291","new_batch_01207"),
+        assertEquals(setOf("new_batch_01010","new_batch_01196","new_batch_01291","new_batch_01207"),
             refs!!.records.values.filter { it.objectBox!=null }.map { it.id }.toSet())
         assertTrue(refs.records.values.filter { it.objectBox!=null }.all { it.sceneCategory=="food_still_life" })
         assertNull(MultiSceneReferences.load(File(assets,"missing-optional-bundle"),index::getMetadata))

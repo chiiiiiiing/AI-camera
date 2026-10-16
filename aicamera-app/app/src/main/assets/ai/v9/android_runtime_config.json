@@ -77,7 +77,8 @@
     "requires_real_device_validation": true,
     "deployment_model_bytes": 4900248,
     "auxiliary_detector_bytes": 3800954,
-    "combined_model_bytes": 8701202
+    "combined_model_bytes": 8701202,
+    "framing_preference_head_bytes": 0
   },
   "offline_quality": {
     "purpose": "index_diagnostic_not_release_gate",
@@ -124,15 +125,22 @@
     },
     "references": {
       "file": "multi_scene_references.json",
-      "sha256": "47953800b26a1f4cc79e39c912b1d8912611c29fc7cea77ac52e50f700c14f2a"
+      "sha256": "b9d4afe7ca0daca534bd17931d2810b865dcb0d57b66cbc669585a2aa7c359fa"
     },
     "detector_manifest": {
       "file": "object_detector_manifest.json",
-      "sha256": "fa819a0bb315b7ed05653ef22fe514cb2b24b3404f0dda4bdb3f7d4d8e8ffbeb"
+      "sha256": "39dd74b97c110d7d107e82f2013495847000e129ad4a4a0c7d0b8fde218412c7"
     },
     "detector_budget_bytes": 4194304,
     "reference_limit": 8,
     "human_aesthetic_improvement_verified": false,
     "physical_device_performance_verified": false
+  },
+  "framing_preference": {
+    "schema_version": 1,
+    "policy": {
+      "file": "framing_preference_policy.json",
+      "sha256": "eaa3e8936f956f887c23e093cecf60b5d32acf903c756d8542596ba9bc55b306"
+    }
   }
 }

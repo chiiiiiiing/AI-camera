@@ -1,8 +1,10 @@
 """Pinned, offline NanoDet support for observable still-life subjects.
 
 This is an auxiliary detector, not an aesthetic score or segmentation model.
-Input is the same square 224 px preview thumbnail used by the phone; enlarging
-it to 416 does not restore native 416 px image detail. Boxes are preview-relative.
+The original ``preprocess`` / ``detect`` entry points preserve the historical
+224-square protocol. ``preprocess_native`` / ``detect_native`` use the upright
+native viewport with an aspect-preserving 416 letterbox. The protocols have
+different identifiers and their reference annotations must not be interchanged.
 """
 from __future__ import annotations
 
@@ -21,6 +23,7 @@ MODEL_SHA256 = "4b82da9944b88577175ee23a459dce2e26e6e4be573def65b1055dc2d9720186
 MODEL_BYTES = 3800954
 LICENSE_SHA256 = "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
 PREPROCESSING = "viewport_rgb224_bilinear416_bgr_mean_std_v1"
+NATIVE_PREPROCESSING = "viewport_native_letterbox416_bgr_mean_std_v2"
 INPUT_SIZE = 416
 STRIDES = (8, 16, 32)
 CLASS_OUTPUTS = ("792", "814", "836")
@@ -50,6 +53,45 @@ def preprocess(image) -> np.ndarray:
         rgb = np.floor(_bilinear(rgb, 224, 224) + .5).clip(0, 255)
     bgr = _bilinear(rgb, INPUT_SIZE, INPUT_SIZE)[..., ::-1]
     return np.ascontiguousarray(((bgr - MEAN_BGR) / STD_BGR).transpose(2, 0, 1)[None])
+
+
+def native_transform(width: int, height: int) -> dict:
+    if width <= 0 or height <= 0:
+        raise ValueError("Viewport dimensions must be positive")
+    scale = INPUT_SIZE / max(width, height)
+    w, h = max(1, min(INPUT_SIZE, int(np.floor(width*scale+.5)))), max(1, min(INPUT_SIZE, int(np.floor(height*scale+.5))))
+    return dict(source_width=width, source_height=height, resized_width=w, resized_height=h,
+                pad_left=(INPUT_SIZE-w)//2, pad_top=(INPUT_SIZE-h)//2, input_size=INPUT_SIZE)
+
+
+def native_analysis_image(image):
+    """Return real aspect-preserved viewport pixels and exact inverse-map metadata."""
+    from PIL import Image
+    rgb = np.asarray(image.convert("RGB"), dtype=np.float32)
+    transform = native_transform(rgb.shape[1], rgb.shape[0])
+    resized = np.floor(_bilinear(rgb, transform["resized_width"], transform["resized_height"]) + .5).clip(0,255).astype(np.uint8)
+    return Image.fromarray(resized), transform
+
+
+def preprocess_native(image) -> tuple[np.ndarray, dict]:
+    analysis, transform = native_analysis_image(image)
+    rgb = np.full((INPUT_SIZE,INPUT_SIZE,3),114,dtype=np.float32)
+    x, y = transform["pad_left"], transform["pad_top"]
+    rgb[y:y+analysis.height,x:x+analysis.width] = np.asarray(analysis)
+    bgr = rgb[...,::-1]
+    tensor = np.ascontiguousarray(((bgr-MEAN_BGR)/STD_BGR).transpose(2,0,1)[None])
+    return tensor, transform
+
+
+def native_box_to_viewport(box, transform: dict) -> list[float] | None:
+    values = np.asarray(box,dtype=np.float32)
+    if values.shape != (4,) or not np.isfinite(values).all() or values[2] <= values[0] or values[3] <= values[1]:
+        return None
+    mapped = (values*transform["input_size"] - np.array([transform["pad_left"],transform["pad_top"]]*2,dtype=np.float32)) / np.array([transform["resized_width"],transform["resized_height"]]*2,dtype=np.float32)
+    visible = mapped.clip(0,1)
+    if visible[2] <= visible[0] or visible[3] <= visible[1] or (visible[2]-visible[0])*(visible[3]-visible[1]) < .5*(mapped[2]-mapped[0])*(mapped[3]-mapped[1]):
+        return None
+    return visible.tolist()
 
 
 def iou(a, b) -> float:
@@ -115,6 +157,16 @@ class NanoDetDetector:
         outputs = self.session.run(self.output_names, {"input.1": preprocess(image)})
         return decode(dict(zip(self.output_names, outputs)))
 
+    def detect_native(self, image) -> list[dict]:
+        tensor, transform = preprocess_native(image)
+        outputs = self.session.run(self.output_names, {"input.1": tensor})
+        result = []
+        for detection in decode(dict(zip(self.output_names, outputs))):
+            box = native_box_to_viewport(detection["box"], transform)
+            if box is not None:
+                result.append({**detection,"box":box})
+        return result
+
 
 def download(directory: Path) -> dict:
     directory.mkdir(parents=True, exist_ok=True)
@@ -154,6 +206,7 @@ def main():
     parser.add_argument("--model", type=Path)
     parser.add_argument("--image", type=Path)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--native", action="store_true", help="Use native viewport letterbox v2 instead of historical 224-square protocol")
     args = parser.parse_args()
     if args.download_dir:
         print(json.dumps(download(args.download_dir), indent=2))
@@ -163,8 +216,9 @@ def main():
         with Image.open(args.image) as original:
             image = ImageOps.exif_transpose(original).convert("RGB")
         start = time.perf_counter()
-        detections = detector.detect(image)
-        result = dict(detections=detections, desktop_cpu_ms=(time.perf_counter()-start)*1000)
+        detections = detector.detect_native(image) if args.native else detector.detect(image)
+        result = dict(detections=detections, preprocessing=NATIVE_PREPROCESSING if args.native else PREPROCESSING,
+                      desktop_cpu_ms=(time.perf_counter()-start)*1000)
         text = json.dumps(result, indent=2)
         if args.output:
             args.output.write_text(text+"\n", encoding="utf-8")

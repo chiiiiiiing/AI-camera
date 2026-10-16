@@ -3,7 +3,9 @@ import unittest
 import numpy as np
 from PIL import Image
 
-from multiscene_detector import BOX_OUTPUTS, CLASS_OUTPUTS, STRIDES, decode, preprocess
+from multiscene_detector import (BOX_OUTPUTS, CLASS_OUTPUTS, STRIDES, decode, preprocess,
+                                preprocess_native, native_transform, native_box_to_viewport,
+                                native_analysis_image, PREPROCESSING, NATIVE_PREPROCESSING)
 
 
 class MultiSceneDetectorTests(unittest.TestCase):
@@ -55,6 +57,45 @@ class MultiSceneDetectorTests(unittest.TestCase):
     def test_blank_image_has_finite_input_and_empty_scores_produce_no_detection(self):
         self.assertTrue(np.isfinite(preprocess(Image.new("RGB",(3,5)))).all())
         self.assertEqual(decode(self.heads()),[])
+
+    def test_native_protocol_distinct_and_preserves_fine_detail(self):
+        pixels = np.zeros((416,416,3),dtype=np.uint8)
+        pixels[:,1::2] = 255
+        image = Image.fromarray(pixels)
+        tensor, transform = preprocess_native(image)
+        legacy = preprocess(image)
+        self.assertNotEqual(PREPROCESSING,NATIVE_PREPROCESSING)
+        self.assertGreater(abs(tensor[0,0,0,0]-legacy[0,0,0,0]),.5)
+        self.assertAlmostEqual(float(tensor[0,0,0,1]-tensor[0,0,0,0]),255/57.375,places=5)
+        self.assertEqual(transform["pad_left"],0)
+
+    def test_native_aspect_mapping_for_rotated_mirrored_viewports(self):
+        for width,height in ((1920,1080),(1080,1920),(4032,3024),(301,100),(100,301)):
+            transform = native_transform(width,height)
+            wanted = np.array([.12,.18,.76,.86])
+            for mirrored in (False,True):
+                expected = wanted.copy()
+                if mirrored:
+                    expected[[0,2]] = 1-expected[[2,0]]
+                box = (expected*np.array([transform["resized_width"],transform["resized_height"]]*2)+np.array([transform["pad_left"],transform["pad_top"]]*2))/416
+                np.testing.assert_allclose(native_box_to_viewport(box,transform),expected,atol=1e-6)
+
+    def test_native_padding_does_not_become_subject(self):
+        transform = native_transform(1600,900)
+        self.assertIsNone(native_box_to_viewport([.2,0,.4,.1],transform))
+        self.assertIsNone(native_box_to_viewport([.2,float("nan"),.4,.1],transform))
+        self.assertEqual(native_box_to_viewport([.2,.2,.4,.6],transform)[1],0)
+
+    def test_native_gray_padding_and_python_kotlin_pixel_fixture(self):
+        pixels = np.array([[(i*31+3)%256,(i*17+5)%256,(i*11+7)%256] for i in range(21)],dtype=np.uint8).reshape(3,7,3)
+        image = Image.fromarray(pixels)
+        analysis,transform = native_analysis_image(image)
+        self.assertEqual(analysis.size,(416,178))
+        self.assertEqual(transform["pad_top"],119)
+        self.assertEqual(analysis.getpixel((0,0)),(3,5,7))
+        self.assertEqual(analysis.getpixel((415,177)),(111,89,227))
+        tensor,_ = preprocess_native(image)
+        np.testing.assert_allclose(tensor[0,:,0,0],(114-np.array([103.53,116.28,123.675]))/np.array([57.375,57.12,58.395]),atol=1e-6)
 
 
 if __name__ == "__main__":

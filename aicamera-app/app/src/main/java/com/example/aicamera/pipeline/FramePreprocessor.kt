@@ -28,8 +28,8 @@ import java.nio.ByteOrder
  * ★ 返回的 PreprocessedFrame.buffer 仅在当前 IInference.predict() 同步调用期间有效。
  *   不允许缓存到异步线程或跨帧持有。未来接入异步推理时需改用 BufferPool。
  *
- * ★ originalBitmap（224×224 已转正）由调用方在推理完成后回收（FramePipeline 已用
- *   try/finally 保证），供 V9 推理器直接做 NCHW 预处理，避免二次解码。
+ * ★ All returned bitmaps belong to the synchronous frame. FramePipeline calls
+ *   recycleBitmaps() in finally; inference must never hold them across frames.
  */
 class FramePreprocessor(
     /** 模型输入边长（正方形，V9 为 224） */
@@ -65,6 +65,8 @@ class FramePreprocessor(
         val startTime = SystemClock.elapsedRealtime()
 
         var bitmap: Bitmap? = null
+        var analysisBitmap: Bitmap? = null
+        var detectionBitmap: Bitmap? = null
         try {
             // Step 1: YUV → Bitmap → the same ViewPort shown in PreviewView.
             bitmap = imageProxy.toViewPortBitmap()
@@ -75,9 +77,20 @@ class FramePreprocessor(
             // Step 3: 前摄镜像（协议：模型输入与显示画面保持一致）
             if (isFrontCamera) bitmap = mirrorBitmap(requireNotNull(bitmap))
 
-            // Step 4: Resize → 模型尺寸。current variable owns exactly one bitmap.
+            // Build the detector and crop-analysis inputs directly from the native
+            // viewport, before retrieval's 224 px resize loses detail or aspect.
             val current = requireNotNull(bitmap)
             val displayAspectRatio = current.width.toFloat() / current.height
+            val detectionTransform = DetectionViewportTransform.forViewport(current.width, current.height)
+            val nativePixels = IntArray(current.width * current.height)
+            current.getPixels(nativePixels, 0, current.width, 0, 0, current.width, current.height)
+            val analysisPixels = NativeViewportPixels.resize(nativePixels, current.width, current.height, detectionTransform)
+            analysisBitmap = Bitmap.createBitmap(analysisPixels, detectionTransform.resizedWidth,
+                detectionTransform.resizedHeight, Bitmap.Config.ARGB_8888)
+            detectionBitmap = Bitmap.createBitmap(NativeViewportPixels.letterbox(analysisPixels, detectionTransform),
+                detectionTransform.inputSize, detectionTransform.inputSize, Bitmap.Config.ARGB_8888)
+
+            // Retrieval keeps its original 224-square preprocessing protocol.
             if (current.width != targetSize || current.height != targetSize) {
                 val resized = Bitmap.createScaledBitmap(current, targetSize, targetSize, true)
                 if (resized !== current) current.recycle()
@@ -99,11 +112,16 @@ class FramePreprocessor(
                 originalHeight = imageProxy.height,
                 // Ownership transfers to FramePipeline, whose finally block recycles it.
                 originalBitmap = bitmap,
-                displayAspectRatio = displayAspectRatio
+                displayAspectRatio = displayAspectRatio,
+                analysisBitmap = analysisBitmap,
+                detectionBitmap = detectionBitmap,
+                detectionTransform = detectionTransform
             )
         } catch (e: Exception) {
             // If construction fails, no PreprocessedFrame reaches FramePipeline to own this bitmap.
             bitmap?.takeIf { !it.isRecycled }?.recycle()
+            analysisBitmap?.takeIf { !it.isRecycled }?.recycle()
+            detectionBitmap?.takeIf { !it.isRecycled }?.recycle()
             throw e
         }
     }
@@ -200,8 +218,21 @@ data class PreprocessedFrame(
     /** Full, rotated frame before the embedding model's square resize. */
     val displayAspectRatio: Float? = null,
     /** Monotonic arrival time captured before face detection or model inference. */
-    val sampledAtMs: Long = 0L
-)
+    val sampledAtMs: Long = 0L,
+    /** Upright/mirrored native viewport resized with aspect intact, longest side 416.
+     * Real candidate crops and subject-local quality use this image, never a square reconstruction.
+     */
+    val analysisBitmap: Bitmap? = null,
+    /** 416-square RGB114 letterbox built directly from analysisBitmap's pixels. */
+    val detectionBitmap: Bitmap? = null,
+    val detectionTransform: DetectionViewportTransform? = null
+) {
+    /** FramePipeline is the only owner; inference is synchronous and must not retain these. */
+    fun recycleBitmaps() {
+        val bitmaps = listOfNotNull(originalBitmap, analysisBitmap, detectionBitmap)
+        for (bitmap in bitmaps) if (!bitmap.isRecycled) bitmap.recycle()
+    }
+}
 
 // ── 日志 ──────────────────────────────────────────────────────
 

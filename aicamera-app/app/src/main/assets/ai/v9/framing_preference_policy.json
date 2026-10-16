@@ -1,0 +1,122 @@
+{
+  "schema_version": 1,
+  "enabled": false,
+  "model_sha256": "ed50396b4de1180087f724e22fc4589475bdcb098777ade469135be4f9009aa1",
+  "feature_protocol": "embedding512_rgb64_grid4_subject_scene_v1",
+  "enabled_scenes": [],
+  "minimum_score_margin": 0.1,
+  "metrics": {
+    "acceptance_cluster_count": 20,
+    "pair_count": 30,
+    "pairwise_agreement": 0.475,
+    "bootstrap_lower95": 0.275,
+    "baseline_pairwise_agreement": 0.425,
+    "coverage": 0.9666666666666667,
+    "rejection_rate": 0.033333333333333326,
+    "scene_cluster_counts": {
+      "landscape": 12,
+      "food": 3,
+      "still_life": 3,
+      "portrait": 2
+    },
+    "hard_constraints_passed": true,
+    "severe_defect_non_regression": true,
+    "keep_current_pairwise_agreement": 0.6,
+    "preprocessing_parity_passed": false
+  },
+  "gates": {
+    "minimum_acceptance_clusters": false,
+    "minimum_scene_clusters": false,
+    "teacher_crop_agreement": false,
+    "bootstrap_above_chance": false,
+    "beats_rule_baseline": true,
+    "hard_constraints": true,
+    "severe_defect_non_regression": true,
+    "weight_budget": true,
+    "beats_keep_current_baseline": false,
+    "preprocessing_parity": false
+  },
+  "reasons": [
+    "minimum_acceptance_clusters",
+    "minimum_scene_clusters",
+    "teacher_crop_agreement",
+    "bootstrap_above_chance",
+    "beats_keep_current_baseline",
+    "preprocessing_parity"
+  ],
+  "weak_teacher_only": true,
+  "historical_holdout_excluded": true,
+  "previous_quality_acceptance_excluded": true,
+  "crop_advice_enabled": false,
+  "physical_movement_prediction_enabled": false,
+  "training_protocol_sha256": "914aa98578ac7a0a361141caeabdb40267c9664a5f1ccdb529107067a170e54d",
+  "encoder_sha256": "f7f76fa326e0bf089eeb98c7df6ca9ca8225719fa80d482919216dff7504a9cf",
+  "crop_preprocessing": "viewport_native_max416_then_crop_bilinear224_v1",
+  "acceptance_report_sha256": "eda29336b0fd9e741b57dc81ecad370a9c2563716ad7a956ac0d1ab42f4aa308",
+  "per_scene": {
+    "portrait": {
+      "acceptance_cluster_count": 2,
+      "pair_count": 2,
+      "pairwise_agreement": 0.5,
+      "bootstrap_lower95": 0.0,
+      "baseline_pairwise_agreement": 0.5,
+      "coverage": 1.0,
+      "rejection_rate": 0.0,
+      "scene_cluster_counts": {
+        "portrait": 2
+      },
+      "keep_current_pairwise_agreement": 0.5
+    },
+    "landscape": {
+      "acceptance_cluster_count": 12,
+      "pair_count": 17,
+      "pairwise_agreement": 0.5833333333333334,
+      "bootstrap_lower95": 0.3333333333333333,
+      "baseline_pairwise_agreement": 0.5416666666666666,
+      "coverage": 1.0,
+      "rejection_rate": 0.0,
+      "scene_cluster_counts": {
+        "landscape": 12
+      },
+      "keep_current_pairwise_agreement": 0.5833333333333334
+    },
+    "food": {
+      "acceptance_cluster_count": 3,
+      "pair_count": 5,
+      "pairwise_agreement": 0.0,
+      "bootstrap_lower95": 0.0,
+      "baseline_pairwise_agreement": 0.0,
+      "coverage": 1.0,
+      "rejection_rate": 0.0,
+      "scene_cluster_counts": {
+        "food": 3
+      },
+      "keep_current_pairwise_agreement": 0.3333333333333333
+    },
+    "still_life": {
+      "acceptance_cluster_count": 3,
+      "pair_count": 6,
+      "pairwise_agreement": 0.5,
+      "bootstrap_lower95": 0.0,
+      "baseline_pairwise_agreement": 0.3333333333333333,
+      "coverage": 0.8333333333333334,
+      "rejection_rate": 0.16666666666666663,
+      "scene_cluster_counts": {
+        "still_life": 3
+      },
+      "keep_current_pairwise_agreement": 1.0
+    }
+  },
+  "preprocessing_audit": {
+    "training": "Pillow thumbnail max416 BILINEAR, crop, Pillow BILINEAR224",
+    "runtime_required": "viewport_native416_halfpixel_round_crop_rgb224_halfpixel_round_v2",
+    "current_embedding_training": "independently encoded thumbnail416 current view",
+    "current_embedding_old_runtime": "retrieval embedding from original viewport to224",
+    "passed": false,
+    "old_acceptance_reexecuted": false,
+    "note": "V2 preprocessing fixtures do not validate or relabel the V1 trained model."
+  },
+  "supplemental_protocol_sha256": "1f07fb446055d0fa806d6388c1090c4530624ca0e9db53882e9954b8f4f627d0",
+  "metric_semantics": "Source-cluster macro agreement with CLIP aesthetic teacher stable under JPEG90; not human aesthetic accuracy. Model ties count incorrect.",
+  "teacher_stable_crop_coverage": 0.24193548387096775
+}

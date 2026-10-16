@@ -8,7 +8,7 @@
   "license": "Apache-2.0",
   "license_sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
   "license_url": "https://raw.githubusercontent.com/opencv/opencv_zoo/47534e27c9851bb1128ccc0102f1145e27f23f98/models/object_detection_nanodet/LICENSE",
-  "preprocessing": "viewport_rgb224_bilinear416_bgr_mean_std_v1",
+  "preprocessing": "viewport_native_letterbox416_bgr_mean_std_v2",
   "input": {
     "name": "input.1",
     "shape": [
@@ -138,7 +138,19 @@
   ],
   "limits": [
     "Object detection is not segmentation or aesthetic assessment.",
-    "Input uses a 224 px preview; no native 416 px detail or phone latency claim.",
+    "Native viewport detail is retained up to 416 pixels; desktop results do not establish phone latency.",
     "Automatic labels may be incorrect; ambiguous or clipped subjects must not drive movement."
-  ]
+  ],
+  "native_input": {
+    "source": "shared upright mirrored camera viewport",
+    "max_side": 416,
+    "resize": "half_pixel_bilinear_rgb_round_uint8",
+    "letterbox_rgb": [
+      114,
+      114,
+      114
+    ],
+    "padding": "integer centred, residual pixel on right/bottom",
+    "boxes": "inverse letterbox into normalized viewport"
+  }
 }

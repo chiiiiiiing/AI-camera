@@ -125,7 +125,10 @@ class CompositionSessionController {
         /** FACE and OBJECT use different detectors; a COCO object never counts as a face. */
         val observedAnchorKind: ObservedAnchorKind = ObservedAnchorKind.FACE,
         /** False only when a fresh IMU confirms the gravity axis cannot establish image roll. */
-        val rollObservable: Boolean = true
+        val rollObservable: Boolean = true,
+        val executionQuality: ExecutionQualityEvidence? = null,
+        /** Enabled by the real model path; legacy/fake geometry fixtures cannot invent image evidence. */
+        val executionQualityRequired: Boolean = false
     )
 
     private val _state = MutableStateFlow<State>(State.Idle)
@@ -154,6 +157,9 @@ class CompositionSessionController {
     private var lastTrackingId: Int? = null
     private var lastAcceptedAt = -1L
     private var lastAnchorKind: ObservedAnchorKind? = null
+    private val executionGuard = ExecutionQualityGuard()
+    private var lastExecutionId = -1L
+    private var lastCaptureEvidence: FrameObservation? = null
 
 
     // ── 滞回状态 ──
@@ -186,6 +192,18 @@ class CompositionSessionController {
     /** 开始拍照 */
     fun startCapture() {
         _state.value = State.Capturing
+    }
+
+    /** Called again after asynchronous AF/AE. Ready is a lease on live evidence, not a latch. */
+    fun confirmReadyForCapture(nowMs:Long):Boolean {
+        val obs=lastCaptureEvidence
+        val subjectAge=if(obs?.observedAnchorKind==ObservedAnchorKind.OBJECT)1500L else 750L
+        fun fresh(time:Long,maxAge:Long)=nowMs>=time && nowMs-time<=maxAge
+        val valid=_state.value is State.Ready && obs!=null && fresh(obs.timestampMs,750) && fresh(obs.imuSampledAtMs,1500) &&
+            (!(obs.expectsSubject || obs.hasRealSubject) || fresh(obs.subjectSampledAtMs,subjectAge)) &&
+            (!obs.executionQualityRequired || obs.executionQuality?.isFresh(nowMs)==true)
+        if(!valid && _state.value is State.Ready && obs!=null)hold(obs.copy(timestampMs=nowMs),GuidanceFeedback.INSUFFICIENT_EVIDENCE)
+        return valid
     }
 
     /** 拍照完成 */
@@ -248,6 +266,31 @@ class CompositionSessionController {
             hold(input, GuidanceFeedback.INSUFFICIENT_EVIDENCE)
             return
         }
+        var executionComparison = ExecutionComparison.COMPARABLE
+        if(input.executionQualityRequired) {
+            val quality=input.executionQuality
+            val box=quality?.subjectBox
+            val comparableSubject=!requiresSubject || (quality?.subjectTrackingId==input.subjectTrackingId && box!=null &&
+                input.subjectCx?.let { abs(it-box.centerX)<=.03f }==true && input.subjectCy?.let { abs(it-box.centerY)<=.03f }==true)
+            if(quality==null || !quality.isFresh(input.timestampMs) || quality.viewportVersion!=input.viewportVersion || !comparableSubject) {
+                hold(input,GuidanceFeedback.INSUFFICIENT_EVIDENCE)
+                return
+            }
+            executionComparison=if(quality.observationId<=lastExecutionId) ExecutionComparison.CACHED else executionGuard.compare(quality)
+            lastExecutionId=maxOf(lastExecutionId,quality.observationId)
+            if(executionComparison==ExecutionComparison.CONTEXT_CHANGED || executionComparison==ExecutionComparison.UNATTRIBUTED_MOTION) {
+                previousError=null;previousQuality=null;lastImprovedAt=input.timestampMs
+                hold(input,GuidanceFeedback.SCENE_CHANGED)
+                return
+            }
+            if(executionComparison==ExecutionComparison.QUALITY_REGRESSED) {
+                // A closer target is not a success if the measured image becomes worse.
+                pausedTarget=input.targetId ?: "${input.targetCx}:${input.targetCy}:${input.pitchTargetDegrees}:${input.yawTargetDegrees}"
+                lockedTarget=null
+                hold(input,GuidanceFeedback.WORSENING)
+                return
+            }
+        }
         // Cached evidence may render, but can never confirm progress or Ready a second time.
         if (input.imuObservationId <= lastImuId || (requiresSubject && input.subjectObservationId <= lastSubjectId)) {
             // A new bad measurement can revoke Ready even when the other sensor is cached.
@@ -268,6 +311,7 @@ class CompositionSessionController {
             }
             return
         }
+        if(executionComparison==ExecutionComparison.CACHED)return
         if (lastAcceptedAt >= 0 && input.timestampMs-lastAcceptedAt > 1500) {
             lockedTarget = null; previousError = null; previousQuality = null; worseningCount = 0
             lastImprovedAt = input.timestampMs
@@ -301,7 +345,8 @@ class CompositionSessionController {
         val error = measuredError(obs)
         val previous = previousError
         val qualityWorse = obs.qualityScore?.let { q -> previousQuality?.let { q < it-.1f } } == true
-        val improving = previous != null && error != null && error < previous-.015f
+        val improving = previous != null && error != null && error < previous-.015f &&
+            executionComparison==ExecutionComparison.COMPARABLE
         if (lastImprovedAt < 0 || improving) lastImprovedAt = obs.timestampMs
         if(obs.observedAnchorKind == ObservedAnchorKind.OBJECT &&
             (nextAction is GuidanceAction.HoldStill || _action.value is GuidanceAction.HoldStill)) lastImprovedAt=obs.timestampMs
@@ -341,7 +386,8 @@ class CompositionSessionController {
                 _state.value is State.Verifying -> GuidanceFeedback.VERIFYING
                 improving -> GuidanceFeedback.IMPROVING
                 nextAction is GuidanceAction.HoldStill -> GuidanceFeedback.INSUFFICIENT_EVIDENCE
-                else -> GuidanceFeedback.ADJUSTING }, obs.subjectObservationId)
+                else -> GuidanceFeedback.ADJUSTING }, obs.subjectObservationId,reasons=executionGuard.lastReasons)
+        if(_state.value is State.Ready)lastCaptureEvidence=obs
     }
 
     private fun hold(obs: FrameObservation, feedback: GuidanceFeedback) {
@@ -349,7 +395,8 @@ class CompositionSessionController {
         levelGoodFrames = 0; positionGoodFrames = 0
         _state.value = State.Adjusting(GuidanceAction.HoldStill, 0f)
         _action.value = GuidanceAction.HoldStill
-        _decision.value = GuidanceDecision(GuidanceAction.HoldStill, obs.targetId, measuredError(obs), feedback, obs.subjectObservationId)
+        _decision.value = GuidanceDecision(GuidanceAction.HoldStill, obs.targetId, measuredError(obs), feedback, obs.subjectObservationId,
+            reasons=executionGuard.lastReasons)
     }
 
     private fun measuredError(obs: FrameObservation): Float? {
@@ -515,6 +562,8 @@ class CompositionSessionController {
         lockedTarget = null; previousError = null; previousQuality = null; worseningCount = 0
         lastImprovedAt = -1; pausedTarget = null; replanned = false; lastTimestamp = -1
         lastAcceptedAt = -1; lastTrackingId = null
+        executionGuard.reset(); lastExecutionId=-1L
+        lastCaptureEvidence=null
         if (resetFrameSequence) { lastAppliedFrameId = -1; viewportVersion = null; lastAnchorKind = null }
     }
 }

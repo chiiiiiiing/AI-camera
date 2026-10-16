@@ -21,8 +21,9 @@ data class ObjectDetection(val classId: Int, val confidence: Float, val box: Nor
 
 /**
  * Pinned OpenCV Zoo NanoDet-m-plus 1.5x. Shares ONNX Runtime with retrieval.
- * The input is our existing square 224 px viewport thumbnail, enlarged to 416;
- * this does not claim native 416 px detection detail. All boxes use that viewport.
+ * detectNative consumes a native-viewport 416 letterbox and maps boxes back to
+ * the original preview. detect(bitmap) retains the explicit old 224 protocol
+ * for historical evaluation, and must not be silently mixed with new references.
  * Caller owns scheduling, sample times, camera generation and fallback on failure.
  */
 class NanoDetRuntime(modelFile: File) : Closeable {
@@ -70,6 +71,23 @@ class NanoDetRuntime(modelFile: File) : Closeable {
         val pixels = IntArray(bitmap.width * bitmap.height)
         bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
         val input = pixelsToInput(pixels, bitmap.width, bitmap.height)
+        return runInput(input)
+    }
+
+    @Synchronized
+    fun detectNative(frame: PreprocessedFrame): List<ObjectDetection> {
+        check(!closed) { "NanoDet session is closed" }
+        val bitmap = frame.detectionBitmap ?: return emptyList()
+        val transform = frame.detectionTransform ?: return emptyList()
+        require(bitmap.width == INPUT_SIZE && bitmap.height == INPUT_SIZE && !bitmap.isRecycled)
+        val pixels = IntArray(INPUT_SIZE * INPUT_SIZE)
+        bitmap.getPixels(pixels, 0, INPUT_SIZE, 0, 0, INPUT_SIZE, INPUT_SIZE)
+        return runInput(letterboxPixelsToInput(pixels)).mapNotNull { detection ->
+            transform.toViewport(detection.box)?.let { detection.copy(box = it) }
+        }
+    }
+
+    private fun runInput(input: FloatArray): List<ObjectDetection> {
         OnnxTensor.createTensor(env, FloatBuffer.wrap(input), longArrayOf(1, 3, 416, 416)).use { tensor ->
             session.run(mapOf(INPUT_NAME to tensor)).use { result ->
                 // Lookup by actual graph output names: no Set iteration order or
@@ -96,6 +114,7 @@ class NanoDetRuntime(modelFile: File) : Closeable {
         const val MODEL_SHA256 = "4b82da9944b88577175ee23a459dce2e26e6e4be573def65b1055dc2d9720186"
         const val MODEL_BYTES = 3800954L
         const val PREPROCESSING = "viewport_rgb224_bilinear416_bgr_mean_std_v1"
+        const val NATIVE_PREPROCESSING = "viewport_native_letterbox416_bgr_mean_std_v2"
         private const val INPUT_SIZE = 416
         private const val INPUT_NAME = "input.1"
         internal val STRIDES = intArrayOf(8, 16, 32)
@@ -103,6 +122,16 @@ class NanoDetRuntime(modelFile: File) : Closeable {
         internal val BOX_NAMES = listOf("795", "817", "839")
         private val MEANS = floatArrayOf(103.53f, 116.28f, 123.675f)
         private val STDS = floatArrayOf(57.375f, 57.12f, 58.395f)
+
+        internal fun letterboxPixelsToInput(pixels: IntArray): FloatArray {
+            val plane = INPUT_SIZE * INPUT_SIZE
+            require(pixels.size == plane)
+            return FloatArray(3 * plane) { index ->
+                val channel = index / plane
+                val value = ((pixels[index % plane] ushr (channel*8)) and 255).toFloat()
+                (value-MEANS[channel])/STDS[channel]
+            }
+        }
 
         private fun sha256(file: File): String {
             val digest = MessageDigest.getInstance("SHA-256")
