@@ -7,7 +7,8 @@ const root = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(root, '..');
 const res = resolve(repo, 'aicamera-app/app/src/main/res/drawable-nodpi');
 const src = resolve(repo, 'aicamera-app/app/src/main/java/com/example/aicamera');
-const mime = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.png':'image/png'};
+const webAssets = resolve(root, 'assets');
+const mime = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.png':'image/png','.svg':'image/svg+xml; charset=utf-8'};
 function files(dir) {
   return readdirSync(dir,{withFileTypes:true}).flatMap(e => e.isDirectory() ? files(resolve(dir,e.name)) : [resolve(dir,e.name)]);
 }
@@ -36,8 +37,11 @@ export const server=http.createServer((req,resp)=>{
     let path;
     if(url.pathname.startsWith('/assets/')) {
       const name=decodeURIComponent(url.pathname.slice(8));
-      if(!/^[a-z0-9_]+\.png$/.test(name)) throw Error('Invalid asset');
-      path=resolve(res,name);
+      if(!/^[a-z0-9_/-]+\.(png|svg)$/.test(name)) throw Error('Invalid asset');
+      const localPath=resolve(webAssets,name);
+      if(!localPath.startsWith(webAssets+sep)) throw Error('Invalid asset path');
+      path=existsSync(localPath)?localPath:resolve(res,name);
+      if(!existsSync(path)) throw Error('Missing asset');
     } else if(url.pathname==='/source') {
       const name=url.searchParams.get('file')||'';
       path=resolve(src,name);

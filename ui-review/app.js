@@ -143,24 +143,41 @@ function auxDemo(){
   '</div>';
 }
 // 以用户提供的真机截图与 Android drawable-nodpi 原始资源为准。
+function poseGuideCard(asset,title,subtitle,stateClass){
+ const live='<svg class="pose-live" viewBox="0 0 390 748" preserveAspectRatio="none" aria-label="当前人物实时轮廓"><path d="M69 705 C72 620 74 520 80 438 C84 386 101 350 132 331 C146 322 153 310 153 292 C147 273 147 252 153 233 C162 205 184 190 211 188 C244 186 269 202 278 228 C286 249 284 273 275 293 C269 307 274 319 289 327 C322 344 341 381 350 435 C360 500 360 604 362 705 M153 233 C158 211 177 195 204 192 C231 190 253 202 265 221 C278 241 279 268 268 288 C256 309 235 320 210 318 C181 316 160 299 153 276 M132 331 C166 316 198 315 226 318 C250 319 270 323 289 327"/></svg>';
+ const reference=stateClass==='verifying'||stateClass==='aligned'||stateClass==='lost'?'':'<div class="pose-reference"><small>目标姿势</small><img src="'+site('/assets/pose-v8/'+asset)+'" alt="'+title+'目标模板"></div>';
+ return '<div class="pose-guide '+stateClass+'" data-layer="人物姿势引导">'+live+reference+
+  '<div class="pose-guide-copy"><b>'+title+'</b><span>'+subtitle+'</span></div></div>';
+}
 function stageOverlay(){
  const s=stageOf();
  if(s===1)return phoneGuideCard('guidance_roll_off.png','旋转手机','向右旋转');
  if(s===2)return phoneGuideCard('guidance_roll_aligned.png','调整构图','',true);
- return phoneGuideCard('guidance_pitch_cw_misaligned.png','调整俯仰','向上倾斜');
+ if(s===3)return phoneGuideCard('guidance_pitch_cw_misaligned.png','调整俯仰','向上倾斜');
+ if(s===4)return poseGuideCard('demo_seated_window_target.svg','人物姿势目标','保持坐姿，视线自然望向窗外','target');
+ if(s===5)return poseGuideCard('demo_seated_window_target.svg','调整人物姿势','肩部放松，脸部轻微转向窗外','adjusting');
+ if(s===6)return poseGuideCard('demo_seated_window_target.svg','正在验证姿势','保持坐姿与视线方向','verifying');
+ if(s===7)return poseGuideCard('demo_seated_window_target.svg','姿势已对齐','保持自然坐姿，可以拍摄','aligned');
+ return poseGuideCard('demo_seated_window_target.svg','未检测到人物','请重新回到座位与取景区域','lost');
 }
 function stepControls(){
- const s=guideStep||1, names=['','① 旋转手机','② 调整构图','③ 调整俯仰'];
+ const s=guideStep||1, names=['','① 旋转手机','② 调整构图','③ 调整俯仰','④ 姿势目标','⑤ 姿势调整','⑥ 姿势验证','⑦ 姿势对齐','⑧ 跟踪丢失'];
  return '<div class="step-ctl"><span class="step-ctl-label">分步引导演示 · '+names[s]+'</span><span class="spacer"></span>'+
   (s>1?btn('← 上一步','step-prev','quiet'):'')+
-  (s<3?btn('下一步 →','step-next','primary'):btn('重新演示','step-reset','primary'))+
+  (s<8?btn('下一步 →','step-next','primary'):btn('重新演示','step-reset','primary'))+
   '</div>';
 }
 function stageProgress(){
- const s=stageOf(), xs=[12,50,88], active=s-1;
- const status=s===1?'第 1 步：调整手机姿态':s===2?'第 2 步：确认构图':'第 3 步：调整俯仰';
- const dots=xs.map((x,i)=>{const done=i<active;const on=i===active;return '<span class="wf-dot'+(on?' active':'')+(done?' done':'')+'" style="left:'+x+'%"></span>'}).join('');
- return '<div class="wf-bar" data-layer="工作流进度"><div class="wf-track"><span class="wf-connector"></span>'+(active>0?'<span class="wf-fill" style="width:'+(xs[active]-xs[0])+'%"></span>':'')+dots+'</div><span class="wf-status'+(s===2?' ready':'')+'">'+status+'</span></div>';
+ const s=stageOf();
+ if(s<=3){
+  const xs=[12,50,88], active=s-1;
+  const status=s===1?'第 1 步：调整手机姿态':s===2?'第 2 步：确认构图':'第 3 步：调整俯仰';
+  const dots=xs.map((x,i)=>'<span class="wf-dot'+(i===active?' active':'')+(i<active?' done':'')+'" style="left:'+x+'%"></span>').join('');
+  return '<div class="wf-bar" data-layer="设备姿态进度"><div class="wf-track"><span class="wf-connector"></span>'+(active>0?'<span class="wf-fill" style="width:'+(xs[active]-xs[0])+'%"></span>':'')+dots+'</div><span class="wf-status">'+status+'</span></div>';
+ }
+ const labels=['目标','调整','验证','对齐','丢失'], active=s-4;
+ const dots=labels.map((label,i)=>'<span class="pose-progress-dot '+(i===active?'active ':'')+(i<active&&active<4?'done ':'')+(active===3&&i<=3?'done ':'')+'"><i></i><small>'+label+'</small></span>').join('');
+ return '<div class="pose-progress" data-layer="人物姿势进度"><b>人物姿势引导</b><div>'+dots+'</div></div>';
 }
 function filterStrip(){return '<div class="filterstrip">'+filters.map((f,i)=>btn('<img src="'+image()+'" style="filter:'+effects[i]+'" alt="'+f+'封面">'+f,'filter:'+i,!data.activeCustomId&&i===filter?'selected':'')).join('')+route('<img src="'+image()+'" alt="自定义滤镜">＋ 自定义','filter-editor')+(data.filters||[]).map(f=>btn('<img src="'+image()+'" data-custom-cover="'+escape(f.id||f.name)+'" alt="'+escape(f.name)+'封面">'+escape(f.name),'custom-filter:'+(f.id||f.name),data.activeCustomId===(f.id||f.name)?'selected':'')).join('')+'</div>'}
 function proPanel(){
@@ -368,7 +385,7 @@ document.addEventListener('click',e=>{
  case 'code':toast('验证码入口交互演示，不发送短信');break;
  case 'third-party':toast('与当前 App 一致：此入口尚未接入第三方登录');break;
  case 'agreement':toast('用户服务协议（演示）');break;
- case 'step-next':guideStep=Math.min(3,(guideStep||1)+1);render();break;
+ case 'step-next':guideStep=Math.min(8,(guideStep||1)+1);render();break;
  case 'step-prev':guideStep=Math.max(1,(guideStep||1)-1);render();break;
  case 'step-reset':guideStep=1;render();break;
  case 'logout':if(confirm('确定退出当前账号？'))goto('login');break;

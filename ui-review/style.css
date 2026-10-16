@@ -98,3 +98,45 @@ svg{fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-l
 .phone-guide-panel>img{display:none!important}
 .guide-asset-overview .phone-guide-icon{width:62px;height:58px}
 .guide-asset-overview .phone-guide.is-pitch .phone-guide-icon{width:96px;height:48px}
+
+
+/* 人物姿势引导 v8：正式轮廓 SVG；调试关键点图不进入相机 UI。 */
+.pose-guide{position:absolute;inset:120px 0 160px;z-index:5;pointer-events:none;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.pose-guide>img{width:58%!important;height:74%!important;object-fit:contain!important;filter:drop-shadow(0 2px 4px rgba(0,0,0,.5))}
+.pose-guide-copy{margin-top:5px;padding:8px 15px;border-radius:13px;background:rgba(0,0,0,.48);display:flex;flex-direction:column;align-items:center;gap:3px;color:#fff}
+.pose-guide-copy b{font-size:16px;font-weight:600}.pose-guide-copy span{font-size:12px;opacity:.82}
+.pose-guide.adjusting .pose-guide-copy b{color:#f4b6c2}.pose-guide.aligned .pose-guide-copy{color:#8ce0c3}.pose-guide.lost{opacity:.64}
+.pose-progress{position:absolute;left:10%;right:10%;top:96px;z-index:6;color:#fff;text-align:center;pointer-events:none}
+.pose-progress>b{font-size:12px;font-weight:500}.pose-progress>div{margin-top:7px;display:flex;justify-content:space-between;position:relative}
+.pose-progress>div:before{content:"";position:absolute;left:8%;right:8%;top:5px;height:2px;background:rgba(255,255,255,.24)}
+.pose-progress-dot{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:9px;color:rgba(255,255,255,.58)}
+.pose-progress-dot i{width:10px;height:10px;border-radius:50%;background:#777;box-shadow:0 0 0 2px rgba(0,0,0,.18)}
+.pose-progress-dot.active i{width:14px;height:14px;margin:-2px;background:#f4b6c2}.pose-progress-dot.done i{background:#8ce0c3}.pose-progress-dot.done{color:#8ce0c3}
+.pose-guide.verifying>img{animation:pose-pulse 1.3s ease-in-out infinite alternate}@keyframes pose-pulse{to{opacity:.62}}
+@media(prefers-reduced-motion:reduce){.pose-guide.verifying>img{animation:none}}
+
+/* v8 姿势模板配准到当前演示人像的可视区域。 */
+.pose-guide>img{width:66%!important;height:84%!important;transform:translateY(44px)}
+.pose-guide-copy{transform:translateY(22px)}
+
+
+/* 将实时人物轮廓配准到演示照片；v8 抬手模板作为独立目标参考，不再错误套在人脸上。 */
+.pose-guide{inset:40px 0 160px;display:block}
+.pose-guide>img{display:none!important}
+.pose-live{position:absolute;inset:0;width:100%;height:100%;overflow:visible;color:rgba(255,255,255,.88);filter:drop-shadow(0 1px 2px rgba(0,0,0,.75))}
+.pose-live path{fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.pose-guide.target .pose-live{color:rgba(255,255,255,.55)}
+.pose-guide.adjusting .pose-live{color:rgba(255,255,255,.9)}
+.pose-guide.verifying .pose-live{color:rgba(255,255,255,.9);animation:pose-pulse 1.3s ease-in-out infinite alternate}
+.pose-guide.aligned .pose-live{color:#8ce0c3}
+.pose-guide.lost .pose-live{color:rgba(255,255,255,.32);stroke-dasharray:9 8}
+.pose-reference{position:absolute;right:13px;top:92px;width:94px;padding:7px 6px 5px;border-radius:14px;background:rgba(12,12,16,.62);border:1px solid rgba(255,255,255,.18);text-align:center;color:#fff}
+.pose-reference small{display:block;font-size:9px;opacity:.72;margin-bottom:3px}
+.pose-reference img{display:block!important;width:100%!important;height:130px!important;object-fit:contain!important;transform:none!important;filter:none!important}
+.pose-guide-copy{position:absolute;left:50%;bottom:18px;transform:translateX(-50%)!important;margin:0;white-space:nowrap}
+.pose-guide.adjusting:after{content:"↗";position:absolute;left:120px;top:306px;color:#f4b6c2;font-size:38px;font-weight:300;transform:rotate(-18deg);text-shadow:0 1px 3px #000}
+@media(prefers-reduced-motion:reduce){.pose-guide.verifying .pose-live{animation:none}}
+
+
+/* 当前演示场景是坐姿窗边人像，纠错方向改为轻微转头，而不是抬手。 */
+.pose-guide.adjusting:after{content:"↗";left:274px;top:205px;transform:rotate(-8deg)}
