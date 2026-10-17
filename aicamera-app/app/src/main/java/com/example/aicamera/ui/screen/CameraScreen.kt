@@ -125,6 +125,15 @@ import kotlinx.coroutines.launch
  *
  * 预览使用真机画面，工作流叠加层根据真实观测绘制；静态验收站只复现其 UI 状态。
  */
+
+/**
+ * ANALYZING 状态的让位延迟。
+ *
+ * 旧值固定 800ms 空等，是拍摄提速的主要瓶颈之一。
+ * 压到 150ms —— 仍留一帧的余量让状态文案可感知，但不再成为阻碍。
+ */
+private const val ANALYZE_SETTLE_MS = 150L
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CameraScreen(
@@ -321,7 +330,7 @@ fun CameraScreen(
                     result.processingWarning?.let {
                         Toast.makeText(context, it, Toast.LENGTH_LONG).show()
                     }
-                    delay(350)
+                    delay(200)
                     showCaptureResult = true
                 }
                 is com.example.aicamera.camera.CameraCapture.CaptureResult.Error -> {
@@ -501,8 +510,8 @@ fun CameraScreen(
         when (sessionState) {
             is CompositionSessionController.State.Analyzing -> {
                 // ★ 修复：不再强制重置用户 Zoom（尊重用户手动选择的焦段）
-                // 分析阶段持续 800ms
-                delay(800)
+                // 分析阶段：快速让位给引导，不再固定空等 800ms
+                delay(ANALYZE_SETTLE_MS)
                 renderViewModel.sessionController.onAnalysisComplete()
             }
             is CompositionSessionController.State.Ready -> {

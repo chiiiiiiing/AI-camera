@@ -369,7 +369,7 @@ class CompositionSessionController {
         if (nextAction is GuidanceAction.Ready) {
             if (readySamples == 0) firstReadyAt = obs.timestampMs
             readySamples++
-            if (readySamples >= 3 && obs.timestampMs-firstReadyAt >= 750) {
+            if (readySamples >= READY_SAMPLE_COUNT && obs.timestampMs-firstReadyAt >= READY_HOLD_MS) {
                 _state.value = State.Ready
                 _action.value = GuidanceAction.Ready
             } else {
@@ -552,6 +552,18 @@ class CompositionSessionController {
         obs.subjectCy != null && obs.subjectCy.isFinite() && obs.subjectCy in 0f..1f &&
         GuidanceGeometry.isValidTarget(obs.targetCx, obs.targetCy, obs.targetTolerance) &&
         obs.coordinateAspectRatio.isFinite() && obs.coordinateAspectRatio > 0f
+
+    companion object {
+        /**
+         * READY 确认门槛。
+         *
+         * 旧值 3 帧 / 750ms 让「辅助」变成阻碍：用户对齐后还要再等近 1 秒。
+         * 现在 2 帧 / 300ms —— 仍要求连续正向观测（防单帧抖动误拍），
+         * 但把无意义的等待压到感知阈值以下。
+         */
+        const val READY_SAMPLE_COUNT = 2
+        const val READY_HOLD_MS = 300L
+    }
 
     private fun resetCounters(resetFrameSequence: Boolean = true) {
         levelGoodFrames = 0

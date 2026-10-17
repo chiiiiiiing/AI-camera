@@ -28,6 +28,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -43,6 +45,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.aicamera.data.AuthRepository
+import com.example.aicamera.data.CommunityRepository
 import com.example.aicamera.ui.auth.AuthField
 import com.example.aicamera.ui.auth.AuthFieldIcon
 import com.example.aicamera.ui.auth.BrandPrimaryButton
@@ -73,6 +76,8 @@ fun EditProfileScreen(
     LightSystemBars()
     val context = LocalContext.current
     val authRepo = remember { AuthRepository.getInstance(context) }
+    val communityRepo = remember { CommunityRepository.getInstance(context) }
+    val scope = rememberCoroutineScope()
 
     var username by remember { mutableStateOf(authRepo.currentUsername ?: "") }
     var bio by remember { mutableStateOf(authRepo.currentBio ?: "") }
@@ -160,13 +165,29 @@ fun EditProfileScreen(
             enabled = true,
             onClick = {
                 val trimmed = username.trim()
-                if (trimmed.length in 2..20) {
-                    authRepo.updateUsername(trimmed)
-                    authRepo.updateBio(bio)
-                    avatarUri?.let { authRepo.saveAvatarUri(it.toString()) }
-                    onBack()
-                } else {
+                if (trimmed.length !in 2..20) {
                     Toast.makeText(context, "昵称需要 2-20 个字符", Toast.LENGTH_SHORT).show()
+                } else {
+                    val oldName = authRepo.currentUsername
+                    // 先迁移社区侧引用（帖子/评论/点赞/收藏/关注），再改本地用户名，
+                    // 否则个人主页会立刻变空、旧作品变孤儿。
+                    scope.launch {
+                        if (!oldName.isNullOrBlank() && oldName != trimmed) {
+                            runCatching { communityRepo.renameAuthor(oldName, trimmed) }
+                                .onFailure { Toast.makeText(context, "社区数据迁移失败，昵称未修改", Toast.LENGTH_SHORT).show() }
+                                .onSuccess {
+                                    authRepo.updateUsername(trimmed)
+                                    authRepo.updateBio(bio)
+                                    avatarUri?.let { authRepo.saveAvatarUri(it.toString()) }
+                                    onBack()
+                                }
+                        } else {
+                            authRepo.updateUsername(trimmed)
+                            authRepo.updateBio(bio)
+                            avatarUri?.let { authRepo.saveAvatarUri(it.toString()) }
+                            onBack()
+                        }
+                    }
                 }
             },
         )

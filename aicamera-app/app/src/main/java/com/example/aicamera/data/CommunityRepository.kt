@@ -1,11 +1,16 @@
 package com.example.aicamera.data
 
+import android.content.Context
 import com.example.aicamera.data.db.CommunityComment
 import com.example.aicamera.data.db.CommunityDao
 import com.example.aicamera.data.db.CommunityFavorite
 import com.example.aicamera.data.db.CommunityLike
 import com.example.aicamera.data.db.CommunityPost
 import com.example.aicamera.data.db.UserFollow
+import dagger.hilt.EntryPoint
+import dagger.hilt.EntryPoints
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -55,15 +60,7 @@ class CommunityRepository @Inject constructor(
         dao.observeIsLiked(postId, username)
 
     suspend fun toggleLike(postId: Long, username: String) {
-        withContext(Dispatchers.IO) {
-            if (dao.isLiked(postId, username)) {
-                dao.deleteLike(CommunityLike(postId, username))
-                dao.decrementLikes(postId)
-            } else {
-                dao.insertLike(CommunityLike(postId, username))
-                dao.incrementLikes(postId)
-            }
-        }
+        withContext(Dispatchers.IO) { dao.toggleLikeAtomic(postId, username) }
     }
 
     fun getLikedPosts(username: String): Flow<List<CommunityPost>> =
@@ -78,13 +75,7 @@ class CommunityRepository @Inject constructor(
         dao.observeIsFavorited(postId, username)
 
     suspend fun toggleFavorite(postId: Long, username: String) {
-        withContext(Dispatchers.IO) {
-            if (dao.isFavorited(postId, username)) {
-                dao.deleteFavorite(CommunityFavorite(postId, username))
-            } else {
-                dao.insertFavorite(CommunityFavorite(postId, username))
-            }
-        }
+        withContext(Dispatchers.IO) { dao.toggleFavoriteAtomic(postId, username) }
     }
 
     fun getFavoritedPosts(username: String): Flow<List<CommunityPost>> =
@@ -104,13 +95,7 @@ class CommunityRepository @Inject constructor(
         dao.observeIsFollowing(follower, following)
 
     suspend fun toggleFollow(follower: String, following: String) {
-        withContext(Dispatchers.IO) {
-            if (dao.isFollowing(follower, following)) {
-                dao.deleteFollow(UserFollow(follower, following))
-            } else {
-                dao.insertFollow(UserFollow(follower, following))
-            }
-        }
+        withContext(Dispatchers.IO) { dao.toggleFollowAtomic(follower, following) }
     }
 
     fun followerCount(username: String): Flow<Int> = dao.observeFollowerCount(username)
@@ -120,6 +105,43 @@ class CommunityRepository @Inject constructor(
     fun getFollowers(username: String): Flow<List<String>> = dao.getFollowers(username)
 
     fun getFollowing(username: String): Flow<List<String>> = dao.getFollowing(username)
+
+    // ── 昵称迁移 ──
+
+    /**
+     * 改昵称后把社区侧的作者/用户引用一起迁移。
+     *
+     * 不迁移会出现：个人主页立刻变空、旧作品变孤儿、关注列表指向不存在的用户。
+     * 由 EditProfileScreen 在 [AuthRepository.updateUsername] 之前调用。
+     */
+    suspend fun renameAuthor(oldName: String, newName: String) {
+        withContext(Dispatchers.IO) {
+            dao.renameAuthorEverywhere(oldName.trim(), newName.trim())
+        }
+    }
+
+    companion object {
+        @EntryPoint
+        @InstallIn(SingletonComponent::class)
+        interface RepoEntryPoint {
+            fun communityDao(): CommunityDao
+        }
+
+        @Volatile
+        private var INSTANCE: CommunityRepository? = null
+
+        /**
+         * 供非 Hilt 注入的 Compose 页面（如 EditProfileScreen）取用同一实例。
+         * 与 [AuthRepository.getInstance] 模式一致。
+         */
+        fun getInstance(context: Context): CommunityRepository =
+            INSTANCE ?: synchronized(this) {
+                INSTANCE ?: CommunityRepository(
+                    EntryPoints.get(context.applicationContext, RepoEntryPoint::class.java)
+                        .communityDao()
+                ).also { INSTANCE = it }
+            }
+    }
 
     // ── 种子数据 ──
 

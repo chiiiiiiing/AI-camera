@@ -222,12 +222,16 @@ private fun WorkflowGuideLines(
                 when (line.type) {
                     GuideLineType.SUBJECT_BOX -> if (showSubjectBox) {
                         val box = GuideLineParser.parseSubjectBox(line.params)
+                        // 对齐设计稿「人形虚线轮廓」：改用虚线描边，不再是实线矩形框
                         drawRoundRect(
                             color = (if (box.aligned) GuideAligned else BrandPink).copy(alpha = opacity),
                             topLeft = Offset(box.x * size.width, box.y * size.height),
                             size = Size(box.width * size.width, box.height * size.height),
                             cornerRadius = CornerRadius(10.dp.toPx()),
-                            style = Stroke(width = 2.dp.toPx())
+                            style = Stroke(
+                                width = 2.dp.toPx(),
+                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 6.dp.toPx()))
+                            )
                         )
                     }
                     GuideLineType.TARGET_ZONE -> if (showTargetZone) {

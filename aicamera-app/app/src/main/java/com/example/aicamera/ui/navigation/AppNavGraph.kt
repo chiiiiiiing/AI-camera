@@ -259,7 +259,7 @@ fun AppNavGraph(
                     username = username,
                     currentUser = authRepo.currentUsername ?: "摄影师",
                     onBack = { navController.popBackStack() },
-                    onNavigateToProfile = { navController.navigate("${Routes.PROFILE}?username=$it") },
+                    onNavigateToProfile = { navController.navigate("${Routes.PROFILE}?username=${Uri.encode(it)}") },
                     viewModel = communityViewModel
                 )
             }
@@ -280,7 +280,7 @@ fun AppNavGraph(
                     username = username,
                     currentUser = authRepo.currentUsername ?: "摄影师",
                     onBack = { navController.popBackStack() },
-                    onNavigateToProfile = { navController.navigate("${Routes.PROFILE}?username=$it") },
+                    onNavigateToProfile = { navController.navigate("${Routes.PROFILE}?username=${Uri.encode(it)}") },
                     viewModel = communityViewModel
                 )
             }
