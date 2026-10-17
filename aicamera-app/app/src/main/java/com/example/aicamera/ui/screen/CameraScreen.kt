@@ -11,6 +11,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.view.PreviewView
@@ -59,8 +60,11 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -88,6 +92,7 @@ import com.example.aicamera.ui.components.CaptureWorkflowState
 import com.example.aicamera.ui.components.CaptureResultSheet
 import com.example.aicamera.ui.components.FocusExposureOverlay
 import com.example.aicamera.ui.components.CompactProPanel
+import com.example.aicamera.ui.components.compositionLabelText
 import com.example.aicamera.ui.state.SettingsState
 import com.example.aicamera.ui.theme.BrandPink
 import com.example.aicamera.ui.theme.BrandOnSurface
@@ -179,6 +184,8 @@ fun CameraScreen(
     var workflowStartedAt by remember { mutableLongStateOf(0L) }
     var showTakeNow by remember { mutableStateOf(false) }
     var captureError by remember { mutableStateOf<String?>(null) }
+    // 拍摄进行中的同步防重入标志（isCapturing 是异步 StateFlow，Ready 自动拍摄也可能绕过）
+    var captureInFlight by remember { mutableStateOf(false) }
     var showFilterPanel by remember { mutableStateOf(false) }
     var showFilterEditor by remember { mutableStateOf(false) }
     var bottomBarHeightPx by remember { mutableIntStateOf(0) }
@@ -192,6 +199,17 @@ fun CameraScreen(
     // 点击对焦位置与曝光条显隐
     var focusCenter by remember { mutableStateOf(Offset.Zero) }
     var showExposureSlider by remember { mutableStateOf(false) }
+
+    // 返回键关闭手写覆盖层（拍后结果页 / 拍摄失败弹层），而不是退出相机
+    BackHandler(enabled = showCaptureResult || captureError != null) {
+        if (showCaptureResult) {
+            showCaptureResult = false
+            compositionLabel = null
+            renderViewModel.sessionController.resetToIdle()
+        } else {
+            captureError = null
+        }
+    }
     val aiState by pipelineViewModel.aiState.collectAsStateWithLifecycle()
     val v9DegradedReason by pipelineViewModel.v9DegradedReason.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -206,6 +224,7 @@ fun CameraScreen(
     // 社区发布 Sheet
     var showPublishSheet by remember { mutableStateOf(false) }
     var publishDescription by remember { mutableStateOf("") }
+    var isPublishing by remember { mutableStateOf(false) }
 
     // ── 权限 ──
     var hasCameraPermission by remember {
@@ -290,6 +309,7 @@ fun CameraScreen(
     // 订阅拍照结果 → 快门声 + 提示
     LaunchedEffect(Unit) {
         cameraViewModel.captureResult.collect { result ->
+            captureInFlight = false
             when (result) {
                 is com.example.aicamera.camera.CameraCapture.CaptureResult.Success -> {
                     if (settings.soundEnabled) {
@@ -305,9 +325,16 @@ fun CameraScreen(
                 is com.example.aicamera.camera.CameraCapture.CaptureResult.Error -> {
                     captureError = result.message
                     renderViewModel.sessionController.error(result.message)
-                    Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
                 }
             }
+        }
+    }
+
+    // 拍照后构图说明标签 2.5s 自动消失
+    LaunchedEffect(compositionLabel) {
+        if (!compositionLabel.isNullOrBlank()) {
+            delay(2500)
+            compositionLabel = null
         }
     }
 
@@ -375,10 +402,12 @@ fun CameraScreen(
     // ── ★ 统一构图-拍摄工作流（由 CompositionSessionController 驱动） ──
 
     fun captureNow() {
-        if (uiState.isCapturing ||
+        if (captureInFlight ||
+            uiState.isCapturing ||
             renderViewModel.sessionController.state.value is CompositionSessionController.State.Capturing
         ) return
 
+        captureInFlight = true
         showTakeNow = false
         showFilterPanel = false
         renderViewModel.sessionController.startCapture()
@@ -429,31 +458,9 @@ fun CameraScreen(
         }
     }
 
-    /** 从 AI 输出提取中文构图说明（如"三分构图 · 明亮场景"） */
-    fun compositionDescription(): String {
-        val strategy = renderInput.compositionStrategy
-        val scene = renderInput.sceneType
-        val strategyCN = when {
-            strategy.contains("rule_of_thirds") || strategy.contains("thirds") -> "三分构图"
-            strategy.contains("centered") || strategy.contains("symmetry") -> "对称构图"
-            strategy.contains("leading") -> "引导线构图"
-            strategy.contains("negative_space") -> "留白构图"
-            strategy.contains("horizon") -> "水平构图"
-            else -> ""
-        }
-        val sceneCN = when {
-            scene.contains("bright") -> "明亮"
-            scene.contains("dark") -> "暗调"
-            scene.contains("normal") -> "自然光"
-            else -> ""
-        }
-        return when {
-            strategyCN.isNotEmpty() && sceneCN.isNotEmpty() -> "$strategyCN · $sceneCN"
-            strategyCN.isNotEmpty() -> strategyCN
-            sceneCN.isNotEmpty() -> sceneCN
-            else -> "AI 构图"
-        }
-    }
+    /** 从 AI 输出提取中文构图说明（与拍后确认页共用同一映射） */
+    fun compositionDescription(): String =
+        compositionLabelText(renderInput.compositionStrategy, renderInput.sceneType)
 
     // ★ 统一会话控制器驱动：ANALYZING → 延迟后通知完成
     LaunchedEffect(sessionState) {
@@ -466,15 +473,25 @@ fun CameraScreen(
             }
             is CompositionSessionController.State.Ready -> {
                 // Preserve verified framing; do not guess a new focal length after Ready.
-                compositionLabel = "正在对焦与测光"
-                cameraViewModel.prepareForCapture()
-                // AF/AE may finish after a new bad frame or after observations expire.
-                // Compose cancellation alone cannot close the state/recomposition race.
-                if (!renderViewModel.sessionController.confirmReadyForCapture(
-                        android.os.SystemClock.elapsedRealtime())) return@LaunchedEffect
-                compositionLabel = compositionDescription()
-                renderViewModel.sessionController.startCapture()
-                cameraViewModel.takePhoto(saveToGallery = settings.saveOriginal)
+                // 与手动快门共用同步守卫，避免 Ready 自动拍摄与手动拍摄重复提交。
+                if (!captureInFlight && !uiState.isCapturing) {
+                    captureInFlight = true
+                    var submitted = false
+                    try {
+                        compositionLabel = "正在对焦与测光"
+                        cameraViewModel.prepareForCapture()
+                        // AF/AE 完成后再次确认构图仍然有效，避免坏帧或过期观测触发拍摄。
+                        if (!renderViewModel.sessionController.confirmReadyForCapture(
+                                android.os.SystemClock.elapsedRealtime())) return@LaunchedEffect
+                        compositionLabel = compositionDescription()
+                        renderViewModel.sessionController.startCapture()
+                        cameraViewModel.takePhoto(saveToGallery = settings.saveOriginal)
+                        submitted = true
+                    } finally {
+                        // A withdrawn Ready cancels this effect during AF/AE; release its guard.
+                        if (!submitted) captureInFlight = false
+                    }
+                }
                 // 结果确认页在真实保存成功事件后显示，避免 UI 提前宣称保存完成。
             }
             is CompositionSessionController.State.Error -> {
@@ -746,6 +763,7 @@ fun CameraScreen(
                 showHorizon = settings.showHorizon,
                 overlayAlpha = settings.overlayAlpha,
                 guideLines = presentation.guideLines,
+                bottomBarHeight = measuredBottomBarHeight,
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -793,6 +811,14 @@ fun CameraScreen(
                 Modifier
                     .fillMaxSize()
                     .background(Color.Black.copy(alpha = 0.72f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        showCaptureResult = false
+                        compositionLabel = null
+                        renderViewModel.sessionController.resetToIdle()
+                    }
                     .zIndex(11f)
             )
             CaptureResultSheet(
@@ -817,6 +843,11 @@ fun CameraScreen(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .zIndex(12f)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {}
+                    )
                     .navigationBarsPadding()
             )
         }
@@ -848,24 +879,40 @@ fun CameraScreen(
         }
 
         captureError?.let { message ->
-            Column(
+            Box(
                 modifier = Modifier
-                    .align(Alignment.Center)
-                    .background(Color.Black.copy(alpha = 0.78f), RoundedCornerShape(20.dp))
-                    .padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { captureError = null }
+                    .zIndex(13f),
+                contentAlignment = Alignment.Center
             ) {
-                Text("拍摄失败", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(6.dp))
-                Text(message, color = Color.White.copy(alpha = 0.72f), fontSize = 13.sp)
-                Spacer(Modifier.height(14.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    TextButton(onClick = { captureError = null }) { Text("取消") }
-                    Button(onClick = {
-                        captureError = null
-                        renderViewModel.sessionController.resetToIdle()
-                        triggerCapture()
-                    }) { Text("重试") }
+                Column(
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.78f), RoundedCornerShape(20.dp))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = {}
+                        )
+                        .padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("拍摄失败", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(6.dp))
+                    Text(message, color = Color.White.copy(alpha = 0.72f), fontSize = 13.sp)
+                    Spacer(Modifier.height(14.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        TextButton(onClick = { captureError = null }) { Text("取消") }
+                        Button(onClick = {
+                            captureError = null
+                            renderViewModel.sessionController.resetToIdle()
+                            triggerCapture()
+                        }) { Text("重试") }
+                    }
                 }
             }
         }
@@ -883,22 +930,27 @@ fun CameraScreen(
                 PublishToCommunitySheet(
                     imageUri = uiState.latestPhotoUri,
                     description = publishDescription,
+                    isPublishing = isPublishing,
                     onDescriptionChange = { publishDescription = it },
                     onPublish = {
-                        val imageKey = uiState.latestPhotoUri?.toString()
-                        val body = publishDescription.takeIf { it.isNotBlank() }
-                            ?: "AI 构图作品"
-                        communityViewModel.publishPost(
-                            author = currentUser,
-                            body = body,
-                            imageAssetKey = imageKey,
-                            elapsedText = "刚刚"
-                        ) {
-                            showPublishSheet = false
-                            publishDescription = ""
-                            renderViewModel.sessionController.resetToIdle()
-                            onNavigateToCommunity()
-                            Toast.makeText(context, "已发布到社区", Toast.LENGTH_SHORT).show()
+                        val imageKey = uiState.latestPhotoUri
+                        if (imageKey != null && !isPublishing) {
+                            isPublishing = true
+                            val body = publishDescription.takeIf { it.isNotBlank() }
+                                ?: "AI 构图作品"
+                            communityViewModel.publishPost(
+                                author = currentUser,
+                                body = body,
+                                imageAssetKey = imageKey.toString(),
+                                elapsedText = "刚刚"
+                            ) {
+                                isPublishing = false
+                                showPublishSheet = false
+                                publishDescription = ""
+                                renderViewModel.sessionController.resetToIdle()
+                                onNavigateToCommunity()
+                                Toast.makeText(context, "已发布到社区", Toast.LENGTH_SHORT).show()
+                            }
                         }
                     },
                     onCancel = {
@@ -1018,9 +1070,12 @@ private fun AiStatusChip(
         degraded ->
             com.example.aicamera.ui.theme.GuideWarning to "AI 演示模式"
         status == com.example.aicamera.pipeline.AiEngineManager.Status.READY -> {
-            // ★ Release 隐藏内部推理引擎名称（V9-ONNX/Fake）
-            val name = if (com.example.aicamera.BuildConfig.DEBUG) inferenceType else "AI"
-            GuideAligned to "AI 已就绪 · $name"
+            // ★ Release 隐藏内部推理引擎名称（V9-ONNX/Fake），避免出现「AI 已就绪 · AI」
+            GuideAligned to if (com.example.aicamera.BuildConfig.DEBUG) {
+                "AI 已就绪 · $inferenceType"
+            } else {
+                "AI 已就绪"
+            }
         }
         status == com.example.aicamera.pipeline.AiEngineManager.Status.FAILED ->
             com.example.aicamera.ui.theme.GuideWarning to "AI 演示模式"
@@ -1254,7 +1309,16 @@ private fun CaptureButton(
                 interactionSource = interaction,
                 indication = null,
                 onClick = onClick
-            ),
+            )
+            .semantics {
+                contentDescription = "拍照"
+                role = Role.Button
+                stateDescription = when {
+                    !enabled -> "拍摄进行中，暂不可用"
+                    aligned -> "构图已对齐"
+                    else -> "构图未对齐"
+                }
+            },
         contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.size(if (compact) 58.dp else 72.dp)) {
@@ -1310,7 +1374,7 @@ private fun ZoomStrip(
             },
             valueRange = minZoom..maxZoom,
             steps = (intervalCount - 1).coerceAtLeast(0),
-            modifier = Modifier.fillMaxWidth().height(24.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
             colors = SliderDefaults.colors(
                 thumbColor = BrandPink,
                 activeTrackColor = BrandPink,
@@ -1441,6 +1505,7 @@ private fun FilterCover(
 private fun PublishToCommunitySheet(
     imageUri: Uri?,
     description: String,
+    isPublishing: Boolean = false,
     onDescriptionChange: (String) -> Unit,
     onPublish: () -> Unit,
     onCancel: () -> Unit,
@@ -1513,6 +1578,7 @@ private fun PublishToCommunitySheet(
             }
             Button(
                 onClick = onPublish,
+                enabled = imageUri != null && !isPublishing,
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = BrandPink,
@@ -1520,7 +1586,19 @@ private fun PublishToCommunitySheet(
                 ),
                 shape = RoundedCornerShape(12.dp),
             ) {
-                Text("发布", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                if (isPublishing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(
+                        if (imageUri == null) "暂无图片" else "发布",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
         }
         Spacer(Modifier.height(8.dp))

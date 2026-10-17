@@ -32,6 +32,9 @@ val BrandSurface = Color(0xFFFFF9FC)
 val BrandOnSurface = Color(0xFF4B3A62)
 val BrandOnSurfaceMuted = Color(0xFF8A8093)
 
+/** 表单/错误提示红 — 统一错误色，替代各处硬编码 0xFFC76464 */
+val BrandError = Color(0xFFC76464)
+
 /** Logo 渐变起止色 (Figma Node 1:28) */
 val LogoGradientStart = Color(0xFFFFCCF2)
 val LogoGradientEnd = Color(0xFF977DFF)

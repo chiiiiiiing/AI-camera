@@ -33,6 +33,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.ModalBottomSheet
@@ -47,6 +48,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -85,6 +87,7 @@ import com.example.aicamera.ui.theme.BrandOnSurfaceMuted
 import com.example.aicamera.ui.theme.BrandPink
 import com.example.aicamera.ui.theme.GenWowMotion
 import com.example.aicamera.viewmodel.CommunityViewModel
+import kotlinx.coroutines.launch
 
 /**
  * 社区动态推荐页 — 视觉移植自队友 frontend/ ui/feed/FeedScreen.kt。
@@ -113,6 +116,7 @@ fun CommunityScreen(
     SystemBarsAppearance(light = true)
     var selectedTab by rememberSaveable { mutableIntStateOf(1) }
     val posts by viewModel.posts.collectAsState()
+    val postsLoading by viewModel.postsLoading.collectAsState()
     val context = LocalContext.current
     val authRepo = remember { AuthRepository.getInstance(context) }
     val currentUser = authRepo.currentUsername ?: "用户"
@@ -130,7 +134,9 @@ fun CommunityScreen(
     Column(Modifier.fillMaxSize().background(FeedBackground).statusBarsPadding()) {
         CommunityTopTabs(selectedIndex = selectedTab, onSelected = { selectedTab = it })
         when (selectedTab) {
-            0 -> if (followingUsers.isEmpty()) {
+            0 -> if (postsLoading) {
+                FeedLoadingState(modifier = Modifier.fillMaxWidth().weight(1f))
+            } else if (followingUsers.isEmpty()) {
                 FeedEmptyState(
                     title = "还没有关注任何人",
                     subtitle = "去发现页关注喜欢的摄影师",
@@ -160,7 +166,9 @@ fun CommunityScreen(
                     }
                 }
             }
-            1 -> if (posts.isEmpty()) {
+            1 -> if (postsLoading) {
+                FeedLoadingState(modifier = Modifier.fillMaxWidth().weight(1f))
+            } else if (posts.isEmpty()) {
                 FeedEmptyState(modifier = Modifier.fillMaxWidth().weight(1f))
             } else {
                 LazyColumn(
@@ -309,12 +317,6 @@ private fun FeedPostItem(
                     maxLines = 1,
                 )
             }
-            Text(
-                text = "⋯",
-                color = BrandOnSurfaceMuted,
-                fontSize = 18.sp,
-                modifier = Modifier.padding(start = 8.dp),
-            )
         }
 
         Spacer(Modifier.height(10.dp))
@@ -392,6 +394,9 @@ internal fun PostImage(
             contentDescription = contentDescription,
             modifier = modifier,
             contentScale = ContentScale.Crop,
+            placeholder = painterResource(R.drawable.gallery_flowers),
+            error = painterResource(R.drawable.gallery_flowers),
+            fallback = painterResource(R.drawable.gallery_flowers),
         )
     } else {
         Image(
@@ -414,6 +419,13 @@ internal fun splitPostBody(body: String): Pair<String, String> {
 }
 
 // ── 空状态 ──────────────────────────────────────────────────────
+
+@Composable
+private fun FeedLoadingState(modifier: Modifier = Modifier) {
+    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator(color = BrandPink)
+    }
+}
 
 @Composable
 private fun FeedEmptyState(
@@ -602,6 +614,7 @@ private fun CommentSheet(
     val comments by viewModel.getComments(postId).collectAsState(initial = emptyList())
     var input by remember { mutableStateOf("") }
     var isSending by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val filterStore = remember { CustomFilterStore(context) }
     Column(
@@ -654,9 +667,15 @@ private fun CommentSheet(
                 modifier = Modifier
                     .clickable(enabled = canSend) {
                         isSending = true
-                        viewModel.addComment(postId, currentUser, input.trim())
-                        input = ""
-                        isSending = false
+                        scope.launch {
+                            val ok = viewModel.addComment(postId, currentUser, input.trim())
+                            isSending = false
+                            if (ok) {
+                                input = ""
+                            } else {
+                                Toast.makeText(context, "评论发送失败，请重试", Toast.LENGTH_SHORT).show()
+                            }
+                        }
                     }
             )
         }

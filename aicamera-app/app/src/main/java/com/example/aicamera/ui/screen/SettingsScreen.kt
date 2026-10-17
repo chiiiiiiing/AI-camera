@@ -21,8 +21,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -63,6 +69,8 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     SystemBarsAppearance(light = true)
+
+    var showLogoutConfirm by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -178,13 +186,32 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(BrandPurple, RoundedCornerShape(18.dp))
-                .clickable(onClick = onLogout)
+                .clickable(onClick = { showLogoutConfirm = true })
                 .padding(vertical = 16.dp),
             contentAlignment = Alignment.Center,
         ) {
             Text("退出登录", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
         }
         Spacer(Modifier.height(24.dp))
+    }
+
+    if (showLogoutConfirm) {
+        AlertDialog(
+            onDismissRequest = { showLogoutConfirm = false },
+            title = { Text("退出登录") },
+            text = { Text("确定退出当前账号？") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showLogoutConfirm = false
+                        onLogout()
+                    }
+                ) { Text("退出", color = BrandPink) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutConfirm = false }) { Text("取消") }
+            },
+        )
     }
 }
 
@@ -214,15 +241,18 @@ private fun SettingsSwitchRow(
     onCheckedChange: (Boolean) -> Unit,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) }
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
             Text(label, color = BrandOnSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(4.dp))
-            Text(subtitle, color = BrandOnSurfaceMuted, fontSize = 11.sp, lineHeight = 16.sp)
+            Text(subtitle, color = BrandOnSurfaceMuted, fontSize = 12.sp, lineHeight = 17.sp)
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(checked = checked, onCheckedChange = null)
     }
 }
 

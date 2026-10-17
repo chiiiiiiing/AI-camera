@@ -1,0 +1,25 @@
+{
+  "version": "0.1",
+  "component": "CorrectionArc",
+  "parameters": {
+    "pivot": [
+      "float x",
+      "float y"
+    ],
+    "startAngleDeg": "float",
+    "sweepAngleDeg": "float signed",
+    "radius": "float px in display coordinates",
+    "directionConfidence": "float 0..1",
+    "visibility": "bool"
+  },
+  "rules": [
+    "Do not infer direction from 2D wrist displacement alone; use validated guidance signal.",
+    "Hide when confidence is insufficient or target/current coordinate alignment invalid.",
+    "Arrow geometry is recalculated from parameters, not animated to completion by elapsed time."
+  ],
+  "stroke": {
+    "color": "#F4B6C2",
+    "widthSvg": 2.7,
+    "cap": "round"
+  }
+}

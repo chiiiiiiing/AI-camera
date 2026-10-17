@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 200 200" role="img" aria-label="PITCH 抬头">
+  <title>PITCH 抬头</title>
+  <defs>
+    <linearGradient id="activeGradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F37FA1"/>
+      <stop offset="1" stop-color="#F4A18E"/>
+    </linearGradient>
+  </defs>
+  <g id="target" fill="none" stroke="#66656B" stroke-width="3.6" stroke-linejoin="round">
+  <rect x="67" y="34" width="66" height="132" rx="7"/>
+  </g>
+  <g id="current" fill="none" stroke="url(#activeGradient)" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M82 41 Q80 41 79 46 L61 151 Q60 158 67 159 L139 159 Q145 159 143 152 L120 46 Q119 41 115 41 Z"/>
+        <path d="M87 54 L111 54 L129 145 L74 145 Z" stroke-width="2.6"/>
+        <path d="M94 48 L106 48" stroke-width="2.5"/>
+  </g>
+  <g id="correction-arrow" fill="none" stroke="url(#activeGradient)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M148 61 C168 82 172 116 154 141"/><path d="M140 63 L148 53 L157 64"/>
+  </g>
+</svg>

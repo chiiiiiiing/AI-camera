@@ -22,12 +22,20 @@ class CommunityViewModel @Inject constructor(
     private val _posts = MutableStateFlow<List<CommunityPost>>(emptyList())
     val posts: StateFlow<List<CommunityPost>> = _posts.asStateFlow()
 
+    /** 帖子是否已完成首次加载（用于区分加载中与空列表，避免首屏空态闪现） */
+    private val _postsLoading = MutableStateFlow(true)
+    val postsLoading: StateFlow<Boolean> = _postsLoading.asStateFlow()
+
     init {
         viewModelScope.launch {
             runCatching {
                 repo.seedIfEmpty()
-                repo.getAllPosts().collect { _posts.value = it }
+                repo.getAllPosts().collect {
+                    _posts.value = it
+                    _postsLoading.value = false
+                }
             }.onFailure { e ->
+                _postsLoading.value = false
                 Log.w(TAG, "社区数据初始化失败: ${e.message}", e)
             }
         }
@@ -47,9 +55,15 @@ class CommunityViewModel @Inject constructor(
     fun getLikedPosts(username: String): Flow<List<CommunityPost>> =
         repo.getLikedPosts(username)
 
-    fun addComment(postId: Long, author: String, body: String) {
-        viewModelScope.launch { repo.addComment(postId, author, body) }
-    }
+    /** 添加评论。返回是否成功，供 UI 做发送中 loading 与失败回滚。 */
+    suspend fun addComment(postId: Long, author: String, body: String): Boolean =
+        try {
+            repo.addComment(postId, author, body)
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "评论发送失败: ${e.message}", e)
+            false
+        }
 
     fun postCountByAuthor(author: String, onResult: (Int) -> Unit) {
         viewModelScope.launch { onResult(repo.postCountByAuthor(author)) }

@@ -1,0 +1,408 @@
+{
+  "schemaVersion": "genwow.pose-stream-fixture/0.1",
+  "synthetic": true,
+  "frames": [
+    {
+      "timestampMs": 0,
+      "fixtureOnly": true,
+      "targetPoseId": "target_up",
+      "currentPoseId": "current_down",
+      "poseState": "ADJUSTING",
+      "trackingValid": true,
+      "currentKeypoints": {
+        "left_shoulder": {
+          "x": 118,
+          "y": 116,
+          "confidence": 0.99
+        },
+        "left_elbow": {
+          "x": 100,
+          "y": 182,
+          "confidence": 0.99
+        },
+        "left_wrist": {
+          "x": 91,
+          "y": 244,
+          "confidence": 0.99
+        },
+        "right_shoulder": {
+          "x": 230,
+          "y": 112,
+          "confidence": 0.99
+        },
+        "right_elbow": {
+          "x": 237,
+          "y": 193,
+          "confidence": 0.99
+        },
+        "right_wrist": {
+          "x": 243,
+          "y": 249,
+          "confidence": 0.99
+        },
+        "left_hip": {
+          "x": 143,
+          "y": 205,
+          "confidence": 0.99
+        },
+        "right_hip": {
+          "x": 216,
+          "y": 205,
+          "confidence": 0.99
+        },
+        "left_knee": {
+          "x": 112,
+          "y": 337,
+          "confidence": 0.99
+        },
+        "right_knee": {
+          "x": 213,
+          "y": 337,
+          "confidence": 0.99
+        },
+        "left_ankle": {
+          "x": 91,
+          "y": 425,
+          "confidence": 0.99
+        },
+        "right_ankle": {
+          "x": 205,
+          "y": 431,
+          "confidence": 0.99
+        }
+      },
+      "correction": {
+        "joint": "left_shoulder",
+        "action": "ROTATE_UP",
+        "confidence": 0.95,
+        "angleDeltaDeg": 45
+      },
+      "validation": {
+        "independentPoseVerifier": false,
+        "fixtureOnly": true
+      }
+    },
+    {
+      "timestampMs": 350,
+      "fixtureOnly": true,
+      "targetPoseId": "target_up",
+      "currentPoseId": "current_low",
+      "poseState": "ADJUSTING",
+      "trackingValid": true,
+      "currentKeypoints": {
+        "left_shoulder": {
+          "x": 118,
+          "y": 115,
+          "confidence": 0.99
+        },
+        "left_elbow": {
+          "x": 88,
+          "y": 156,
+          "confidence": 0.99
+        },
+        "left_wrist": {
+          "x": 69,
+          "y": 132,
+          "confidence": 0.99
+        },
+        "right_shoulder": {
+          "x": 230,
+          "y": 112,
+          "confidence": 0.99
+        },
+        "right_elbow": {
+          "x": 237,
+          "y": 193,
+          "confidence": 0.99
+        },
+        "right_wrist": {
+          "x": 243,
+          "y": 249,
+          "confidence": 0.99
+        },
+        "left_hip": {
+          "x": 143,
+          "y": 205,
+          "confidence": 0.99
+        },
+        "right_hip": {
+          "x": 216,
+          "y": 205,
+          "confidence": 0.99
+        },
+        "left_knee": {
+          "x": 112,
+          "y": 337,
+          "confidence": 0.99
+        },
+        "right_knee": {
+          "x": 213,
+          "y": 337,
+          "confidence": 0.99
+        },
+        "left_ankle": {
+          "x": 91,
+          "y": 425,
+          "confidence": 0.99
+        },
+        "right_ankle": {
+          "x": 205,
+          "y": 431,
+          "confidence": 0.99
+        }
+      },
+      "correction": {
+        "joint": "left_shoulder",
+        "action": "ROTATE_UP",
+        "confidence": 0.95,
+        "angleDeltaDeg": 24
+      },
+      "validation": {
+        "independentPoseVerifier": false,
+        "fixtureOnly": true
+      }
+    },
+    {
+      "timestampMs": 700,
+      "fixtureOnly": true,
+      "targetPoseId": "target_up",
+      "currentPoseId": "current_mid",
+      "poseState": "ADJUSTING",
+      "trackingValid": true,
+      "currentKeypoints": {
+        "left_shoulder": {
+          "x": 128,
+          "y": 113,
+          "confidence": 0.99
+        },
+        "left_elbow": {
+          "x": 87,
+          "y": 104,
+          "confidence": 0.99
+        },
+        "left_wrist": {
+          "x": 153,
+          "y": 46,
+          "confidence": 0.99
+        },
+        "right_shoulder": {
+          "x": 230,
+          "y": 112,
+          "confidence": 0.99
+        },
+        "right_elbow": {
+          "x": 237,
+          "y": 193,
+          "confidence": 0.99
+        },
+        "right_wrist": {
+          "x": 243,
+          "y": 249,
+          "confidence": 0.99
+        },
+        "left_hip": {
+          "x": 143,
+          "y": 205,
+          "confidence": 0.99
+        },
+        "right_hip": {
+          "x": 216,
+          "y": 205,
+          "confidence": 0.99
+        },
+        "left_knee": {
+          "x": 112,
+          "y": 337,
+          "confidence": 0.99
+        },
+        "right_knee": {
+          "x": 213,
+          "y": 337,
+          "confidence": 0.99
+        },
+        "left_ankle": {
+          "x": 91,
+          "y": 425,
+          "confidence": 0.99
+        },
+        "right_ankle": {
+          "x": 205,
+          "y": 431,
+          "confidence": 0.99
+        }
+      },
+      "correction": {
+        "joint": "left_shoulder",
+        "action": "ROTATE_UP",
+        "confidence": 0.95,
+        "angleDeltaDeg": 9
+      },
+      "validation": {
+        "independentPoseVerifier": false,
+        "fixtureOnly": true
+      }
+    },
+    {
+      "timestampMs": 1100,
+      "fixtureOnly": true,
+      "targetPoseId": "target_up",
+      "currentPoseId": "target_up",
+      "poseState": "VERIFYING",
+      "trackingValid": true,
+      "currentKeypoints": {
+        "left_shoulder": {
+          "x": 129,
+          "y": 112,
+          "confidence": 0.99
+        },
+        "left_elbow": {
+          "x": 78,
+          "y": 80,
+          "confidence": 0.99
+        },
+        "left_wrist": {
+          "x": 157,
+          "y": 28,
+          "confidence": 0.99
+        },
+        "right_shoulder": {
+          "x": 230,
+          "y": 112,
+          "confidence": 0.99
+        },
+        "right_elbow": {
+          "x": 237,
+          "y": 193,
+          "confidence": 0.99
+        },
+        "right_wrist": {
+          "x": 243,
+          "y": 249,
+          "confidence": 0.99
+        },
+        "left_hip": {
+          "x": 143,
+          "y": 205,
+          "confidence": 0.99
+        },
+        "right_hip": {
+          "x": 216,
+          "y": 205,
+          "confidence": 0.99
+        },
+        "left_knee": {
+          "x": 112,
+          "y": 337,
+          "confidence": 0.99
+        },
+        "right_knee": {
+          "x": 213,
+          "y": 337,
+          "confidence": 0.99
+        },
+        "left_ankle": {
+          "x": 91,
+          "y": 425,
+          "confidence": 0.99
+        },
+        "right_ankle": {
+          "x": 205,
+          "y": 431,
+          "confidence": 0.99
+        }
+      },
+      "correction": null,
+      "validation": {
+        "independentPoseVerifier": false,
+        "fixtureOnly": true
+      }
+    },
+    {
+      "timestampMs": 2000,
+      "fixtureOnly": true,
+      "targetPoseId": "target_up",
+      "currentPoseId": "target_up",
+      "poseState": "ALIGNED",
+      "trackingValid": true,
+      "currentKeypoints": {
+        "left_shoulder": {
+          "x": 129,
+          "y": 112,
+          "confidence": 0.99
+        },
+        "left_elbow": {
+          "x": 78,
+          "y": 80,
+          "confidence": 0.99
+        },
+        "left_wrist": {
+          "x": 157,
+          "y": 28,
+          "confidence": 0.99
+        },
+        "right_shoulder": {
+          "x": 230,
+          "y": 112,
+          "confidence": 0.99
+        },
+        "right_elbow": {
+          "x": 237,
+          "y": 193,
+          "confidence": 0.99
+        },
+        "right_wrist": {
+          "x": 243,
+          "y": 249,
+          "confidence": 0.99
+        },
+        "left_hip": {
+          "x": 143,
+          "y": 205,
+          "confidence": 0.99
+        },
+        "right_hip": {
+          "x": 216,
+          "y": 205,
+          "confidence": 0.99
+        },
+        "left_knee": {
+          "x": 112,
+          "y": 337,
+          "confidence": 0.99
+        },
+        "right_knee": {
+          "x": 213,
+          "y": 337,
+          "confidence": 0.99
+        },
+        "left_ankle": {
+          "x": 91,
+          "y": 425,
+          "confidence": 0.99
+        },
+        "right_ankle": {
+          "x": 205,
+          "y": 431,
+          "confidence": 0.99
+        }
+      },
+      "correction": null,
+      "validation": {
+        "independentPoseVerifier": true,
+        "fixtureOnly": true
+      }
+    },
+    {
+      "timestampMs": 2400,
+      "fixtureOnly": true,
+      "poseState": "TRACKING_LOST",
+      "trackingValid": false,
+      "currentKeypoints": {},
+      "correction": null,
+      "validation": {
+        "independentPoseVerifier": false,
+        "fixtureOnly": true
+      }
+    }
+  ]
+}

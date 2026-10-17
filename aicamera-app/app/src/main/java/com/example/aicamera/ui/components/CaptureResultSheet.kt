@@ -33,6 +33,30 @@ import com.example.aicamera.ui.theme.BrandPink
 import com.example.aicamera.ui.theme.CameraChrome
 import com.example.aicamera.ui.theme.GuideAligned
 
+/** 构图说明共享映射：保证成片叠加层与拍后确认页的标签一致。 */
+fun compositionLabelText(strategy: String, sceneType: String): String {
+    val strategyCN = when {
+        strategy.contains("rule_of_thirds") || strategy.contains("thirds") -> "三分构图"
+        strategy.contains("centered") || strategy.contains("symmetry") -> "对称构图"
+        strategy.contains("leading") -> "引导线构图"
+        strategy.contains("negative_space") -> "留白构图"
+        strategy.contains("horizon") -> "水平构图"
+        else -> ""
+    }
+    val sceneCN = when {
+        sceneType.contains("bright") -> "明亮"
+        sceneType.contains("dark") -> "暗调"
+        sceneType.contains("normal") -> "自然光"
+        else -> ""
+    }
+    return when {
+        strategyCN.isNotEmpty() && sceneCN.isNotEmpty() -> "$strategyCN · $sceneCN"
+        strategyCN.isNotEmpty() -> strategyCN
+        sceneCN.isNotEmpty() -> sceneCN
+        else -> "AI 构图"
+    }
+}
+
 /** 拍摄完成后的确认页。只反馈结果与操作，不生成伪审美分数。 */
 @Composable
 fun CaptureResultSheet(
@@ -45,20 +69,7 @@ fun CaptureResultSheet(
     modifier: Modifier = Modifier
 ) {
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val strategyCN = when {
-        strategy.contains("rule_of_thirds") || strategy.contains("thirds") -> "三分构图"
-        strategy.contains("centered") || strategy.contains("symmetry") -> "对称构图"
-        strategy.contains("leading") -> "引导线构图"
-        strategy.contains("negative_space") -> "留白构图"
-        strategy.contains("horizon") -> "水平构图"
-        else -> "辅助构图"
-    }
-    val sceneCN = when {
-        sceneType.contains("portrait") || sceneType.contains("person") -> "人像"
-        sceneType.contains("landscape") -> "风景"
-        sceneType.contains("food") || sceneType.contains("coffee") -> "美食"
-        else -> "日常"
-    }
+    val caption = compositionLabelText(strategy, sceneType)
 
     Column(
         modifier = modifier
@@ -96,7 +107,7 @@ fun CaptureResultSheet(
         }
         Spacer(Modifier.height(7.dp))
         Text(
-            "$strategyCN · $sceneCN",
+            caption,
             color = Color.White.copy(alpha = 0.68f),
             fontSize = 13.sp,
             textAlign = TextAlign.Center

@@ -32,6 +32,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -40,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -77,6 +79,7 @@ import com.example.aicamera.ui.theme.BrandPink
 import com.example.aicamera.ui.theme.BrandPurple
 import com.example.aicamera.ui.theme.GenWowMotion
 import com.example.aicamera.viewmodel.CommunityViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOf
 
 /**
@@ -133,7 +136,7 @@ fun ProfileScreen(
         }
     }
 
-    var selectedProfileTab by remember { mutableStateOf(ProfileTab.WORKS) }
+    var selectedProfileTab by rememberSaveable { mutableStateOf(ProfileTab.WORKS) }
 
     val postsFlow = remember(username, communityViewModel) {
         communityViewModel?.getPostsByAuthor(username) ?: kotlinx.coroutines.flow.flowOf(emptyList())
@@ -154,6 +157,13 @@ fun ProfileScreen(
         communityViewModel?.getCommentsByAuthor(username) ?: kotlinx.coroutines.flow.flowOf(emptyList())
     }
     val userComments by commentsFlow.collectAsState(initial = emptyList())
+
+    // 首次加载过渡，避免四 Tab 在数据未就绪时闪现空态
+    var contentLoading by remember(username) { mutableStateOf(true) }
+    LaunchedEffect(username) {
+        delay(400)
+        contentLoading = false
+    }
 
     // 头像选择（仅当前用户）
     var avatarUri by remember { mutableStateOf<Uri?>(null) }
@@ -295,7 +305,14 @@ fun ProfileScreen(
                     translationY = (1f - galleryProgress) * 14.dp.toPx()
                 }
             ) {
-                when (selectedProfileTab) {
+                if (contentLoading) {
+                    Box(
+                        Modifier.fillMaxWidth().padding(vertical = 40.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(color = BrandPink)
+                    }
+                } else when (selectedProfileTab) {
                     ProfileTab.WORKS -> {
                         if (userPosts.isEmpty()) {
                             ProfileEmptyGallery()
@@ -566,13 +583,6 @@ private fun ProfilePostCard(
     onNavigateToProfile: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val interaction = remember(post.id) { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        if (pressed) .97f else 1f,
-        tween(if (pressed) GenWowMotion.PressMillis else GenWowMotion.PressReleaseMillis),
-        label = "profile card press",
-    )
     val liked by remember(post.id, currentUser, viewModel) {
         viewModel?.observeIsLiked(post.id, currentUser) ?: flowOf(false)
     }.collectAsState(initial = false)
@@ -581,15 +591,8 @@ private fun ProfilePostCard(
 
     Column(
         modifier = modifier
-            .scale(scale)
             .clip(RoundedCornerShape(16.dp))
             .background(Color.White.copy(alpha = 0.72f))
-            .clickable(
-                role = Role.Button,
-                interactionSource = interaction,
-                indication = null,
-                onClick = {},
-            )
             .padding(8.dp),
     ) {
         PostImage(

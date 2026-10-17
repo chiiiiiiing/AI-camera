@@ -1,7 +1,7 @@
 const S='ui/screen/', C='ui/components/';
 const page=(id,title,group,source,states=['默认'],note='按当前 Compose 页面复现布局与交互；Web 字体和控件尺寸需与真机二次核对。')=>({id,title,group,source:Array.isArray(source)?source:[source],states,note});
 export const pages=[
- page('camera','相机主页面','01 / 相机',[S+'CameraScreen.kt',C+'CaptureWorkflowOverlay.kt',C+'FocusExposureOverlay.kt'],['预览','分析中','旋转','水平已对齐','俯仰','水平转向','移动','主体已对齐','稳定验证','拍摄中','无主体','倒置','超时提示','对焦曝光','权限拒绝','拍摄失败']),
+ page('camera','相机主页面','01 / 相机',[S+'CameraScreen.kt',C+'CaptureWorkflowOverlay.kt',C+'FocusExposureOverlay.kt'],['预览','分步引导','分析中','旋转','水平已对齐','俯仰','水平转向','移动','主体已对齐','稳定验证','拍摄中','无主体','倒置','超时提示','对焦曝光','权限拒绝','拍摄失败']),
  page('filters','滤镜选择面板','01 / 相机',[S+'CameraScreen.kt','filter/PresetFilter.kt']),
  page('pro','Pro 手动参数面板','01 / 相机',C+'CompactProPanel.kt',['EV','ISO','快门','白平衡','对焦','变焦']),
  page('filter-editor','自定义滤镜编辑','01 / 相机',[S+'FilterEditorScreen.kt','filter/CustomFilterConfig.kt']),
@@ -39,7 +39,7 @@ let current=pages.find(p=>p.id===id);
 let state=new URLSearchParams(location.search).get('state')||current.states[0];
 if(!current.states.includes(state))state=current.states[0];
 if(id==='user-profile'&&['Helena','Daniel'].includes(new URLSearchParams(location.search).get('user')))state=new URLSearchParams(location.search).get('user');
-let hidden=new Set(), filter=0, zoom=1, proControl='EV', mode='静物', front=false, captured=false, expanded=id==='filters', proOpen=id==='pro';
+let hidden=new Set(), filter=0, zoom=1, proControl='EV', mode='静物', front=false, captured=false, expanded=id==='filters', proOpen=id==='pro', guideStep=1;
 let otherTab='作品';
 let revision={}, toastTimer, captureTimer, hintTimer;
 const basePosts=[
@@ -89,7 +89,7 @@ const empty=text=>'<div class="empty">'+svg('camera')+'<p>'+text+'</p></div>';
 function toast(text){$('#toast').textContent=text;$('#toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').classList.remove('show'),2600)}
 function save(){localStorage.setItem('genwow-review-data',JSON.stringify(data))}
 function goto(dest){location.href=site('/'+dest+'.html')}
-function setState(next){state=next;const u=new URL(location.href);u.searchParams.set('state',next);history.replaceState({},'',u);$('#scenario').value=next;render();loadFeedback()}
+function setState(next){state=next;if(next==='分步引导')guideStep=1;const u=new URL(location.href);u.searchParams.set('state',next);history.replaceState({},'',u);$('#scenario').value=next;render();loadFeedback()}
 function camera(){
  const activeCustom=(data.filters||[]).find(f=>f.id===data.activeCustomId);
  const denied=state==='权限拒绝';
@@ -103,14 +103,81 @@ function camera(){
  if(['移动','主体已对齐'].includes(state))art='<div class="axis-card position"><div class="axis-caption">主体位置</div><div class="position-track"><span class="subject-marker">人物</span><span class="position-arrow">'+(aligned?'✓':'→')+'</span><span class="target-marker">目标</span></div><small>粉框 = 当前主体 · 白框 = 构图目标</small></div>';
  if(state==='稳定验证')art='<div class="cross-target">✓</div>';
  return '<div class="camera">'+
- '<div class="preview" data-layer="相机预览占位" data-action="focus"><img alt="静态相机占位照片" src="'+image()+'" style="filter:'+(activeCustom?'none':effects[filter])+';transform:scale('+zoom+')'+(front?' scaleX(-1)':'')+'">'+((data.settings['显示三分线网格']??true)&&guidance.includes(state)?'<div class="preview-grid" data-layer="拍摄后辅助三分线" style="opacity:'+((data.settings.opacity??100)/100)+'"><i></i><i></i><i></i><i></i></div>':'')+(['移动','主体已对齐','稳定验证'].includes(state)&&data.settings['显示主体框']!==false?'<div class="preview-subject '+(aligned?'aligned':'')+'" data-layer="真实主体框"></div>':'')+(['移动','主体已对齐','稳定验证'].includes(state)&&data.settings['显示目标区']!==false?'<div class="preview-target" data-layer="构图目标区"></div>':'')+'</div>'+
+ '<div class="preview" data-layer="相机预览占位" data-action="focus"><img alt="静态相机占位照片" src="'+image()+'" style="filter:'+(activeCustom?'none':effects[filter])+';transform:scale('+zoom+')'+(front?' scaleX(-1)':'')+'">'+((data.settings['显示三分线网格']??true)&&guidance.includes(state)?'<div class="preview-grid" data-layer="拍摄后辅助三分线" style="opacity:'+((data.settings.opacity??100)/100)+'"><i></i><i></i><i></i><i></i></div>':'')+(['移动','主体已对齐','稳定验证'].includes(state)&&data.settings['显示主体框']!==false?'<div class="preview-subject '+(aligned?'aligned':'')+'" data-layer="真实主体框"></div>':'')+(['移动','主体已对齐','稳定验证'].includes(state)&&data.settings['显示目标区']!==false?'<div class="preview-target" data-layer="构图目标区"></div>':'')+(state==='辅助线'?auxDemo():'')+(stageOf()?stageOverlay():'')+'</div>'+
  (denied?'<div class="guide">'+btn('模拟授予权限','permit','primary')+'</div>':'')+
  '<div class="camtop" data-layer="顶部构图模式">'+[['coffee','静物'],['mountain','风景'],['person','人像']].map(([i,m])=>icon(i,'mode:'+m,m+'构图模式',mode===m?'selected':'')).join('')+'<span class="spacer"></span>'+route(svg('settings'),'settings','icon')+'</div>'+
- (guidance.includes(state)?'<div class="progress" data-layer="工作流进度"><div class="dots">● ━ ● ━ ●</div>分析 · 调整 · 拍摄</div><div class="guide '+(aligned?'good':'')+'" data-layer="旋转俯仰移动引导">'+art+'<h3>'+hints[state][0]+'</h3><p>'+hints[state][1]+'</p></div>':'<div class="ai" data-layer="引擎状态提示">● AI 已就绪 · 预览模拟</div>')+
+ (stageOf()?stageProgress():(guidance.includes(state)?'<div class="progress" data-layer="工作流进度"><div class="dots">● ━ ● ━ ●</div>分析 · 调整 · 拍摄</div><div class="guide '+(aligned?'good':'')+'" data-layer="旋转俯仰移动引导">'+art+'<h3>'+hints[state][0]+'</h3><p>'+hints[state][1]+'</p></div>':'<div class="ai" data-layer="引擎状态提示">● AI 已就绪 · 预览模拟</div>'))+
  (state==='对焦曝光'?'<div class="focusbox" data-layer="对焦与曝光"><input aria-label="曝光补偿" type="range" min="-2" max="2" step=".1" value="0" data-ev><output>0 EV</output></div>':'')+
  (state==='超时提示'?btn('按当前画面立即拍摄','capture','take-now'):'')+
  (proOpen?proPanel():'<div class="filterdock" data-layer="滤镜组件">'+(expanded?filterStrip()+'<small class="filter-hint">实时取景仅显示基础色彩；高光、阴影、锐化、暗角在成片中完整应用。</small>':'')+btn('◉ '+(activeCustom?escape(activeCustom.name):filters[filter])+' · 滤镜','filters')+'</div>')+
  '<div class="camtools" data-layer="快门相册翻转变焦"><div class="capture-row">'+btn(captured?'<img alt="最新照片" src="'+image()+'">':'','gallery','thumb')+btn('','shutter','shutter')+icon('flip','flip','切换前后摄像头')+'</div><div class="zoom"><label><output id="zoom-value">'+zoom.toFixed(1)+'×</output><input aria-label="变焦倍率" id="zoom" type="range" min="1" max="3" step=".1" value="'+zoom+'"></label>'+btn('PRO','pro','probutton')+'</div></div>'+nav('camera')+'</div>';
+}
+// ── 辅助线 / 分步引导：严格镜像真机 CaptureWorkflowOverlay.kt ──
+// 真机叠加层（WorkflowGuideLines）：三分线网格(白 34% 1dp)、主体框(粉/绿 2dp 圆角10dp)、
+// 目标区(白圈 2dp alpha.8)、水平仪(白虚线 2dp + 粉/绿实线 3dp)。
+const isStepDemo=()=>state==='分步引导';
+const stageOf=()=>isStepDemo()?(guideStep||1):0;
+const SUBJ={x:25,y:30,w:50,h:40};           // SubjectBoxParams 默认 (0.25,0.3,0.5,0.4)
+const TGT={cx:33.3,cy:33.3,r:12};            // TargetZoneParams 默认 (0.333,0.333,0.12)
+const LIVE={sx:52,sy:56,tx:34,ty:40};        // 真实主体中心 scx,scy → 目标中心 tcx,tcy
+function guideLines(aligned){
+ return '<div class="gl" data-layer="三分线网格"><span class="gl-v" style="left:33.33%"></span><span class="gl-v" style="left:66.67%"></span><span class="gl-h" style="top:33.33%"></span><span class="gl-h" style="top:66.67%"></span></div>'+
+  '<div class="gl-subjectbox'+(aligned?' aligned':'')+'" data-layer="主体框" style="left:'+SUBJ.x+'%;top:'+SUBJ.y+'%;width:'+SUBJ.w+'%;height:'+SUBJ.h+'%"></div>'+
+  '<div class="gl-zone" data-layer="目标区" style="left:'+TGT.cx+'%;top:'+TGT.cy+'%"></div>';
+}
+function horizonGuide(){
+ return '<div class="gl-hz" data-layer="水平仪"><span class="gl-hz-target"></span><span class="gl-hz-line" style="transform:rotate(8deg)"></span></div>';
+}
+function guidanceAsset(name){return site('/assets/'+name)}
+function phoneGuideCard(asset,title,subtitle,aligned=false){
+ const pitch=asset.includes('pitch');
+ return '<div class="phone-guide '+(aligned?'is-aligned ':'')+(pitch?'is-pitch':'')+'" data-layer="真机姿态指引">'+
+  '<div class="phone-guide-panel"><span class="phone-guide-icon" role="img" aria-label="'+title+'图标" style="--guide-mask:url('+guidanceAsset(asset)+')"></span></div>'+
+  '<div class="phone-guide-copy"><b>'+title+'</b>'+(subtitle?'<span>'+subtitle+'</span>':'')+'</div></div>';
+}
+function auxDemo(){
+ return '<div class="guide-asset-overview" data-layer="真机辅助线资源">'+
+  phoneGuideCard('guidance_roll_off.png','旋转手机','向右旋转')+
+  phoneGuideCard('guidance_roll_aligned.png','调整构图','',true)+
+  phoneGuideCard('guidance_pitch_cw_misaligned.png','调整俯仰','向上倾斜')+
+  '</div>';
+}
+// 以用户提供的真机截图与 Android drawable-nodpi 原始资源为准。
+function poseGuideCard(asset,title,subtitle,stateClass){
+ const live='<svg class="pose-live" viewBox="0 0 390 748" preserveAspectRatio="none" aria-label="当前人物实时轮廓"><path d="M69 705 C72 620 74 520 80 438 C84 386 101 350 132 331 C146 322 153 310 153 292 C147 273 147 252 153 233 C162 205 184 190 211 188 C244 186 269 202 278 228 C286 249 284 273 275 293 C269 307 274 319 289 327 C322 344 341 381 350 435 C360 500 360 604 362 705 M153 233 C158 211 177 195 204 192 C231 190 253 202 265 221 C278 241 279 268 268 288 C256 309 235 320 210 318 C181 316 160 299 153 276 M132 331 C166 316 198 315 226 318 C250 319 270 323 289 327"/></svg>';
+ const reference=stateClass==='verifying'||stateClass==='aligned'||stateClass==='lost'?'':'<div class="pose-reference"><small>目标姿势</small><img src="'+site('/assets/pose-v8/'+asset)+'" alt="'+title+'目标模板"></div>';
+ return '<div class="pose-guide '+stateClass+'" data-layer="人物姿势引导">'+live+reference+
+  '<div class="pose-guide-copy"><b>'+title+'</b><span>'+subtitle+'</span></div></div>';
+}
+function stageOverlay(){
+ const s=stageOf();
+ if(s===1)return phoneGuideCard('guidance_roll_off.png','旋转手机','向右旋转');
+ if(s===2)return phoneGuideCard('guidance_roll_aligned.png','调整构图','',true);
+ if(s===3)return phoneGuideCard('guidance_pitch_cw_misaligned.png','调整俯仰','向上倾斜');
+ if(s===4)return poseGuideCard('demo_seated_window_target.svg','人物姿势目标','保持坐姿，视线自然望向窗外','target');
+ if(s===5)return poseGuideCard('demo_seated_window_target.svg','调整人物姿势','肩部放松，脸部轻微转向窗外','adjusting');
+ if(s===6)return poseGuideCard('demo_seated_window_target.svg','正在验证姿势','保持坐姿与视线方向','verifying');
+ if(s===7)return poseGuideCard('demo_seated_window_target.svg','姿势已对齐','保持自然坐姿，可以拍摄','aligned');
+ return poseGuideCard('demo_seated_window_target.svg','未检测到人物','请重新回到座位与取景区域','lost');
+}
+function stepControls(){
+ const s=guideStep||1, names=['','① 旋转手机','② 调整构图','③ 调整俯仰','④ 姿势目标','⑤ 姿势调整','⑥ 姿势验证','⑦ 姿势对齐','⑧ 跟踪丢失'];
+ return '<div class="step-ctl"><span class="step-ctl-label">分步引导演示 · '+names[s]+'</span><span class="spacer"></span>'+
+  (s>1?btn('← 上一步','step-prev','quiet'):'')+
+  (s<8?btn('下一步 →','step-next','primary'):btn('重新演示','step-reset','primary'))+
+  '</div>';
+}
+function stageProgress(){
+ const s=stageOf();
+ if(s<=3){
+  const xs=[12,50,88], active=s-1;
+  const status=s===1?'第 1 步：调整手机姿态':s===2?'第 2 步：确认构图':'第 3 步：调整俯仰';
+  const dots=xs.map((x,i)=>'<span class="wf-dot'+(i===active?' active':'')+(i<active?' done':'')+'" style="left:'+x+'%"></span>').join('');
+  return '<div class="wf-bar" data-layer="设备姿态进度"><div class="wf-track"><span class="wf-connector"></span>'+(active>0?'<span class="wf-fill" style="width:'+(xs[active]-xs[0])+'%"></span>':'')+dots+'</div><span class="wf-status">'+status+'</span></div>';
+ }
+ const labels=['目标','调整','验证','对齐','丢失'], active=s-4;
+ const dots=labels.map((label,i)=>'<span class="pose-progress-dot '+(i===active?'active ':'')+(i<active&&active<4?'done ':'')+(active===3&&i<=3?'done ':'')+'"><i></i><small>'+label+'</small></span>').join('');
+ return '<div class="pose-progress" data-layer="人物姿势进度"><b>人物姿势引导</b><div>'+dots+'</div></div>';
 }
 function filterStrip(){return '<div class="filterstrip">'+filters.map((f,i)=>btn('<img src="'+image()+'" style="filter:'+effects[i]+'" alt="'+f+'封面">'+f,'filter:'+i,!data.activeCustomId&&i===filter?'selected':'')).join('')+route('<img src="'+image()+'" alt="自定义滤镜">＋ 自定义','filter-editor')+(data.filters||[]).map(f=>btn('<img src="'+image()+'" data-custom-cover="'+escape(f.id||f.name)+'" alt="'+escape(f.name)+'封面">'+escape(f.name),'custom-filter:'+(f.id||f.name),data.activeCustomId===(f.id||f.name)?'selected':'')).join('')+'</div>'}
 function proPanel(){
@@ -152,7 +219,7 @@ function settings(){
   ['显示三分线网格','按下快门后显示三分线参考'],['显示主体框','检测到主体时绘制边界框'],['显示目标区','展示推荐构图位置参考框'],['显示水平仪','IMU 实时水平参考线']],
   '拍摄与相册':[
   ['安全自动变焦','仅识别到真实人物时轻微调整，最高 1.8×'],['保存原图到相册','默认开启，拍摄后直接写入系统相册'],['拍照音效','默认关闭，减少公共场景干扰'],['Pro 手动模式','开启后可手动调节 EV/ISO/白平衡/对焦']]};
- return '<div class="screen">'+top('设置')+'<div class="bodypad">'+Object.entries(groups).map(([title,items])=>'<section class="card" data-layer="'+title+'"><h4>'+title+'</h4>'+(title==='辅助线与引导'?'<label class="range-row">辅助线透明度 · '+(data.settings.opacity??100)+'%<input aria-label="辅助线透明度" type="range" min="25" max="100" value="'+(data.settings.opacity??100)+'" data-setting="opacity"><small>明亮背景下保持可见又不过度遮挡</small></label>':'')+items.map(([name,subtitle])=>'<label class="setting switchlabel"><div><h5>'+name+'</h5><span class="muted">'+subtitle+'</span></div><input type="checkbox" data-setting="'+name+'" '+((data.settings[name]??!['拍照音效','Pro 手动模式'].includes(name))?'checked':'')+'></label>').join('')+'</section>').join('')+'<div class="card" data-layer="关于"><h4>关于</h4><div class="setting">产品名称 <strong>帧好 GenWow</strong></div><div class="setting">版本 <strong>1.0.0-debug</strong></div><div class="setting">定位 <strong>AI 构图相机</strong></div></div>'+route('退出登录','login','primary full row')+'</div></div>';
+ return '<div class="screen">'+top('设置')+'<div class="bodypad">'+Object.entries(groups).map(([title,items])=>'<section class="card" data-layer="'+title+'"><h4>'+title+'</h4>'+(title==='辅助线与引导'?'<label class="range-row">辅助线透明度 · '+(data.settings.opacity??100)+'%<input aria-label="辅助线透明度" type="range" min="25" max="100" value="'+(data.settings.opacity??100)+'" data-setting="opacity"><small>明亮背景下保持可见又不过度遮挡</small></label>':'')+items.map(([name,subtitle])=>'<label class="setting switchlabel"><div><h5>'+name+'</h5><span class="muted">'+subtitle+'</span></div><input type="checkbox" data-setting="'+name+'" '+((data.settings[name]??!['拍照音效','Pro 手动模式'].includes(name))?'checked':'')+'></label>').join('')+'</section>').join('')+'<div class="card" data-layer="关于"><h4>关于</h4><div class="setting">产品名称 <strong>帧好 GenWow</strong></div><div class="setting">版本 <strong>1.0.0-debug</strong></div><div class="setting">定位 <strong>AI 构图相机</strong></div></div>'+btn('退出登录','logout','primary full row')+'</div></div>';
 }
 function editProfile(){return '<div class="screen">'+top('编辑资料','profile')+'<form class="bodypad" id="profile-form" data-layer="资料编辑表单"><label class="edit-avatar"><img class="avatar heroavatar" src="'+escape(data.avatar||avatar(data.name))+'" alt="当前头像"><span>点击更换头像</span><input type="file" id="avatar-upload" accept="image/*" aria-label="更换头像"></label><section class="card" data-layer="基础信息"><h4>基础信息</h4>'+field('昵称','name','text',data.name)+field('个人简介','bio','text',data.bio)+'</section><section class="card" data-layer="展示信息"><h4>展示信息</h4>'+field('个人链接','link','url','https://')+'</section><button class="primary full">保存资料</button></form></div>'}
 function auth(){
@@ -165,7 +232,7 @@ function auth(){
  const links=register?route('已有账号？返回登录','login','auth-switch'):
   forgot?route('返回登录','login','auth-switch'):
   '<div class="links">'+route('忘记密码','forgot-password')+route('注册账号','register')+'</div>';
- return '<div class="screen"><form class="auth" id="auth-form" data-layer="账号表单"><h2>'+(register?'注册':forgot?'忘记密码':'登录')+'</h2>'+(forgot?'<p class="muted">通过验证码重置密码</p>':'')+body+(state==='错误提示'?'<p class="auth-error">请检查输入内容后重试</p>':'')+links+'<button class="primary full">'+(register?'注册':forgot?'重置密码':'登录')+'</button>'+(register||forgot?'':btn(codeMode?'密码登录':'验证码登录','auth-mode','auth-switch'))+'<div class="agreement">'+(register?'注册同意':forgot?'重置密码同意':'登录同意')+'用户协议与隐私政策</div><footer>交互仅供验收；网页不会发送验证码或创建真实账号。</footer></form></div>';
+ return '<div class="screen"><form class="auth" id="auth-form" data-layer="账号表单"><h2>'+(register?'注册':forgot?'忘记密码':'登录')+'</h2>'+(forgot?'<p class="muted">通过验证码重置密码</p>':'')+body+(state==='错误提示'?'<p class="auth-error">请检查输入内容后重试</p>':'')+links+'<button class="primary full">'+(register?'注册':forgot?'重置密码':'登录')+'</button>'+(register||forgot?'':btn(codeMode?'密码登录':'验证码登录','auth-mode','auth-switch'))+'<label class="agreement"><input type="checkbox" data-agree><span>'+(register?'注册同意':forgot?'重置密码同意':'登录同意')+'</span><span class="link" data-action="agreement">《用户服务协议》</span></label><footer>交互仅供验收；网页不会发送验证码或创建真实账号。</footer></form></div>';
 }
 const adjustments=[['曝光',-2,2,.1],['对比度',-100,100,1],['高光',-100,100,1],['阴影',-100,100,1],['饱和度',-100,100,1],['色温',-100,100,1],['色调',-100,100,1],['红色',-100,100,1],['绿色',-100,100,1],['蓝色',-100,100,1],['锐化',0,100,1],['暗角',0,100,1]];
 let editorOriginal=null,editorFrame=0;
@@ -263,6 +330,7 @@ function render(){
  else if(id==='publish')html=publish();
  else html='<div class="screen dark">'+top('系统相册入口')+'<div class="bodypad"><p class="note" style="color:#333">'+escape(current.note)+'</p>'+(state==='空相册'?empty('暂无照片'):'<img class="photo" src="'+image()+'" alt="示例照片">')+'</div></div>';
  $('#app').innerHTML=html;
+ const stageCtl=$('#stage-controls');if(stageCtl)stageCtl.innerHTML=isStepDemo()?stepControls():'';
  if(id==='filter-editor')initEditorPreview();
  if(['camera','filters','pro','capture-result','publish'].includes(id))renderStoredCustomPreview();
  if(id==='login'){
@@ -316,14 +384,19 @@ document.addEventListener('click',e=>{
  case 'auth-mode':setState(state==='验证码登录'?'密码登录':'验证码登录');break;
  case 'code':toast('验证码入口交互演示，不发送短信');break;
  case 'third-party':toast('与当前 App 一致：此入口尚未接入第三方登录');break;
+ case 'agreement':toast('用户服务协议（演示）');break;
+ case 'step-next':guideStep=Math.min(8,(guideStep||1)+1);render();break;
+ case 'step-prev':guideStep=Math.max(1,(guideStep||1)-1);render();break;
+ case 'step-reset':guideStep=1;render();break;
+ case 'logout':if(confirm('确定退出当前账号？'))goto('login');break;
  }
 });
 document.addEventListener('submit',e=>{
  e.preventDefault();const form=e.target;const fields=new FormData(form);
- if(form.id==='comment-form'){const text=fields.get('text').trim();if(!text)return;data.comments.push({post:activePost().id,author:data.name,text});save();state='有评论';render()}
- if(form.id==='publish-form'){data.posts.unshift({id:Date.now().toString(),author:data.name,title:fields.get('body').slice(0,20),body:fields.get('body'),image:'community_cafe_portrait',likes:0});save();goto('community')}
- if(form.id==='profile-form'){const name=fields.get('name').trim();if(name.length<2||name.length>20){toast('昵称需要 2–20 个字符');return}data.posts.forEach(p=>{if(p.author===data.name)p.author=name});data.name=name;data.bio=fields.get('bio');save();goto('profile')}
- if(form.id==='auth-form'){if(fields.has('password')&&fields.get('password').length<6){toast('密码至少 6 位');return}goto(id==='forgot-password'?'login':'camera')}
+ if(form.id==='comment-form'){const text=fields.get('text').trim();if(!text)return;data.comments.push({post:activePost().id,author:data.name,text});save();state='有评论';toast('评论已发送');render()}
+ if(form.id==='publish-form'){data.posts.unshift({id:Date.now().toString(),author:data.name,title:fields.get('body').slice(0,20),body:fields.get('body'),image:'community_cafe_portrait',likes:0});save();toast('已发布');goto('community')}
+ if(form.id==='profile-form'){const name=fields.get('name').trim();if(name.length<2||name.length>20){toast('昵称需要 2–20 个字符');return}data.posts.forEach(p=>{if(p.author===data.name)p.author=name});data.name=name;data.bio=fields.get('bio');save();toast('资料已保存');goto('profile')}
+ if(form.id==='auth-form'){const agree=form.querySelector('[data-agree]');if(agree&&!agree.checked){toast('请先勾选同意《用户服务协议》');return}if(fields.has('password')&&fields.get('password').length<6){toast('密码至少 6 位');return}goto(id==='forgot-password'?'login':'camera')}
 });
 document.addEventListener('input',e=>{
  const t=e.target;
@@ -353,6 +426,11 @@ function loadFeedback(){const all=read('genwow-review-feedback',{}),item=all[fee
 $('#save-feedback').onclick=()=>{const all=read('genwow-review-feedback',{});all[feedbackKey()]={page:id,title:current.title,state,viewport:$('#viewport').value,verdict:$('#verdict').value,text:$('#feedback').value,revision,date:new Date().toISOString()};localStorage.setItem('genwow-review-feedback',JSON.stringify(all));toast('本页验收意见已保存')};
 $('#export-feedback').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(read('genwow-review-feedback',{}),null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='GenWow-验收意见-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
 render();loadFeedback();
+document.addEventListener('keydown',e=>{
+ if(!isStepDemo())return;
+ if(e.key==='ArrowRight'){guideStep=Math.min(3,guideStep+1);render()}
+ else if(e.key==='ArrowLeft'){guideStep=Math.max(1,guideStep-1);render()}
+});
 let webVersion='';
 async function poll(){try{const endpoint=published?site('/review-version.json'):site('/api/revision');const r=await fetch(endpoint+'?t='+Date.now(),{cache:'no-store'});if(!r.ok)throw Error();revision=await r.json();if(webVersion&&webVersion!==revision.web){const u=new URL(location.href);u.searchParams.set('revision',revision.web);location.replace(u);return}webVersion=revision.web;$('#connection').textContent=published?'● 在线版本已连接':'● 本地服务已连接';const baseline=await fetch(site('/baseline.json'),{cache:'no-store'}).then(r=>r.ok?r.json():{});const changed=baseline.android&&baseline.android!==revision.android;$('#source-status').textContent=changed?'Android 源码已变化：HTML 需由开发同步后重新验收。':'预览按所列源文件人工复现。修改 HTML 自动刷新；Android 改动不会自动转换成网页。'}catch{$('#connection').textContent=published?'在线版本暂不可用':'服务断开 · 请重启验收站'} }
 poll();setInterval(poll,published?10000:1800);

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -53,7 +54,7 @@ fun MainScreen(
 ) {
     // ★ 社区 VM 仅在社区 Tab 使用，通过 hiltViewModel() 即时获取
     val communityViewModel: CommunityViewModel = hiltViewModel()
-    var selectedTab by remember { mutableStateOf(0) }
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
 
     // ★ Tab 切换时控制相机/管线资源：离开相机 Tab 暂停，进入时恢复
     LaunchedEffect(selectedTab) {

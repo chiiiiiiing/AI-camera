@@ -10,7 +10,133 @@ svg{fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-l
 .guide{z-index:4}.guide .axis-card{position:relative;width:min(300px,90vw);height:146px;border-radius:22px;background:#09090bd9;border:1px solid #ffffff4d;box-shadow:0 15px 35px #0009;color:var(--pink);padding:13px 16px;text-align:center}.guide .axis-caption{color:#fff;font-size:12px;font-weight:700;letter-spacing:.08em}.guide .axis-card small{position:absolute;bottom:10px;left:12px;right:12px;color:#fff;opacity:.78;font-size:10px;line-height:1.25}.axis-card.roll .reference-line,.axis-card.roll .moving-line{position:absolute;left:18%;right:18%;top:67px;border-top:3px solid}.axis-card.roll .reference-line{border-color:white;border-style:dashed;opacity:.75}.axis-card.roll .moving-line{border-color:var(--pink);transform:rotate(-11deg);transform-origin:center}.axis-arrow{position:absolute;top:51px;right:16px;font-size:28px;font-weight:700}.guide.good .moving-line{border-color:var(--green)!important;transform:rotate(0)!important}.guide.good .axis-card{color:var(--green);border-color:#55d98a90}.pitch-track{position:absolute;top:42px;left:46%;height:65px;width:36px;border-left:2px dashed white}.pitch-target{position:absolute;left:-15px;bottom:0;color:white;font-size:10px}.pitch-current{position:absolute;top:-11px;left:14px;font-size:40px;line-height:1;color:var(--pink)}.yaw-track{position:absolute;top:70px;left:23%;width:54%;border-top:2px dashed white}.yaw-current{position:absolute;top:-29px;left:5%;font-size:35px;line-height:1;color:var(--pink)}.yaw-target{position:absolute;top:5px;right:0;color:white;font-size:10px}.position-track{display:flex;align-items:center;justify-content:center;gap:14px;height:86px}.subject-marker,.target-marker{display:grid;place-items:center;width:66px;height:66px;border:2px solid;border-radius:13px;font-size:11px}.subject-marker{color:var(--pink)}.target-marker{color:white;border-style:dashed}.position-arrow{font-size:25px}.guide.good .subject-marker{color:var(--green);border-color:var(--green)}.guide.good .target-marker{border-color:var(--green);color:var(--green)}.guide.good .position-arrow{color:var(--green)}
 .landscape .guide .axis-card{height:105px;width:280px;padding-top:7px}.landscape .axis-card.roll .reference-line,.landscape .axis-card.roll .moving-line{top:45px}.landscape .pitch-track{top:27px;height:48px}.landscape .yaw-track{top:48px}.landscape .axis-card small{bottom:4px}.landscape .position-track{height:62px}.landscape .subject-marker,.landscape .target-marker{height:45px;width:56px}
 .post-detail{background:#fff1f5;padding-bottom:72px}.post-detail .top{height:58px;display:flex;justify-content:space-between}.post-detail .detail-photo{width:100%;aspect-ratio:4/3;object-fit:cover;display:block}.post-detail .bodypad{padding:16px}.post-detail .bodypad h4{margin-top:22px}.post-detail .detail-composer{position:absolute;bottom:0;left:0;right:0;margin:0;background:#fff1f5;padding:10px 12px;border-top:1px solid #e9dce4}.post-detail .actions a{font-size:12px;padding:3px}
-.auth{min-height:100%;display:flex;flex-direction:column;justify-content:center;padding:25px 52px 30px}.auth h2{text-align:center;font-size:26px;margin:0 0 26px}.auth .field{margin:7px 0}.auth .field input{height:48px;background:#ffffffa8;border-radius:16px}.auth .links{margin:14px 0 26px}.auth .primary.full{margin-top:18px;background:#4b3a62;color:white}.auth .auth-switch{margin:12px auto;display:block;text-align:center;color:#654687;border:0;background:transparent;font-size:13px}.auth .code-button{align-self:flex-end;margin-bottom:8px;font-size:11px}.auth .agreement{text-align:center;margin-top:27px;color:#716982;font-size:11px}.auth .auth-error{color:#c44;font-size:12px}.auth footer{margin-top:10px}
-.edit-avatar{display:flex;flex-direction:column;align-items:center;gap:10px;margin:18px auto 28px;color:#4b3a62;font-size:13px;cursor:pointer}.edit-avatar .heroavatar{width:94px;height:94px;border:3px solid white;box-shadow:0 6px 18px #55406422}.edit-avatar input{position:absolute;width:1px;height:1px;opacity:0}.preview-grid{inset:0}.preview-subject,.preview-target{position:absolute;pointer-events:none;z-index:2}.preview-subject{left:34%;top:22%;width:42%;height:54%;border:2px solid var(--pink);border-radius:10px}.preview-subject.aligned{border-color:var(--green)}.preview-target{left:30%;top:20%;width:36%;height:50%;border:2px dashed white;border-radius:10px}.guide h3,.guide p{background:#08080ab8;border-radius:12px;padding:5px 10px;text-shadow:0 1px 2px #000;margin:7px 0 0}.guide .axis-card+h3{margin-top:12px}
+.auth{min-height:100%;display:flex;flex-direction:column;justify-content:center;padding:25px 52px 30px}.auth h2{text-align:center;font-size:26px;margin:0 0 26px}.auth .field{margin:7px 0}.auth .field input{height:48px;background:#ffffffa8;border-radius:16px}.auth .links{margin:14px 0 26px}.auth .primary.full{margin-top:18px;background:#4b3a62;color:white}.auth .auth-switch{margin:12px auto;display:block;text-align:center;color:#654687;border:0;background:transparent;font-size:13px}.auth .code-button{align-self:flex-end;margin-bottom:8px;font-size:11px}.auth .agreement{display:flex;align-items:center;justify-content:center;gap:4px;margin-top:27px;color:#716982;font-size:11px}.agreement input{width:14px;height:14px;margin:0;accent-color:#654687}.link{color:#654687;border:0;background:transparent;cursor:pointer;text-decoration:none}.auth .auth-error{color:#c44;font-size:12px}.auth footer{margin-top:10px}
+.edit-avatar{display:flex;flex-direction:column;align-items:center;gap:10px;margin:18px auto 28px;color:#4b3a62;font-size:13px;cursor:pointer}.edit-avatar .heroavatar{width:94px;height:94px;border:3px solid white;box-shadow:0 6px 18px #55406422}.edit-avatar input{position:absolute;width:1px;height:1px;opacity:0}.preview-grid{inset:0}.preview-subject,.preview-target{position:absolute;pointer-events:none;z-index:2}.preview-subject{left:34%;top:22%;width:42%;height:54%;border:2px solid var(--pink);border-radius:10px}.preview-subject.aligned{border-color:var(--green)}
+/* ── 相机辅助线（严格镜像 CaptureWorkflowOverlay.kt 的 WorkflowGuideLines） ── */
+/* 三分线网格：1/3、2/3，白 34%，1px（满宽/满高） */
+.gl-v{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.34)}
+.gl-h{position:absolute;left:0;right:0;height:1px;background:rgba(255,255,255,.34)}
+/* 主体框：粉 / 对齐绿，2px，圆角 10dp */
+.gl-subjectbox{position:absolute;border:2px solid var(--pink);border-radius:10px;pointer-events:none;z-index:3}
+.gl-subjectbox.aligned{border-color:var(--green)}
+/* 目标区：白圈 2px，alpha .8，半径 = 0.12 × 画面短边 */
+.gl-zone{position:absolute;width:24%;aspect-ratio:1;transform:translate(-50%,-50%);border:2px solid rgba(255,255,255,.8);border-radius:50%;pointer-events:none;z-index:3}
+/* 水平仪：白虚线 2px（目标水平，虚 9/8）+ 粉/绿实线 3px（当前角度，随倾角旋转） */
+.gl-hz{position:absolute;left:50%;top:46%;width:74%;transform:translate(-50%,-50%);pointer-events:none;z-index:4}
+.gl-hz-target{display:block;height:2px;background:repeating-linear-gradient(90deg,rgba(255,255,255,.75) 0 9px,transparent 9px 17px)}
+.gl-hz-line{display:block;margin-top:-2px;border-top:3px solid var(--pink);border-radius:2px}
+/* 图例 */
+.aux-legend{position:absolute;left:10px;bottom:10px;margin:0;padding:8px 11px;list-style:none;background:#09090bcc;border-radius:10px;color:#f4eef7;font-size:10px;line-height:1.75;z-index:6;pointer-events:none}
+.aux-legend b{display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:6px;vertical-align:middle;background:#fff}
+.aux-legend .d-grid{background:rgba(255,255,255,.6)}
+.aux-legend .d-subject{background:var(--pink)}
+.aux-legend .d-zone{background:#fff;height:9px;width:9px;border-radius:50%}
+.aux-legend .d-horizon{background:linear-gradient(90deg,#fff 0 55%,var(--pink) 55%)}
+/* ── 分步引导 第 1 步：旋转卡（镜像 RotatingOverlay / RollGuide） ── */
+.rot-wrap{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:10px;pointer-events:none;z-index:5}
+.rot-step{color:rgba(255,255,255,.72);font-size:12px;font-weight:500}
+.rot-card{position:relative;width:300px;height:146px;background:rgba(0,0,0,.82);border-radius:26px;overflow:hidden}
+.roll-line{position:absolute;left:50%;top:46%;width:192px;transform:translate(-50%,-50%)}
+.roll-target{display:block;height:3px;background:repeating-linear-gradient(90deg,rgba(255,255,255,.85) 0 10px,transparent 10px 18px)}
+.roll-current{display:block;margin-top:-3px;border-top:4px solid var(--pink);border-radius:2px;transform:rotate(9deg)}
+.roll-caption{position:absolute;left:0;right:0;bottom:13px;text-align:center;color:rgba(255,255,255,.8);font-size:10px}
+.rot-chip{background:rgba(0,0,0,.72);border-radius:12px;padding:7px 12px;display:flex;flex-direction:column;gap:4px}
+.rot-chip b{color:var(--pink);font-size:17px;font-weight:500}
+.rot-chip span{color:#fff;font-size:14px}
+/* ── 分步引导 第 2 步：中心点连线（镜像 CenterPointGuidance） ── */
+.cp{position:absolute;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:5}
+.cp-subject{width:12px;height:12px;background:var(--pink);box-shadow:0 0 0 9px rgba(255,255,255,.18)}
+.cp-target{width:14px;height:14px;border:2.5px solid var(--pink);background:radial-gradient(circle,var(--pink) 0 4px,transparent 4px);box-shadow:0 0 0 11px rgba(255,255,255,.1)}
+.cp-arrow{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4}
+.cp-hint{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);background:rgba(0,0,0,.45);color:var(--pink);border-radius:12px;padding:8px 16px;font-size:15px;font-weight:500;z-index:6;pointer-events:none;white-space:nowrap}
+/* ── 分步引导 第 3 步：就绪（镜像 ReadyOverlay） ── */
+.ready-ring{position:absolute;width:36%;aspect-ratio:1;transform:translate(-50%,-50%);border:2px solid rgba(140,224,195,.6);border-radius:50%;pointer-events:none;z-index:4}
+.ready-text{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:10px;pointer-events:none;z-index:5}
+.ready-text b{color:var(--green);font-size:56px;font-weight:300;line-height:1}
+.ready-text span{color:var(--green);font-size:15px;font-weight:500}
+/* ── 顶部工作流进度点条（镜像 WorkflowProgress：三点 12%/50%/88%） ── */
+.wf-bar{position:absolute;left:0;right:0;top:110px;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;z-index:6}
+.wf-track{position:relative;width:220px;height:22px}
+.wf-connector{position:absolute;left:12%;right:12%;top:50%;height:3px;background:rgba(255,255,255,.24);border-radius:2px;transform:translateY(-50%)}
+.wf-fill{position:absolute;left:12%;top:50%;height:3px;background:var(--green);border-radius:2px;transform:translateY(-50%)}
+.wf-dot{position:absolute;top:50%;width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;background:rgba(255,255,255,.32)}
+.wf-dot.active{width:14px;height:14px;margin:-7px 0 0 -7px;background:var(--pink)}
+.wf-dot.done{background:var(--green)}
+.wf-status{font-size:11px;font-weight:500;color:rgba(255,255,255,.82)}
+.wf-status.ready{color:var(--green)}
+/* 演示控制条（手机外部，便于逐步点击） */
+.stage-controls{margin-top:14px}
+.step-ctl{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 14px;flex-wrap:wrap}
+.step-ctl-label{font-size:12px;color:#5a5566;font-weight:600}
+.step-ctl .spacer{flex:1}
+.step-ctl button{font-size:12px}.preview-target{left:30%;top:20%;width:36%;height:50%;border:2px dashed white;border-radius:10px}.guide h3,.guide p{background:#08080ab8;border-radius:12px;padding:5px 10px;text-shadow:0 1px 2px #000;margin:7px 0 0}.guide .axis-card+h3{margin-top:12px}
 .filter-editor-screen{display:flex;flex-direction:column;overflow:hidden;padding:0}.filter-editor-screen .top{position:absolute;z-index:2;top:0;left:0;right:0;color:white;text-shadow:0 1px 3px #000}.filter-editor-screen .editor-photo{height:42%;flex:none;object-fit:cover}.filter-editor-screen .bodypad{flex:1;min-height:0;overflow:auto;background:#18181ee8;border-radius:24px 24px 0 0;padding:18px;margin-top:-8px;position:relative}.filter-editor-screen .bodypad h4{font-size:14px;margin:18px 0 8px}.filter-editor-screen .bodypad .field{margin:0 0 16px}
 .filter-hint{display:block;color:#fffc;background:#17171de8;border-radius:9px;padding:6px 8px;margin:-4px 0 8px;font-size:10px;line-height:1.4}
+
+
+/* 真机截图一致的姿态引导：直接复用 Android drawable-nodpi 图标。 */
+.phone-guide{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;pointer-events:none;z-index:5}
+.phone-guide-panel{width:min(300px,84%);height:146px;border-radius:26px;background:rgba(72,69,78,.43);display:grid;place-items:center;overflow:hidden}
+.phone-guide-panel img{display:block;max-width:76%;max-height:74%;object-fit:contain;filter:none}
+.phone-guide-copy{display:flex;flex-direction:column;align-items:center;gap:7px;color:#efb1c4;text-shadow:0 1px 3px rgba(0,0,0,.45)}
+.phone-guide-copy b{font-size:22px;font-weight:500;line-height:1.2}
+.phone-guide-copy span{font-size:17px;font-weight:400;line-height:1.2}
+.phone-guide.is-aligned .phone-guide-copy b{color:#efb1c4}
+.guide-asset-overview{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;gap:8px;z-index:5;pointer-events:none;padding:78px 20px 150px}
+.guide-asset-overview .phone-guide{position:relative;inset:auto;display:grid;grid-template-columns:112px 1fr;gap:10px;justify-content:stretch}
+.guide-asset-overview .phone-guide-panel{width:112px;height:72px;border-radius:18px}
+.guide-asset-overview .phone-guide-panel img{max-width:72%;max-height:76%}
+.guide-asset-overview .phone-guide-copy{align-items:flex-start}
+.guide-asset-overview .phone-guide-copy b{font-size:16px}
+.guide-asset-overview .phone-guide-copy span{font-size:13px}
+
+
+/* Android 图标轮廓 + 正式 App 的 Compose 色值；不使用旧 PNG 自带荧光渐变。 */
+.phone-guide-icon{display:block;width:116px;height:112px;background:#f4b6c2;-webkit-mask:var(--guide-mask) center/contain no-repeat;mask:var(--guide-mask) center/contain no-repeat}
+.phone-guide.is-aligned .phone-guide-icon{background:#8ce0c3}
+.phone-guide.is-pitch .phone-guide-icon{width:258px;height:100px}
+.phone-guide-panel>img{display:none!important}
+.guide-asset-overview .phone-guide-icon{width:62px;height:58px}
+.guide-asset-overview .phone-guide.is-pitch .phone-guide-icon{width:96px;height:48px}
+
+
+/* 人物姿势引导 v8：正式轮廓 SVG；调试关键点图不进入相机 UI。 */
+.pose-guide{position:absolute;inset:120px 0 160px;z-index:5;pointer-events:none;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.pose-guide>img{width:58%!important;height:74%!important;object-fit:contain!important;filter:drop-shadow(0 2px 4px rgba(0,0,0,.5))}
+.pose-guide-copy{margin-top:5px;padding:8px 15px;border-radius:13px;background:rgba(0,0,0,.48);display:flex;flex-direction:column;align-items:center;gap:3px;color:#fff}
+.pose-guide-copy b{font-size:16px;font-weight:600}.pose-guide-copy span{font-size:12px;opacity:.82}
+.pose-guide.adjusting .pose-guide-copy b{color:#f4b6c2}.pose-guide.aligned .pose-guide-copy{color:#8ce0c3}.pose-guide.lost{opacity:.64}
+.pose-progress{position:absolute;left:10%;right:10%;top:96px;z-index:6;color:#fff;text-align:center;pointer-events:none}
+.pose-progress>b{font-size:12px;font-weight:500}.pose-progress>div{margin-top:7px;display:flex;justify-content:space-between;position:relative}
+.pose-progress>div:before{content:"";position:absolute;left:8%;right:8%;top:5px;height:2px;background:rgba(255,255,255,.24)}
+.pose-progress-dot{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:9px;color:rgba(255,255,255,.58)}
+.pose-progress-dot i{width:10px;height:10px;border-radius:50%;background:#777;box-shadow:0 0 0 2px rgba(0,0,0,.18)}
+.pose-progress-dot.active i{width:14px;height:14px;margin:-2px;background:#f4b6c2}.pose-progress-dot.done i{background:#8ce0c3}.pose-progress-dot.done{color:#8ce0c3}
+.pose-guide.verifying>img{animation:pose-pulse 1.3s ease-in-out infinite alternate}@keyframes pose-pulse{to{opacity:.62}}
+@media(prefers-reduced-motion:reduce){.pose-guide.verifying>img{animation:none}}
+
+/* v8 姿势模板配准到当前演示人像的可视区域。 */
+.pose-guide>img{width:66%!important;height:84%!important;transform:translateY(44px)}
+.pose-guide-copy{transform:translateY(22px)}
+
+
+/* 将实时人物轮廓配准到演示照片；v8 抬手模板作为独立目标参考，不再错误套在人脸上。 */
+.pose-guide{inset:40px 0 160px;display:block}
+.pose-guide>img{display:none!important}
+.pose-live{position:absolute;inset:0;width:100%;height:100%;overflow:visible;color:rgba(255,255,255,.88);filter:drop-shadow(0 1px 2px rgba(0,0,0,.75))}
+.pose-live path{fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.pose-guide.target .pose-live{color:rgba(255,255,255,.55)}
+.pose-guide.adjusting .pose-live{color:rgba(255,255,255,.9)}
+.pose-guide.verifying .pose-live{color:rgba(255,255,255,.9);animation:pose-pulse 1.3s ease-in-out infinite alternate}
+.pose-guide.aligned .pose-live{color:#8ce0c3}
+.pose-guide.lost .pose-live{color:rgba(255,255,255,.32);stroke-dasharray:9 8}
+.pose-reference{position:absolute;right:13px;top:92px;width:94px;padding:7px 6px 5px;border-radius:14px;background:rgba(12,12,16,.62);border:1px solid rgba(255,255,255,.18);text-align:center;color:#fff}
+.pose-reference small{display:block;font-size:9px;opacity:.72;margin-bottom:3px}
+.pose-reference img{display:block!important;width:100%!important;height:130px!important;object-fit:contain!important;transform:none!important;filter:none!important}
+.pose-guide-copy{position:absolute;left:50%;bottom:18px;transform:translateX(-50%)!important;margin:0;white-space:nowrap}
+.pose-guide.adjusting:after{content:"↗";position:absolute;left:120px;top:306px;color:#f4b6c2;font-size:38px;font-weight:300;transform:rotate(-18deg);text-shadow:0 1px 3px #000}
+@media(prefers-reduced-motion:reduce){.pose-guide.verifying .pose-live{animation:none}}
+
+
+/* 当前演示场景是坐姿窗边人像，纠错方向改为轻微转头，而不是抬手。 */
+.pose-guide.adjusting:after{content:"↗";left:274px;top:205px;transform:rotate(-8deg)}
