@@ -23,21 +23,30 @@ import androidx.compose.ui.unit.sp
 
 // ── 品牌色（Figma 实测） ──
 
+// 所有颜色统一来自 designs/design-tokens.json 生成的门牌文件。
+// 旧名字保留为别名，避免大规模重命名；新页面直接用 GenWowTokens.Colors.*。
+
 /** 深紫色 — 按钮、强调文字 (Figma #4B3A62) */
-val BrandPurple = Color(0xFF4B3A62)
-val BrandPink = Color(0xFFF4B6C2)
-val BrandLavender = Color(0xFFD8CBFF)
-val BrandBlueTint = Color(0xFFDCE6FF)
-val BrandSurface = Color(0xFFFFF9FC)
-val BrandOnSurface = Color(0xFF4B3A62)
-val BrandOnSurfaceMuted = Color(0xFF8A8093)
+val BrandPurple = GenWowTokens.Colors.BrandPurple
+val BrandPink = GenWowTokens.Colors.BrandPink
+val BrandPinkLight = GenWowTokens.Colors.BrandPinkLight
+val BrandLavender = GenWowTokens.Colors.BrandLavender
+val BrandBlueTint = GenWowTokens.Colors.BrandBlueTint
+val BrandSurface = GenWowTokens.Colors.SurfaceBrand
+val BrandOnSurface = GenWowTokens.Colors.TextOnBrand
+val BrandOnSurfaceMuted = GenWowTokens.Colors.TextMuted
 
 /** 表单/错误提示红 — 统一错误色，替代各处硬编码 0xFFC76464 */
-val BrandError = Color(0xFFC76464)
+val BrandError = GenWowTokens.Colors.StateError
+
+/** 新设计补充色 */
+val BrandLike = GenWowTokens.Colors.BrandLike
+val BrandIconTab = GenWowTokens.Colors.BrandIconTab
+val BrandTabBar = GenWowTokens.Colors.SurfaceTabBar
 
 /** Logo 渐变起止色 (Figma Node 1:28) */
-val LogoGradientStart = Color(0xFFFFCCF2)
-val LogoGradientEnd = Color(0xFF977DFF)
+val LogoGradientStart = GenWowTokens.Gradients.LogoStroke[0]
+val LogoGradientEnd = GenWowTokens.Gradients.LogoStroke[1]
 
 // ── 兼容别名（旧代码可能引用） ──
 val DeepPurple = BrandPurple
@@ -50,57 +59,55 @@ val TextGray = Color(0xFF999999)
 val TextLightGray = Color(0xFFBBBBBB)
 
 // ── 相机 chrome（队友规范 CameraChrome #050505） ──
-val CameraChrome = Color(0xFF050505)
-val CameraOnChrome = Color(0xFFF8F7FA)
-val CameraControlMuted = Color(0xFF9A969F)
+val CameraChrome = GenWowTokens.Colors.SurfaceCamera
+val CameraOnChrome = GenWowTokens.Colors.TextOnCamera
+val CameraControlMuted = GenWowTokens.Colors.TextOnCameraMuted
 
 // ── 引导色（队友设计规范） ──
-val GuidePrimary = Color(0xFF35C6D4)
+val GuidePrimary = GenWowTokens.Colors.GuidePrimary
 val GuideAccent = GuidePrimary
-val GuideAligned = Color(0xFF8CE0C3)
-val GuideWarning = Color(0xFFFF9D55)
-val GuideNeutral = Color(0xB3F8F7FA)
+val GuideAligned = GenWowTokens.Colors.GuideAligned
+val GuideWarning = GenWowTokens.Colors.GuideWarning
+val GuideNeutral = GenWowTokens.Colors.GuideNeutral
 
 // ── 品牌背景渐变 ──
 val BrandBackgroundGradient = Brush.linearGradient(
-    colors = listOf(
-        Color(0xFFFFF9FC),
-        Color(0xFFF8E1F0),
-        Color(0xFFDCCEFF),
-        Color(0xFFDCE7FF),
-    ),
+    colors = GenWowTokens.Gradients.BrandBackground,
 )
 
 /** Logo 描边渐变 (Figma Node 1:28) */
 val LogoStrokeGradient = Brush.linearGradient(
-    colors = listOf(LogoGradientStart, LogoGradientEnd),
+    colors = GenWowTokens.Gradients.LogoStroke,
 )
 
 // ── 字体 — 队友 Figma 指定 Noto Sans CJK SC，未随素材交付，用系统 SansSerif ──
 private val GenWowSans = FontFamily.SansSerif
 
+// Figma 启动页：品牌中文名是粉红渐变，不是深紫
+private val SplashWordmarkBrush = Brush.linearGradient(
+    listOf(Color(0xFFFF6B8A), Color(0xFFE85D7A)),
+)
+
 val BrandChineseTextStyle = TextStyle(
     fontFamily = GenWowSans,
     fontWeight = FontWeight.Bold,
     fontSize = 36.sp,
-    lineHeight = 44.sp,
-    color = BrandOnSurface,
+    lineHeight = 52.13.sp,
+    letterSpacing = 4.sp,
+    brush = SplashWordmarkBrush,
 )
 
 val BrandEnglishTextStyle = TextStyle(
     fontFamily = GenWowSans,
     fontWeight = FontWeight.Medium,
     fontSize = 16.sp,
-    lineHeight = 19.sp,
+    lineHeight = 18.75.sp,
     letterSpacing = 6.sp,
-    color = BrandOnSurface,
+    color = BrandLike,
 )
 
 val GenWowTypography = Typography(
-    headlineLarge = TextStyle(
-        fontFamily = GenWowSans, fontWeight = FontWeight.Bold,
-        fontSize = 26.sp, lineHeight = 34.sp,
-    ),
+    headlineLarge = GenWowTokens.Typography.Heading,
     headlineMedium = TextStyle(
         fontFamily = GenWowSans, fontWeight = FontWeight.SemiBold,
         fontSize = 22.sp, lineHeight = 30.sp,
@@ -109,42 +116,36 @@ val GenWowTypography = Typography(
         fontFamily = GenWowSans, fontWeight = FontWeight.Medium,
         fontSize = 16.sp, lineHeight = 24.sp,
     ),
-    bodyMedium = TextStyle(
-        fontFamily = GenWowSans, fontWeight = FontWeight.Normal,
-        fontSize = 14.sp, lineHeight = 21.sp,
-    ),
+    bodyMedium = GenWowTokens.Typography.Body14,
     bodySmall = TextStyle(
         fontFamily = GenWowSans, fontWeight = FontWeight.Normal,
         fontSize = 12.sp, lineHeight = 18.sp,
     ),
-    labelMedium = TextStyle(
-        fontFamily = GenWowSans, fontWeight = FontWeight.Medium,
-        fontSize = 12.sp, lineHeight = 16.sp,
-    ),
+    labelMedium = GenWowTokens.Typography.Helper13,
 )
 
 val GenWowShapes = Shapes(
-    extraSmall = RoundedCornerShape(8.dp),
-    small = RoundedCornerShape(12.dp),
-    medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(28.dp),
-    extraLarge = RoundedCornerShape(32.dp),
+    extraSmall = RoundedCornerShape(GenWowTokens.Radius.xs),
+    small = RoundedCornerShape(GenWowTokens.Radius.sm),
+    medium = RoundedCornerShape(GenWowTokens.Radius.md),
+    large = RoundedCornerShape(GenWowTokens.Radius.lg),
+    extraLarge = RoundedCornerShape(GenWowTokens.Radius.xl),
 )
 
 // ── 动效时长（design-audit §7 动效规范） ──
 object GenWowMotion {
-    const val PressMillis = 90
-    const val PressReleaseMillis = 150
-    const val FocusMillis = 180
-    const val ModeChangeMillis = 210
-    const val PageEnterMillis = 240
-    const val WrongDirectionMillis = 120
-    const val WrongDirectionRecoveryMillis = 180
-    const val GuidanceLoopMillis = 1_400
-    const val NearGuidanceLoopMillis = 1_900
-    const val AlignmentSettleMillis = 300
-    const val CaptureFlashInMillis = 70
-    const val CaptureFlashOutMillis = 190
+    const val PressMillis = GenWowTokens.Motion.Press
+    const val PressReleaseMillis = GenWowTokens.Motion.PressRelease
+    const val FocusMillis = GenWowTokens.Motion.Focus
+    const val ModeChangeMillis = GenWowTokens.Motion.ModeChange
+    const val PageEnterMillis = GenWowTokens.Motion.PageEnter
+    const val WrongDirectionMillis = GenWowTokens.Motion.WrongDirection
+    const val WrongDirectionRecoveryMillis = GenWowTokens.Motion.WrongDirectionRecovery
+    const val GuidanceLoopMillis = GenWowTokens.Motion.GuidanceLoop
+    const val NearGuidanceLoopMillis = GenWowTokens.Motion.NearGuidanceLoop
+    const val AlignmentSettleMillis = GenWowTokens.Motion.AlignmentSettle
+    const val CaptureFlashInMillis = GenWowTokens.Motion.CaptureFlashIn
+    const val CaptureFlashOutMillis = GenWowTokens.Motion.CaptureFlashOut
 
     val StandardEasing = CubicBezierEasing(0.2f, 0f, 0f, 1f)
     val EmphasizedEasing = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)

@@ -1,6 +1,6 @@
 package com.example.aicamera.ui.screen
 
-import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -9,12 +9,15 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.aicamera.R
 import com.example.aicamera.data.AuthRepository
 import com.example.aicamera.ui.auth.AgreementText
 import com.example.aicamera.ui.auth.AuthBrandHeader
@@ -23,7 +26,6 @@ import com.example.aicamera.ui.auth.AuthFieldIcon
 import com.example.aicamera.ui.auth.BrandPrimaryButton
 import com.example.aicamera.ui.auth.LightSystemBars
 import com.example.aicamera.ui.auth.VerificationButton
-import com.example.aicamera.ui.theme.BrandBackgroundGradient
 import com.example.aicamera.ui.theme.BrandOnSurface
 import com.example.aicamera.ui.theme.BrandOnSurfaceMuted
 import com.example.aicamera.ui.theme.BrandPurple
@@ -126,11 +128,14 @@ fun RegisterScreen(
 
     LightSystemBars()
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(BrandBackgroundGradient)
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Figma 原图背景
+        Image(
+            painter = painterResource(R.drawable.bg_hub),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+        )
         Column(
             modifier = Modifier
                 .fillMaxWidth()

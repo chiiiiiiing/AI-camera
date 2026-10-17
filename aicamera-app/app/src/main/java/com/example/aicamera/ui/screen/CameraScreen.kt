@@ -23,6 +23,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -77,6 +78,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.aicamera.R
 import com.example.aicamera.camera.CameraConfig.CameraFace
 import com.example.aicamera.camera.CameraGestureDispatcher
 import com.example.aicamera.data.AuthRepository
@@ -1267,11 +1269,12 @@ private fun TopModeControl(
         animationSpec = androidx.compose.animation.core.tween(GenWowMotion.ModeChangeMillis),
         label = "top mode color",
     )
-    val shellColor by androidx.compose.animation.animateColorAsState(
-        targetValue = if (selected) Color.White.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.06f),
-        animationSpec = androidx.compose.animation.core.tween(GenWowMotion.ModeChangeMillis),
-        label = "top mode shell",
-    )
+    val iconRes = when (glyph) {
+        TopGlyph.COFFEE -> R.drawable.ic_top_coffee
+        TopGlyph.LANDSCAPE -> R.drawable.ic_top_sunrise
+        TopGlyph.PERSON -> R.drawable.ic_top_person
+        TopGlyph.SETTINGS -> R.drawable.ic_top_settings
+    }
     Box(
         modifier = Modifier
             .size(48.dp)
@@ -1285,46 +1288,19 @@ private fun TopModeControl(
                 this.selected = selected
             }
             .padding(8.dp)
-            .background(shellColor, CircleShape),
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = if (selected) .9f else .5f),
+                shape = CircleShape,
+            ),
         contentAlignment = Alignment.Center,
     ) {
-        if (glyph == TopGlyph.SETTINGS) {
-            Icon(
-                imageVector = Icons.Outlined.Settings,
-                contentDescription = null,
-                tint = iconColor,
-                modifier = Modifier.size(20.dp)
-            )
-        } else Canvas(Modifier.size(24.dp)) {
-            val color = iconColor
-            val stroke = Stroke(1.35.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round)
-            when (glyph) {
-                TopGlyph.COFFEE -> {
-                    drawRoundRect(color, Offset(7.dp.toPx(), 10.dp.toPx()), androidx.compose.ui.geometry.Size(8.dp.toPx(), 5.5.dp.toPx()), androidx.compose.ui.geometry.CornerRadius(1.2.dp.toPx()), style = stroke)
-                    drawArc(color, -82f, 164f, false, Offset(13.dp.toPx(), 10.6.dp.toPx()), androidx.compose.ui.geometry.Size(4.6.dp.toPx(), 3.5.dp.toPx()), style = stroke)
-                    drawLine(color, Offset(6.8.dp.toPx(), 17.dp.toPx()), Offset(15.8.dp.toPx(), 17.dp.toPx()), strokeWidth = stroke.width)
-                    drawLine(color, Offset(8.5.dp.toPx(), 7.8.dp.toPx()), Offset(8.5.dp.toPx(), 5.5.dp.toPx()), stroke.width, androidx.compose.ui.graphics.StrokeCap.Round)
-                    drawLine(color, Offset(12.dp.toPx(), 7.8.dp.toPx()), Offset(12.dp.toPx(), 4.9.dp.toPx()), stroke.width, androidx.compose.ui.graphics.StrokeCap.Round)
-                }
-                TopGlyph.LANDSCAPE -> {
-                    val path = androidx.compose.ui.graphics.Path().apply {
-                        moveTo(4.5.dp.toPx(), 16.dp.toPx())
-                        lineTo(9.5.dp.toPx(), 10.5.dp.toPx())
-                        lineTo(13.dp.toPx(), 13.2.dp.toPx())
-                        lineTo(17.4.dp.toPx(), 8.6.dp.toPx())
-                        lineTo(20.dp.toPx(), 16.dp.toPx())
-                    }
-                    drawPath(path, color, style = stroke)
-                    drawCircle(color, 1.35.dp.toPx(), Offset(7.dp.toPx(), 7.4.dp.toPx()), style = stroke)
-                    drawLine(color, Offset(4.5.dp.toPx(), 16.dp.toPx()), Offset(20.dp.toPx(), 16.dp.toPx()), stroke.width, androidx.compose.ui.graphics.StrokeCap.Round)
-                }
-                TopGlyph.PERSON -> {
-                    drawCircle(color, 2.15.dp.toPx(), Offset(12.dp.toPx(), 8.dp.toPx()), style = stroke)
-                    drawArc(color, 198f, 144f, false, Offset(6.8.dp.toPx(), 11.dp.toPx()), androidx.compose.ui.geometry.Size(10.4.dp.toPx(), 8.6.dp.toPx()), style = stroke)
-                }
-                TopGlyph.SETTINGS -> Unit
-            }
-        }
+        Image(
+            painter = painterResource(iconRes),
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            colorFilter = ColorFilter.tint(iconColor),
+        )
     }
 }
 
@@ -1406,16 +1382,15 @@ private fun CameraBottomBar(
             Box(
                 modifier = Modifier
                     .size(if (compact) 42.dp else 48.dp)
-                    .background(Color.White.copy(alpha = 0.06f), RoundedCornerShape(14.dp))
                     .clickable(onClick = onToggleCamera)
                     .semantics { contentDescription = "切换前后摄像头" },
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.Cameraswitch,
+                Image(
+                    painter = painterResource(R.drawable.ic_camera_flip),
                     contentDescription = null,
-                    tint = CameraControlMuted,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(28.dp),
+                    colorFilter = ColorFilter.tint(CameraControlMuted),
                 )
             }
         }

@@ -3,8 +3,8 @@ package com.example.aicamera.ui.screen
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,13 +22,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.example.aicamera.R
 import com.example.aicamera.ui.auth.LightSystemBars
-import com.example.aicamera.ui.theme.BrandBackgroundGradient
 import com.example.aicamera.ui.theme.BrandChineseTextStyle
 import com.example.aicamera.ui.theme.BrandEnglishTextStyle
 import com.example.aicamera.ui.theme.GenWowMotion
@@ -74,14 +74,21 @@ fun SplashScreen(onSplashFinished: () -> Unit) {
         label = "splash english alpha",
     )
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(BrandBackgroundGradient)
-            .offset(y = (-12).dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Figma 原图背景（白-粉-紫）
+        Image(
+            painter = painterResource(R.drawable.bg_pure),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .offset(y = (-12).dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
         Image(
             painter = painterResource(R.drawable.ic_genwow_logo),
             contentDescription = null,
@@ -95,5 +102,6 @@ fun SplashScreen(onSplashFinished: () -> Unit) {
         Text("帧好", style = BrandChineseTextStyle, modifier = Modifier.alpha(chineseAlpha))
         Spacer(Modifier.height(10.dp))
         Text("GenWow", style = BrandEnglishTextStyle, modifier = Modifier.alpha(englishAlpha))
+        }
     }
 }

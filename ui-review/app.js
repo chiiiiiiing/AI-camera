@@ -23,7 +23,8 @@ export const pages=[
  page('splash','启动页','04 / 账号',S+'SplashScreen.kt'),
  page('login','登录','04 / 账号',S+'LoginScreen.kt',['密码登录','验证码登录','错误提示']),
  page('register','注册','04 / 账号',S+'RegisterScreen.kt',['默认','错误提示']),
- page('forgot-password','找回密码','04 / 账号',S+'ForgotPasswordScreen.kt',['默认','错误提示'])
+ page('forgot-password','找回密码','04 / 账号',S+'ForgotPasswordScreen.kt',['默认','错误提示']),
+ page('replay','功能回放','05 / 功能',[S+'CameraScreen.kt','guidance/CompositionSessionController.kt','pipeline/V9Inference.kt'],['检索与引导'],'桌面 JVM 回放：真实 student_model.onnx + 406 模板索引 + 构图状态机的录制结果（运行 :app:replayEngine 生成）。不是真机运行验收。')
 ];
 const $=s=>document.querySelector(s);
 const siteBase=new URL('.',import.meta.url).pathname.replace(/\/$/,'');
@@ -41,6 +42,8 @@ if(!current.states.includes(state))state=current.states[0];
 if(id==='user-profile'&&['Helena','Daniel'].includes(new URLSearchParams(location.search).get('user')))state=new URLSearchParams(location.search).get('user');
 let hidden=new Set(), filter=0, zoom=1, proControl='EV', mode='静物', front=false, captured=false, expanded=id==='filters', proOpen=id==='pro', guideStep=1;
 let otherTab='作品';
+let replayData=null,replayDataPromise=null,replayImageIndex=0,replayFrame=1,replayPlaying=false,replayTimer=null;
+const replayImageCache={};
 let revision={}, toastTimer, captureTimer, hintTimer;
 const basePosts=[
  {id:'1',author:'Helena',image:'community_cafe_portrait',title:'窗边的下午',body:'柔和肤色与环境留白，让日常人像更有呼吸感。',likes:26},
@@ -75,14 +78,18 @@ const paths={
  flip:'M4 8a8 8 0 0 1 14-3l2 3M20 3v5h-5 M20 16A8 8 0 0 1 6 19l-2-3M4 21v-5h5',
  heart:'M12 21 3 12C-3 4 7-1 12 6 17-1 27 4 21 12z',
  bookmark:'M6 3h12v18l-6-4-6 4z', comment:'M3 3h18v14H9l-6 4z',
+ star:'M12 2l3 7h7l-5.5 4.5 2 7L12 16l-6.5 4.5 2-7L2 9h7z',
  back:'m15 4-8 8 8 8', mountain:'m2 20 7-10 5 6 4-8 4 12z M7 5a2 2 0 1 1-4 0 2 2 0 0 1 4 0',
  coffee:'M4 7h12v8a5 5 0 0 1-10 0V7 M16 8h3a3 3 0 0 1 0 6h-3 M4 21h15 M7 2v2M12 2v2'
 };
 const svg=name=>'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="'+(paths[name]||paths.camera)+'"/></svg>';
+// Figma 导出的原图标（与 App drawable-nodpi 同一份文件）
+const figmaIcons={camera:'ic_tab_camera',share:'ic_tab_share',person:'ic_tab_person',coffee:'ic_top_coffee',mountain:'ic_top_sunrise',settings:'ic_top_settings',star:'ic_post_star',heart:'ic_feed_heart',comment:'ic_feed_comment',more:'ic_more',flip:'ic_camera_flip'};
+const iconImg=name=>figmaIcons[name]?'<img class="figma-icon" src="'+site('/assets/'+figmaIcons[name]+'.png')+'" alt="">':svg(name);
 const btn=(label,action,cls='')=>'<button type="button" class="'+cls+'" data-action="'+action+'">'+label+'</button>';
-const icon=(name,action,label,cls='')=>'<button class="icon '+cls+'" data-action="'+action+'" aria-label="'+label+'" title="'+label+'">'+svg(name)+'</button>';
+const icon=(name,action,label,cls='')=>'<button class="icon '+cls+'" data-action="'+action+'" aria-label="'+label+'" title="'+label+'">'+iconImg(name)+'</button>';
 const route=(label,dest,cls='')=>{const [path,query]=dest.split('?');return '<a class="'+cls+'" href="'+site('/'+path+'.html')+(query?'?'+query:'')+'">'+label+'</a>'};
-const nav=active=>'<nav class="bottomnav" data-layer="全局底栏">'+['camera','community','profile'].map((p,i)=>'<a aria-label="'+['相机','社区','我的'][i]+'" href="'+site('/'+p+'.html')+'" class="icon '+(active===p?'selected':'')+'">'+svg(['camera','share','person'][i])+'</a>').join('')+'</nav>';
+const nav=active=>'<nav class="bottomnav" data-layer="全局底栏">'+['camera','community','profile'].map((p,i)=>'<a aria-label="'+['相机','社区','我的'][i]+'" href="'+site('/'+p+'.html')+'" class="icon '+(active===p?'selected':'')+'">'+iconImg(['camera','share','person'][i])+'</a>').join('')+'</nav>';
 const top=(title,back='camera',right='')=>'<div class="top" data-layer="页面标题">'+route(svg('back'),back,'icon')+'<h3>'+title+'</h3>'+right+'</div>';
 const field=(label,name,type='text',value='')=>'<label class="field">'+label+'<input name="'+name+'" type="'+type+'" value="'+escape(value)+'" required aria-label="'+label+'"></label>';
 const empty=text=>'<div class="empty">'+svg('camera')+'<p>'+text+'</p></div>';
@@ -185,12 +192,14 @@ function proPanel(){
  const options={ISO:['AUTO','100','200','400','800','1600'],'快门':['AUTO','1/15','1/30','1/60','1/125','1/250','1/500'],'白平衡':['AUTO','日光','阴天','白炽灯','荧光灯'],'变焦':['1.0','1.5','2.0','3.0']};
  return '<div class="pro-panel" data-layer="Pro手动参数"><div class="prochips">'+keys.map(k=>btn(k,'pro-control:'+k,k===proControl?'selected':'')).join('')+btn('×','pro')+'</div>'+ (options[proControl]?'<div class="prochips" style="margin-top:12px">'+options[proControl].map(v=>btn(v,'pro-value:'+v)).join('')+'</div>':'<input type="range" aria-label="'+proControl+'" min="'+(proControl==='EV'?-2:0)+'" max="'+(proControl==='EV'?2:10)+'" step=".1" value="0" data-pro-range><output class="muted">0</output>')+'</div>';
 }
-function card(p){return '<article class="post" data-layer="动态卡片"><div class="row">'+route('<img class="avatar" src="'+avatar(p.author)+'" alt="'+escape(p.author)+'">','user-profile?user='+encodeURIComponent(p.author))+'<strong>'+escape(p.author)+'</strong><span class="spacer"></span>'+btn(data.following.includes(p.author)?'已关注':'+ 关注','follow:'+p.author,'quiet')+'</div><button class="icon full" data-action="post:'+p.id+'" style="padding:0"><img class="photo" src="'+image(p.image)+'" alt="'+escape(p.title)+'"></button><h4>'+escape(p.title)+'</h4><p class="muted">'+escape(p.body)+'</p><div class="actions">'+btn(svg('heart')+' '+(p.likes+Number(data.likes.includes(p.id))),'like:'+p.id,data.likes.includes(p.id)?'on':'')+btn(svg('comment')+' 评论','comments:'+p.id)+btn(svg('bookmark')+(data.favorites.includes(p.id)?'已收藏':'收藏'),'favorite:'+p.id,data.favorites.includes(p.id)?'on':'')+'</div></article>'}
+function card(p){return '<article class="post" data-layer="动态卡片"><div class="row">'+route('<img class="avatar" src="'+avatar(p.author)+'" alt="'+escape(p.author)+'">','user-profile?user='+encodeURIComponent(p.author))+'<div class="post-author"><strong>'+escape(p.author)+'</strong><small>刚刚</small></div><span class="spacer"></span><span class="more" aria-hidden="true">···</span></div><button class="icon full" data-action="post:'+p.id+'" style="padding:0"><img class="photo" src="'+image(p.image)+'" alt="'+escape(p.title)+'"></button><h4>'+escape(p.title)+'</h4><p class="muted">'+escape(p.body)+'</p><div class="actions">'+btn(iconImg('heart')+' '+(p.likes+Number(data.likes.includes(p.id))),'like:'+p.id,data.likes.includes(p.id)?'on':'')+btn(iconImg('comment')+' 评论','comments:'+p.id)+'</div></article>'}
 function resource(){return '<div class="resource" data-layer="滤镜分享卡"><strong>🎨 雨后电影感</strong><p>冷色阴影 · 柔和高光 · 轻微暗角</p>'+btn(data.filters.some(f=>f.name==='雨后电影感')?'已导入本地':'一键导入本地滤镜','import-filter','primary')+'<p class="muted">网页只保存演示参数，不写入 Android 本地。</p></div>'}
+function gridCard(p){return '<article class="gridcard" data-layer="动态网格卡片"><button class="icon full" data-action="post:'+p.id+'" style="padding:0"><img src="'+image(p.image)+'" alt="'+escape(p.title)+'"></button><div class="gridmeta"><b>'+escape(p.title)+'</b><span><img class="tinyavatar" src="'+avatar(p.author)+'" alt="">'+escape(p.author)+'<span class="spacer"></span>'+btn(iconImg('heart')+' '+(p.likes+Number(data.likes.includes(p.id))),'like:'+p.id,data.likes.includes(p.id)?'on':'')+'</span></div></article>'}
 function feed(){
  const following=id==='following-feed';let list=following?posts().filter(p=>data.following.includes(p.author)):posts();
  if(state==='未关注'||state==='空列表')list=[];
- return '<div class="screen"><div class="tabs" data-layer="社区顶部Tab">'+route('关注','following-feed',following?'selected':'')+route('为你推荐','community',id==='community'?'selected':'')+route('消息','messages',id==='messages'?'selected':'')+'</div>'+ (id==='messages'?empty('暂无消息<br>互动消息会显示在这里'):list.length?(!following?'<div class="bodypad">'+resource()+'</div>':'')+list.map(card).join(''):empty(following?'还没有关注动态<br>去推荐页关注喜欢的摄影师':'暂无作品'))+'</div>'+nav('community');
+ const messages=id==='messages';
+ return '<div class="screen"><div class="tabs" data-layer="社区顶部Tab">'+route('关注','following-feed',following?'selected':'')+route('为你推荐','community',id==='community'?'selected':'')+route('消息','messages',id==='messages'?'selected':'')+'</div>'+ (messages?empty('暂无消息<br>互动消息会显示在这里'):list.length?(following?'<div class="grid">'+list.map(gridCard).join('')+'</div>':'<div class="feedlist">'+list.map(card).join('')+'</div>'):empty(following?'还没有关注动态<br>去推荐页关注喜欢的摄影师':'暂无作品'))+'</div>'+nav('community');
 }
 function comments(){
  const p=activePost();const list=state==='空评论'?[]:[...(seedComments[p.id]||[]).map(text=>({author:p.author==='Helena'?'Daniel':'Helena',text})),...data.comments.filter(c=>c.post===p.id)];
@@ -198,7 +207,15 @@ function comments(){
 }
 function postDetail(){
  const p=activePost(),list=[...(seedComments[p.id]||[]).map(text=>({author:p.author==='Helena'?'Daniel':'Helena',text})),...data.comments.filter(c=>c.post===p.id)];
- return '<div class="screen post-detail"><div class="top" data-layer="帖子标题栏">'+route('← 返回','community')+'<strong>'+escape(p.author)+'</strong>'+btn(data.following.includes(p.author)?'已关注':'+ 关注','follow:'+p.author,'quiet')+'</div><img class="detail-photo" src="'+image(p.image)+'" alt="'+escape(p.title)+'"><div class="bodypad"><div class="row">'+route('<img class="avatar" src="'+avatar(p.author)+'" alt="">','user-profile?user='+encodeURIComponent(p.author))+'<strong>'+escape(p.author)+'</strong><span class="spacer"></span><small>刚刚</small></div><p>'+escape(p.title)+' | '+escape(p.body)+'</p><div class="actions">'+btn('赞 '+(p.likes+Number(data.likes.includes(p.id))),'like:'+p.id,data.likes.includes(p.id)?'on':'')+btn(data.favorites.includes(p.id)?'已收藏':'收藏','favorite:'+p.id,data.favorites.includes(p.id)?'on':'')+route('评论 '+list.length,'comments')+'</div><h4>评论 ('+list.length+')</h4>'+(list.length?list.map(c=>'<div class="comment row"><img class="avatar" src="'+avatar(c.author)+'" alt=""><div><strong>'+escape(c.author)+'</strong><p>'+escape(c.text)+'</p>'+(c.text.includes('🎨 滤镜资源')?btn('一键导入滤镜','import-filter','quiet'):'')+'</div></div>').join(''):empty('暂无评论，来说两句吧'))+'</div><form id="comment-form" class="composer detail-composer"><input name="text" placeholder="写评论..." required aria-label="评论内容"><button class="quiet">发送</button></form></div>';
+ return '<div class="screen post-detail">'
+  +'<div class="pd-top" data-layer="帖子顶栏">'+route('‹','community')+'<img class="avatar" src="'+avatar(p.author)+'" alt="">'+route('<strong>'+escape(p.author)+'</strong>','user-profile?user='+encodeURIComponent(p.author))+'<span class="spacer"></span>'+btn(data.following.includes(p.author)?'已关注':'关注','follow:'+p.author,'quiet')+'<span class="icon" aria-hidden="true">'+svg('share')+'</span></div>'
+  +'<img class="pd-photo" src="'+image(p.image)+'" alt="'+escape(p.title)+'">'
+  +'<div class="pd-body"><h3>'+escape(p.title)+'</h3><small class="muted">刚刚</small><p class="muted">'+escape(p.body)+'</p><div class="pd-count"><b>共 '+list.length+' 条评论</b></div>'
+  +(list.length?list.map(c=>'<div class="comment row"><img class="avatar" src="'+avatar(c.author)+'" alt=""><div><strong>'+escape(c.author)+'</strong><p>'+escape(c.text)+'</p>'+(c.text.includes('🎨 滤镜资源')?btn('一键导入滤镜','import-filter','quiet'):'')+'</div></div>').join(''):empty('暂无评论，来说两句吧'))
+  +'</div>'
+  +'<div class="pd-bottom"><form id="comment-form" class="pd-composer"><input name="text" placeholder="说点什么..." required aria-label="评论内容"><button class="quiet">发送</button></form>'
+  +'<div class="pd-actions">'+btn(iconImg('heart')+' '+(p.likes+Number(data.likes.includes(p.id))),'like:'+p.id,data.likes.includes(p.id)?'on':'')+btn(iconImg('star'),'favorite:'+p.id,data.favorites.includes(p.id)?'on':'')+'<span class="pd-comment-count">'+iconImg('comment')+' '+list.length+'</span></div></div>'
+  +'</div>';
 }
 function profile(){
  let name=id==='profile'?data.name:state;
@@ -208,7 +225,7 @@ function profile(){
  if(tab==='收藏')list=own?posts().filter(p=>data.favorites.includes(p.id)):[];
  const avatarSrc=own&&data.avatar?data.avatar:avatar(name);
  const bio=own?data.bio:name==='Helena'?'AI 构图助手 Helena | 热爱光影与咖啡':name==='Daniel'?'AI 构图助手 Daniel | 城市与风景观察者':'AI 构图爱好者';
- return '<div class="screen"><div class="top">'+(own?'<span></span>':route('← 返回','community'))+(own?route(svg('settings'),'settings','icon'):'<span></span>')+'</div><div class="bodypad"><div class="row" data-layer="头像昵称简介"><img class="avatar heroavatar" src="'+escape(avatarSrc)+'" alt="头像"><div><h2>'+escape(name)+'</h2><p class="muted">'+escape(bio)+'</p></div></div><div class="stats" data-layer="作品粉丝关注"><span><strong>'+posts().filter(p=>p.author===name).length+'</strong>作品</span>'+route('<strong>'+(own?0:Number(data.following.includes(name)))+'</strong>粉丝','followers')+route('<strong>'+(own?data.following.length:0)+'</strong>关注','following')+'</div>'+ (own?route('编辑资料','edit-profile','quiet full row'):btn(data.following.includes(name)?'已关注':'+ 关注','follow:'+name,'primary full'))+'<div class="tabs" data-layer="作品点赞收藏评论">'+['作品','点赞','收藏','评论'].map(t=>btn(t,'profile-tab:'+t,t===tab?'selected':'')).join('')+'</div><div data-layer="个人内容列表">'+(tab==='评论'?data.comments.map(c=>'<div class="card">'+escape(c.text)+'</div>').join('')||empty('还没有评论'):list.length?'<div class="grid">'+list.map(p=>'<div class="card">'+btn('<img src="'+image(p.image)+'" alt="'+escape(p.title)+'">','post:'+p.id,'icon full')+'<p>'+escape(p.title)+'</p>'+btn('♡ '+(p.likes+Number(data.likes.includes(p.id))),'like:'+p.id,data.likes.includes(p.id)?'primary':'quiet')+'</div>').join('')+'</div>':empty('暂无'+tab))+'</div></div></div>'+(own?nav('profile'):'');
+ return '<div class="screen"><div class="top">'+(own?'<span></span>':route('← 返回','community'))+(own?route(svg('settings'),'settings','icon'):'<span></span>')+'</div><div class="bodypad"><div class="row" data-layer="头像昵称简介"><img class="avatar heroavatar" src="'+escape(avatarSrc)+'" alt="头像"><div>'+(own?route('<h2>'+escape(name)+'</h2>','edit-profile'):'<h2>'+escape(name)+'</h2>')+'<p class="muted">'+escape(bio)+'</p></div></div><div class="stats" data-layer="作品粉丝关注"><span><strong>'+posts().filter(p=>p.author===name).length+'</strong>作品</span>'+route('<strong>'+(own?0:Number(data.following.includes(name)))+'</strong>粉丝','followers')+route('<strong>'+(own?data.following.length:0)+'</strong>关注','following')+'</div>'+ (own?'':btn(data.following.includes(name)?'已关注':'+ 关注','follow:'+name,'primary full'))+'<div class="tabs" data-layer="作品点赞收藏评论">'+['作品','点赞','收藏','评论'].map(t=>btn(t,'profile-tab:'+t,t===tab?'selected':'')).join('')+'</div><div data-layer="个人内容列表">'+(tab==='评论'?data.comments.map(c=>'<div class="card">'+escape(c.text)+'</div>').join('')||empty('还没有评论'):list.length?'<div class="grid">'+list.map(p=>'<div class="card">'+btn('<img src="'+image(p.image)+'" alt="'+escape(p.title)+'">','post:'+p.id,'icon full')+'<p>'+escape(p.title)+'</p>'+btn('♡ '+(p.likes+Number(data.likes.includes(p.id))),'like:'+p.id,data.likes.includes(p.id)?'primary':'quiet')+'</div>').join('')+'</div>':empty('暂无'+tab))+'</div></div></div>'+(own?nav('profile'):'');
 }
 function userList(){
  let list=id==='following'?data.following:[];if(state==='空列表')list=[];
@@ -311,8 +328,78 @@ function processCustomPixels(canvas,editorOriginal,p,liveOnly=false){
 function queueEditorPreview(){cancelAnimationFrame(editorFrame);editorFrame=requestAnimationFrame(renderEditorPreview)}
 function result(){return camera()+'<div class="modalback" data-layer="保存结果遮罩"><div class="sheet result" data-layer="保存结果操作"><div class="handle"></div><img class="photo" data-custom-output src="'+image()+'" style="filter:'+(data.activeCustomId?'none':effects[filter])+'" alt="刚拍摄的照片"><h2 style="color:var(--green)">✓ 照片已保存</h2><p class="muted">辅助构图 · 日常（演示）</p><div class="row">'+route('重拍','camera','primary')+route('发布到社区','publish','primary')+'</div>'+route('完成并返回相机','camera','icon full')+'</div></div>'}
 function publish(){return camera()+'<div class="modalback" data-layer="发布遮罩"><form id="publish-form" class="sheet" data-layer="发布表单"><div class="handle"></div><h3>发布到社区</h3><img class="photo" data-custom-output style="height:220px" src="'+image()+'" alt="待发布照片"><label class="field">添加描述<textarea name="body" required placeholder="记录这一刻的故事…"></textarea></label><div class="row">'+route('取消','capture-result','quiet')+'<span class="spacer"></span><button class="primary">发布</button></div></form></div>'}
+function loadReplayData(){
+ if(!replayDataPromise)replayDataPromise=fetch(site('/replay-data/replay.json'),{cache:'no-store'})
+  .then(r=>{if(!r.ok)throw Error('HTTP '+r.status);return r.json()}).then(d=>{replayData=d}).catch(e=>{replayData=null});
+ return replayDataPromise;
+}
+const replayStateColor=state=>({Idle:'#9aa0a6',Analyzing:'#7bb8e8',Adjusting:'#e8b04b',Verifying:'#b48ce0',Ready:'#55d98a',Capturing:'#5bc8c0',Saved:'#55d98a',Error:'#e0685f'})[state]||'#9aa0a6';
+function replay(){
+ if(replayData===null&&!replayDataPromise)return '<div class="screen replay"><div class="bodypad"><div class="card">正在加载回放数据…</div></div></div>';
+ if(!replayData)return '<div class="screen replay"><div class="bodypad"><div class="card"><h4>暂无回放数据</h4><p class="muted">在 AI-camera 仓库运行 <code>./gradlew.bat :app:replayEngine</code> 生成 <code>ui-review/replay-data/replay.json</code> 后刷新本页。数据在电脑 JVM 上生成，不需要 Android Studio 或真机。</p></div></div></div>';
+ const images=replayData.images||[];
+ if(!images.length)return '<div class="screen replay"><div class="bodypad"><div class="card"><h4>回放数据为空</h4><p class="muted">请重新运行 :app:replayEngine 生成回放 JSON。</p></div></div></div>';
+ const img=images[Math.min(replayImageIndex,images.length-1)]||images[0];
+ const n=(img.timeline||[]).length;const frame=(img.timeline||[])[Math.min(Math.max(replayFrame,1),n)-1];
+ const ctx=img.sceneContext||{};const chips=[ctx.photoType,ctx.sceneCategory,ctx.preferredComposition,ctx.lightingQuality].filter(Boolean);
+ return '<div class="screen replay"><div class="bodypad">'+
+ '<div class="replay-meta">'+escape(replayData.engine)+' · '+escape(replayData.generatedAt||'')+' · 模板 '+escape(replayData.assets?.templates)+' 条</div>'+
+ '<div class="card" data-layer="回放画布与时间线"><div class="row between"><h4>'+escape(img.image)+'</h4><select id="replay-image" aria-label="回放图片">'+images.map((im,i)=>'<option'+(i===Math.min(replayImageIndex,images.length-1)?' selected':'')+'>'+escape(im.image)+'</option>').join('')+'</select></div>'+
+ '<canvas id="replay-canvas" width="340" height="300" role="img" aria-label="回放帧画面"></canvas>'+
+ '<div class="replay-state"></div>'+
+ '<div class="row replay-timeline">'+btn('播放','replay-play','quiet')+'<input id="replay-frame" type="range" min="1" max="'+n+'" value="'+Math.min(Math.max(replayFrame,1),n)+'" aria-label="回放帧"><output class="replay-frame-out">'+Math.min(Math.max(replayFrame,1),n)+' / '+n+'</output></div>'+
+ '<div class="replay-outcome" data-layer="会话结果">结果：<b style="color:'+replayStateColor(img.outcome?.state)+'">'+escape(img.outcome?.state)+'</b>'+(img.outcome?.readyAtFrame?' · 第 '+img.outcome.readyAtFrame+' 帧就绪':'')+' · 途经 '+(img.outcome?.statesVisited||[]).map(escape).join(' → ')+'</div></div>'+
+ '<div class="card" data-layer="检索Top5"><h4>检索 Top5</h4>'+(img.top5||[]).map((h,i)=>'<div class="hit"><span class="rank">'+(i+1)+'</span><div class="hit-main"><div class="row between"><b>'+escape((h.templateId||'').slice(0,26))+'</b><span class="hit-cos">'+(h.cosine*100).toFixed(1)+'%</span></div><div class="bar"><i style="width:'+Math.round(h.cosine*100)+'%"></i></div><div class="muted">'+[h.photoType,h.sceneCategory,h.compositionType].filter(Boolean).map(escape).join(' · ')+'</div><div class="muted">'+escape(h.visualSummary||'')+'</div></div></div>').join('')+'</div>'+
+ '<div class="card" data-layer="场景与检测"><h4>场景与检测</h4><div class="replay-chips">'+(chips.length?chips.map(c=>'<span class="chip">'+escape(c)+'</span>').join(''):'<span class="muted">场景上下文未过共识阈值</span>')+'</div>'+
+ '<div class="row" style="align-items:flex-start;gap:14px"><div class="replay-layout">'+[0,1,2,3,4,5,6,7,8].map(i=>{const v=(img.layout?.lumaGrid||[])[i];return '<i style="background:rgb('+Math.round((v??.5)*255)+','+Math.round((v??.5)*255)+','+Math.round((v??.5)*255)+')"></i>'}).join('')+'<small class="muted">3×3 明度 · 平均 '+(img.layout?.meanLuma??0).toFixed(2)+' · 暗部 '+(img.layout?.darkFraction??0).toFixed(2)+'</small></div>'+
+ '<div class="replay-dets">'+(img.detections?.length?img.detections.map(d=>'<div class="det"><b>class '+d.classId+'</b> '+Math.round(d.confidence*100)+'%<span class="muted"> 框 '+(d.right-d.left).toFixed(2)+'×'+(d.bottom-d.top).toFixed(2)+'</span></div>').join(''):'<span class="muted">未检出物体</span>')+'</div></div>'+
+ '<div class="muted">'+(img.faceTarget?'人像锚点目标：x '+img.faceTarget.x.toFixed(2)+' · y '+img.faceTarget.y.toFixed(2)+' · 面宽比 '+img.faceTarget.aspectRatio.toFixed(2):'非人像路径：仅水平仪引导')+'</div></div>'+
+ '</div></div>';
+}
+function drawReplay(){
+ const canvas=$('#replay-canvas');if(!canvas||!replayData)return;
+ const img=replayData.images[Math.min(replayImageIndex,replayData.images.length-1)];if(!img)return;
+ const n=(img.timeline||[]).length;const frame=(img.timeline||[])[Math.min(Math.max(replayFrame,1),n)-1];
+ const stateRow=$('.replay-state');if(stateRow&&frame)stateRow.innerHTML='<b style="color:'+replayStateColor(frame.state)+'">'+escape(frame.state)+'</b>'+escape(frame.action?' · '+frame.action:'')+escape(frame.feedback?' · '+frame.feedback:'');
+ const slider=$('#replay-frame');if(slider)slider.value=Math.min(Math.max(replayFrame,1),n);
+ const out=$('.replay-frame-out');if(out)out.textContent=Math.min(Math.max(replayFrame,1),n)+' / '+n;
+ const playBtn=$('[data-action="replay-play"]');if(playBtn)playBtn.textContent=replayPlaying?'暂停':'播放';
+ if(!frame)return;
+ const paint=photo=>{
+  const cw=canvas.width,ch=canvas.height,s=Math.max(cw/photo.width,ch/photo.height);
+  const w=photo.width*s,h=photo.height*s,ox=(cw-w)/2,oy=(ch-h)/2;
+  const X=x=>ox+x*s,Y=y=>oy+y*s,R=r=>r*s*Math.min(photo.width,photo.height);
+  const ctx2=canvas.getContext('2d');
+  ctx2.fillStyle='#050505';ctx2.fillRect(0,0,cw,ch);
+  ctx2.drawImage(photo,ox,oy,w,h);
+  // 检测框（整图静态）
+  ctx2.strokeStyle='rgba(85,217,138,.9)';ctx2.lineWidth=1.5;
+  for(const d of img.detections||[]){ctx2.strokeRect(X(d.left),Y(d.top),X(d.right)-X(d.left),Y(d.bottom)-Y(d.top));ctx2.fillStyle='rgba(85,217,138,.95)';ctx2.font='10px sans-serif';ctx2.fillText(Math.round(d.confidence*100)+'%',X(d.left),Math.max(10,Y(d.top)-3))}
+  // 目标水平（白色虚线）与当前 roll（粉色实线）
+  ctx2.save();ctx2.setLineDash([6,6]);ctx2.strokeStyle='rgba(255,255,255,.85)';ctx2.lineWidth=1.5;
+  ctx2.beginPath();ctx2.moveTo(ox,cw/2);ctx2.lineTo(ox+w,cw/2);ctx2.stroke();ctx2.restore();
+  ctx2.save();ctx2.translate(ox+w/2,oy+h/2);ctx2.rotate(-(frame.rollDegrees||0)*Math.PI/180);
+  ctx2.strokeStyle='rgba(244,182,194,.95)';ctx2.lineWidth=2;ctx2.beginPath();ctx2.moveTo(-w*.42,0);ctx2.lineTo(w*.42,0);ctx2.stroke();ctx2.restore();
+  // 人像目标区与主体轨迹
+  if(img.faceTarget){ctx2.setLineDash([5,5]);ctx2.strokeStyle='rgba(255,255,255,.95)';ctx2.lineWidth=1.5;ctx2.beginPath();ctx2.arc(X(img.faceTarget.x),Y(img.faceTarget.y),R(.08),0,Math.PI*2);ctx2.stroke();ctx2.setLineDash([])}
+  if(frame.subjectX!=null){ctx2.fillStyle='rgba(244,182,194,.4)';ctx2.strokeStyle='#f4b6c2';ctx2.lineWidth=2;ctx2.beginPath();ctx2.arc(X(frame.subjectX),Y(frame.subjectY),R(.055),0,Math.PI*2);ctx2.fill();ctx2.stroke()}
+ };
+ if(replayImageCache[img.image])paint(replayImageCache[img.image]);
+ else{const im=new Image();im.onload=()=>{replayImageCache[img.image]=im;if(id==='replay')paint(im)};im.src=image(img.image)}
+}
+function toggleReplayPlay(){
+ const img=replayData?.images?.[Math.min(replayImageIndex,replayData.images.length-1)];if(!img)return;
+ replayPlaying=!replayPlaying;
+ if(!replayPlaying){clearInterval(replayTimer);drawReplay();return}
+ replayTimer=setInterval(()=>{
+  replayFrame++;
+  if(replayFrame>(img.timeline||[]).length){replayFrame=1;clearInterval(replayTimer);replayPlaying=false}
+  drawReplay();
+ },250);
+}
 function render(){
  clearTimeout(hintTimer);
+ clearInterval(replayTimer);replayPlaying=false;
  if(id==='pro'&&current.states.includes(state))proControl=state;
  let html;
  if(['camera','filters','pro'].includes(id))html=camera();
@@ -328,10 +415,13 @@ function render(){
  else if(id==='filter-editor')html=editor();
  else if(id==='capture-result')html=result();
  else if(id==='publish')html=publish();
+ else if(id==='replay')html=replay();
  else html='<div class="screen dark">'+top('系统相册入口')+'<div class="bodypad"><p class="note" style="color:#333">'+escape(current.note)+'</p>'+(state==='空相册'?empty('暂无照片'):'<img class="photo" src="'+image()+'" alt="示例照片">')+'</div></div>';
+ $('#app').dataset.page=id;
  $('#app').innerHTML=html;
  const stageCtl=$('#stage-controls');if(stageCtl)stageCtl.innerHTML=isStepDemo()?stepControls():'';
  if(id==='filter-editor')initEditorPreview();
+ if(id==='replay')loadReplayData().then(()=>{if(id==='replay'){render();drawReplay()}});
  if(['camera','filters','pro','capture-result','publish'].includes(id))renderStoredCustomPreview();
  if(id==='login'){
   const third=document.createElement('section');third.className='card';third.dataset.layer='第三方登录占位';
@@ -359,6 +449,7 @@ document.addEventListener('click',e=>{
  const t=e.target.closest('[data-action]');if(!t)return;
  const [action,...rest]=t.dataset.action.split(':');const value=rest.join(':');
  switch(action){
+ case 'replay-play':toggleReplayPlay();break;
  case 'mode':mode=value;render();break;
  case 'filters':expanded=!expanded;proOpen=false;render();break;
  case 'pro':proOpen=!proOpen;expanded=false;render();break;
@@ -401,6 +492,7 @@ document.addEventListener('submit',e=>{
 document.addEventListener('input',e=>{
  const t=e.target;
  if(t.id==='zoom'){zoom=Number(t.value);$('#zoom-value').textContent=zoom.toFixed(1)+'×';$('.preview img').style.transform='scale('+zoom+')'+(front?' scaleX(-1)':'')}
+ if(t.id==='replay-frame'){replayFrame=Number(t.value);drawReplay()}
  if(t.hasAttribute('data-ev')){t.nextElementSibling.textContent=t.value+' EV';$('.preview img').style.filter=effects[filter]+' brightness('+Math.pow(2,Number(t.value))+')'}
  if(t.hasAttribute('data-pro-range'))t.nextElementSibling.textContent=t.value;
  if(t.dataset.adjust){t.previousElementSibling.querySelector('output').textContent=t.value;queueEditorPreview()}
@@ -408,6 +500,7 @@ document.addEventListener('input',e=>{
 });
 document.addEventListener('change',e=>{
  const t=e.target;
+ if(t.id==='replay-image'){replayImageIndex=t.selectedIndex;replayFrame=1;render();return}
  if(t.dataset.layerToggle){t.checked?hidden.delete(t.dataset.layerToggle):hidden.add(t.dataset.layerToggle);updateLayers()}
  if(t.id==='avatar-upload'&&t.files[0]){if(t.files[0].size>2000000){toast('演示头像请小于 2MB');return}const reader=new FileReader();reader.onload=()=>{data.avatar=reader.result;save();toast('头像已导入，保存资料后查看')};reader.readAsDataURL(t.files[0])}
 });

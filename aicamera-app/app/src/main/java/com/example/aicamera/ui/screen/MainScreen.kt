@@ -1,6 +1,7 @@
 package com.example.aicamera.ui.screen
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -13,16 +14,20 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import com.example.aicamera.R
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.aicamera.ui.state.SettingsState
 import com.example.aicamera.ui.theme.BrandPink
+import com.example.aicamera.ui.theme.BrandTabBar
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.aicamera.viewmodel.CameraViewModel
 import com.example.aicamera.viewmodel.CommunityViewModel
@@ -119,13 +124,13 @@ private fun BottomTabBar(
     onTabSelected: (Int) -> Unit
 ) {
     Surface(
-        color = Color(0xFF09090B),
-        shadowElevation = 8.dp
+        color = BrandTabBar,
+        shadowElevation = 0.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp)
+                .height(62.dp)
                 .padding(horizontal = 24.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
@@ -155,8 +160,14 @@ private fun BottomGlyphTab(
     isSelected: Boolean,
     onClick: () -> Unit,
 ) {
-    val iconColor = if (isSelected) BrandPink else BrandPink.copy(alpha = 0.55f)
-    val iconSize = if (isSelected) 28.dp else 25.dp  // ★ 选中稍大
+    // Figma 底栏图标：选中品牌粉，未选中黑色
+    val iconColor = if (isSelected) BrandPink else Color.Black
+    val iconSize = if (isSelected) 28.dp else 25.dp
+    val iconRes = when (glyph) {
+        BottomGlyph.CAMERA -> R.drawable.ic_tab_camera
+        BottomGlyph.SHARE -> R.drawable.ic_tab_share
+        BottomGlyph.PERSON -> R.drawable.ic_tab_person
+    }
 
     Box(
         modifier = Modifier
@@ -175,28 +186,11 @@ private fun BottomGlyphTab(
             .padding(8.dp),
         contentAlignment = androidx.compose.ui.Alignment.Center,
     ) {
-        Canvas(Modifier.size(iconSize)) {
-            val color = iconColor
-            val stroke = Stroke(1.55.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-            when (glyph) {
-                BottomGlyph.CAMERA -> {
-                    drawRoundRect(color, Offset(3.dp.toPx(), 7.dp.toPx()), Size(19.dp.toPx(), 13.5.dp.toPx()), CornerRadius(2.2.dp.toPx()), style = stroke)
-                    drawCircle(color, 3.8.dp.toPx(), Offset(12.5.dp.toPx(), 13.8.dp.toPx()), style = stroke)
-                    drawLine(color, Offset(8.dp.toPx(), 7.dp.toPx()), Offset(10.dp.toPx(), 4.4.dp.toPx()), stroke.width)
-                    drawLine(color, Offset(10.dp.toPx(), 4.4.dp.toPx()), Offset(15.dp.toPx(), 4.4.dp.toPx()), stroke.width)
-                }
-                BottomGlyph.SHARE -> {
-                    drawCircle(color, 2.3.dp.toPx(), Offset(5.5.dp.toPx(), 13.dp.toPx()), style = stroke)
-                    drawCircle(color, 2.3.dp.toPx(), Offset(19.dp.toPx(), 6.6.dp.toPx()), style = stroke)
-                    drawCircle(color, 2.3.dp.toPx(), Offset(19.dp.toPx(), 19.4.dp.toPx()), style = stroke)
-                    drawLine(color, Offset(7.5.dp.toPx(), 12.2.dp.toPx()), Offset(16.4.dp.toPx(), 7.6.dp.toPx()), stroke.width)
-                    drawLine(color, Offset(7.5.dp.toPx(), 13.8.dp.toPx()), Offset(16.4.dp.toPx(), 18.4.dp.toPx()), stroke.width)
-                }
-                BottomGlyph.PERSON -> {
-                    drawCircle(color, 3.7.dp.toPx(), Offset(12.5.dp.toPx(), 7.2.dp.toPx()), style = stroke)
-                    drawArc(color, 196f, 148f, false, Offset(4.2.dp.toPx(), 12.dp.toPx()), Size(16.6.dp.toPx(), 11.6.dp.toPx()), style = stroke)
-                }
-            }
-        }
+        Image(
+            painter = painterResource(iconRes),
+            contentDescription = null,
+            modifier = Modifier.size(iconSize),
+            colorFilter = ColorFilter.tint(iconColor),
+        )
     }
 }

@@ -28,6 +28,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -55,8 +58,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -79,9 +82,7 @@ import com.example.aicamera.data.db.CommunityPost
 import com.example.aicamera.filter.CustomFilterConfig
 import com.example.aicamera.filter.CustomFilterStore
 import com.example.aicamera.ui.auth.SystemBarsAppearance
-import com.example.aicamera.ui.components.BookmarkOutlineIcon
-import com.example.aicamera.ui.components.CommentOutlineIcon
-import com.example.aicamera.ui.components.HeartOutlineIcon
+import com.example.aicamera.ui.theme.BrandLike
 import com.example.aicamera.ui.theme.BrandOnSurface
 import com.example.aicamera.ui.theme.BrandOnSurfaceMuted
 import com.example.aicamera.ui.theme.BrandPink
@@ -97,14 +98,6 @@ import kotlinx.coroutines.launch
  * - 「为你推荐」：单列动态卡片流（头像 / 名称 / 时间 / 大图 / 描述 / 点赞 / 评论）
  * - 「关注 / 消息」：空状态引导
  */
-private val FeedBackground = Brush.verticalGradient(
-    listOf(
-        Color(0xFFFFE7F3),
-        Color(0xFFF7E6F7),
-        Color(0xFFD8CCF5),
-    ),
-)
-
 private val CommunityTabs = listOf("关注", "为你推荐", "消息")
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -133,8 +126,16 @@ fun CommunityScreen(
     // 点卡片打开作品详情弹层
     var selectedPost by remember { mutableStateOf<CommunityPost?>(null) }
 
-    Column(Modifier.fillMaxSize().background(FeedBackground).statusBarsPadding()) {
-        CommunityTopTabs(selectedIndex = selectedTab, onSelected = { selectedTab = it })
+    Box(Modifier.fillMaxSize()) {
+        // Figma 原图背景（白-粉-紫）
+        Image(
+            painter = painterResource(R.drawable.bg_hub),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+        )
+        Column(Modifier.fillMaxSize().statusBarsPadding()) {
+            CommunityTopTabs(selectedIndex = selectedTab, onSelected = { selectedTab = it })
         when (selectedTab) {
             0 -> if (postsLoading) {
                 FeedLoadingState(modifier = Modifier.fillMaxWidth().weight(1f))
@@ -151,16 +152,18 @@ fun CommunityScreen(
                     modifier = Modifier.fillMaxWidth().weight(1f),
                 )
             } else {
-                LazyColumn(
+                // Figma「关注」：双列封面网格
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
                     modifier = Modifier.fillMaxWidth().weight(1f),
-                    contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(22.dp),
+                    contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    items(followingPosts, key = { "following_${it.id}" }) { post ->
-                        FeedPostItem(
+                    gridItems(followingPosts, key = { "following_grid_${it.id}" }) { post ->
+                        FeedGridItem(
                             post = post,
                             onToggleLike = { viewModel.toggleLike(post.id, currentUser) },
-                            onCommentClick = { selectedPostId = post.id; showComments = true },
                             onNavigateToProfile = onNavigateToProfile,
                             viewModel = viewModel,
                             currentUser = currentUser,
@@ -179,9 +182,6 @@ fun CommunityScreen(
                     contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(22.dp),
                 ) {
-                    item(key = "featured_filter") {
-                        FeaturedFilterResourceCard()
-                    }
                     items(posts, key = { it.id }) { post ->
                         FeedPostItem(
                             post = post,
@@ -226,6 +226,7 @@ fun CommunityScreen(
                 onNavigateToProfile = onNavigateToProfile,
                 communityAssetMapper = { key -> communityAssetResource(key ?: "") },
             )
+        }
         }
     }
 }
@@ -281,8 +282,8 @@ private fun CommunityTopTabs(
             Modifier
                 .align(Alignment.BottomStart)
                 .offset { IntOffset(indicatorOffset.roundToPx(), 0) }
-                .size(width = 28.dp, height = 2.dp)
-                .background(BrandOnSurface, RoundedCornerShape(1.dp)),
+                .size(width = 24.dp, height = 2.dp)
+                .background(Color.Black, RoundedCornerShape(1.dp)),
         )
     }
 }
@@ -311,7 +312,7 @@ private fun FeedPostItem(
                 painter = painterResource(authorAvatar(post.author)),
                 contentDescription = "${post.author} 的头像",
                 modifier = Modifier
-                    .size(38.dp)
+                    .size(32.dp)
                     .clip(CircleShape)
                     .clickable { onNavigateToProfile(post.author) },
                 contentScale = ContentScale.Crop,
@@ -332,7 +333,7 @@ private fun FeedPostItem(
                 Text(
                     text = post.elapsedText,
                     color = BrandOnSurfaceMuted,
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     maxLines = 1,
                 )
             }
@@ -340,14 +341,15 @@ private fun FeedPostItem(
 
         Spacer(Modifier.height(10.dp))
 
-        // 大图
+        // Figma：正方形大图，左右留白约 56dp（299/412）
         PostImage(
             assetKey = post.imageAssetKey,
             contentDescription = "${post.author} 的内容图片",
             modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(0.85f)
-                .clip(RoundedCornerShape(16.dp)),
+                .align(Alignment.CenterHorizontally)
+                .fillMaxWidth(0.726f)
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(10.dp)),
         )
 
         Spacer(Modifier.height(12.dp))
@@ -389,11 +391,80 @@ private fun FeedPostItem(
                 commentCount = post.commentsCount,
                 onClick = onCommentClick,
             )
-            FavoriteAction(
-                post = post,
-                viewModel = viewModel,
-                currentUser = currentUser,
+            // Figma 动态卡片只有点赞/评论；收藏入口保留在帖子详情
+        }
+    }
+}
+
+/** Figma「关注」双列网格卡片：封面 + 标题 + 作者 + 点赞数。 */
+@Composable
+private fun FeedGridItem(
+    post: CommunityPost,
+    onToggleLike: () -> Unit,
+    onNavigateToProfile: (String) -> Unit,
+    viewModel: CommunityViewModel,
+    currentUser: String,
+    onPostClick: () -> Unit,
+) {
+    val liked by remember(post.id, currentUser) {
+        viewModel.observeIsLiked(post.id, currentUser)
+    }.collectAsState(initial = false)
+    val (title, _) = remember(post.body) { splitPostBody(post.body) }
+
+    // Figma 卡片：透明填充/透明边框，背景图直接透出
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onPostClick),
+    ) {
+        PostImage(
+            assetKey = post.imageAssetKey,
+            contentDescription = "${post.author} 的内容图片",
+            modifier = Modifier.fillMaxWidth().aspectRatio(0.8f),
+        )
+        Column(Modifier.padding(horizontal = 9.dp, vertical = 8.dp)) {
+            Text(
+                text = title,
+                color = BrandOnSurface,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Image(
+                    painter = painterResource(authorAvatar(post.author)),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(20.dp)
+                        .clip(CircleShape)
+                        .clickable { onNavigateToProfile(post.author) },
+                    contentScale = ContentScale.Crop,
+                )
+                Spacer(Modifier.size(5.dp))
+                Text(
+                    text = post.author,
+                    color = BrandOnSurfaceMuted,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f),
+                )
+                Image(
+                    painter = painterResource(R.drawable.ic_feed_heart),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(15.dp)
+                        .clickable(role = Role.Button, onClick = onToggleLike),
+                    colorFilter = ColorFilter.tint(if (liked) BrandLike else BrandOnSurfaceMuted),
+                )
+                Spacer(Modifier.size(4.dp))
+                Text(
+                    text = "${post.likes}",
+                    color = if (liked) BrandLike else BrandOnSurfaceMuted,
+                    fontSize = 11.sp,
+                )
+            }
         }
     }
 }
@@ -466,9 +537,11 @@ private fun FeedEmptyState(
                 .border(1.dp, Color.White.copy(alpha = 0.78f), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            CommentOutlineIcon(
+            Image(
+                painter = painterResource(R.drawable.ic_feed_comment),
+                contentDescription = null,
                 modifier = Modifier.size(38.dp),
-                tint = BrandOnSurface.copy(alpha = 0.76f),
+                colorFilter = ColorFilter.tint(BrandOnSurface.copy(alpha = 0.76f)),
             )
         }
         Spacer(Modifier.height(18.dp))
@@ -522,11 +595,11 @@ private fun LikeAction(
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        HeartOutlineIcon(
+        Image(
+            painter = painterResource(R.drawable.ic_feed_heart),
+            contentDescription = null,
             modifier = Modifier.size(20.dp),
-            tint = if (liked) BrandPink else BrandOnSurface,
-            filled = liked,
-            fillColor = BrandPink,
+            colorFilter = ColorFilter.tint(if (liked) BrandLike else BrandOnSurface),
         )
         Spacer(Modifier.size(5.dp))
         Text(
@@ -549,48 +622,16 @@ private fun CommentAction(
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        CommentOutlineIcon(
+        Image(
+            painter = painterResource(R.drawable.ic_feed_comment),
+            contentDescription = null,
             modifier = Modifier.size(20.dp),
-            tint = BrandOnSurface,
+            colorFilter = ColorFilter.tint(BrandOnSurface),
         )
         Spacer(Modifier.size(5.dp))
         Text(
             text = "$commentCount 评论",
             color = BrandOnSurface,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-        )
-    }
-}
-
-@Composable
-private fun FavoriteAction(
-    post: CommunityPost,
-    viewModel: CommunityViewModel,
-    currentUser: String,
-) {
-    val favorited by remember(post.id, currentUser) {
-        viewModel.observeIsFavorited(post.id, currentUser)
-    }.collectAsState(initial = false)
-    Row(
-        modifier = Modifier
-            .semantics { contentDescription = "收藏 ${post.author}" }
-            .clickable {
-                viewModel.toggleFavorite(post.id, currentUser)
-            }
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        BookmarkOutlineIcon(
-            modifier = Modifier.size(20.dp),
-            tint = if (favorited) BrandPink else BrandOnSurface,
-            filled = favorited,
-            fillColor = BrandPink,
-        )
-        Spacer(Modifier.size(5.dp))
-        Text(
-            if (favorited) "已收藏" else "收藏",
-            color = if (favorited) BrandPink else BrandOnSurface,
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
         )

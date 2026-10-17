@@ -233,22 +233,33 @@ private fun WorkflowGuideLines(
                         val box = GuideLineParser.parseSubjectBox(line.params)
                         // 对齐设计稿「人形虚线轮廓」：改用虚线描边，不再是实线矩形框
                         drawRoundRect(
-                            color = (if (box.aligned) GuideAligned else BrandPink).copy(alpha = opacity),
+                            color = (if (box.aligned) GuideAligned else Color.White).copy(alpha = opacity),
                             topLeft = Offset(box.x * size.width, box.y * size.height),
                             size = Size(box.width * size.width, box.height * size.height),
-                            cornerRadius = CornerRadius(10.dp.toPx()),
+                            cornerRadius = CornerRadius(12.dp.toPx()),
                             style = Stroke(
                                 width = 2.dp.toPx(),
-                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 6.dp.toPx()))
+                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(7.dp.toPx(), 6.dp.toPx()))
                             )
                         )
                     }
                     GuideLineType.TARGET_ZONE -> if (showTargetZone) {
+                        // Figma 平移目标：粉色虚线方框 + 中心点
                         val zone = GuideLineParser.parseTargetZone(line.params)
-                        drawCircle(Color.White.copy(alpha = opacity * 0.8f),
-                            zone.radius * size.minDimension,
-                            Offset(zone.centerX * size.width, zone.centerY * size.height),
-                            style = Stroke(width = 2.dp.toPx()))
+                        val cx = zone.centerX * size.width
+                        val cy = zone.centerY * size.height
+                        val half = zone.radius * size.minDimension
+                        drawRoundRect(
+                            color = BrandPink.copy(alpha = opacity),
+                            topLeft = Offset(cx - half, cy - half),
+                            size = Size(half * 2, half * 2),
+                            cornerRadius = CornerRadius(6.dp.toPx()),
+                            style = Stroke(
+                                width = 2.dp.toPx(),
+                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 5.dp.toPx()))
+                            )
+                        )
+                        drawCircle(BrandPink.copy(alpha = opacity), 3.dp.toPx(), Offset(cx, cy))
                     }
                     else -> Unit
                 }
@@ -618,90 +629,49 @@ private fun FallbackGuidance(cue: GuidanceCue?, phase: GuidancePhase, feedbackHi
 /** ROTATING → GUIDING 的旋转容差（度），对齐 HorizonPolicy.enterLevelToleranceDeg */
 const val ROTATION_TOLERANCE_DEG = 4.0f  // 与 HorizonPolicy 入口容差一致，用户更易触发 READY
 
-/** 指引配色 — 队友 GenWow 2D 扁平风格：不同维度用不同颜色，便于用户辨识 */
-private val GuideTargetPurple = Color(0xFFB76EFF)
-private val GuideArrowPurple = Color(0xFFB76EFF).copy(alpha = 0.85f)
-private val GuideTranslationAccent = Color(0xFF4ECDC4)
-private val GuideTranslationAccentAlpha = Color(0xFF4ECDC4).copy(alpha = 0.78f)
+/** Figma 引导配色：水平/俯仰目标线用橙色，当前角度/移动箭头用品牌粉。 */
+private val GuideRollAccent = GuideWarning
+private val GuideMoveAccent = BrandPink
 
 @Composable
 private fun RotatingOverlay(horizonAngleDeg: Float?, cue: GuidanceCue?) {
-    val isRoll = cue == GuidanceCue.ROLL_CLOCKWISE || cue == GuidanceCue.ROLL_COUNTERCLOCKWISE
     val isPitch = cue == GuidanceCue.PITCH_UP || cue == GuidanceCue.PITCH_DOWN
     val isYaw = cue == GuidanceCue.YAW_LEFT || cue == GuidanceCue.YAW_RIGHT
-
     val rollAligned = horizonAngleDeg != null &&
             kotlin.math.abs(horizonAngleDeg) <= ROTATION_TOLERANCE_DEG
 
-    val (title, subtitle, color) = when {
-        isRoll -> when {
-            rollAligned -> Triple("水平已对齐", "保持当前角度", GuideAligned)
-            cue == GuidanceCue.ROLL_CLOCKWISE -> Triple("调整水平", "顺时针旋转手机，让粉线贴合白色虚线", BrandPink)
-            else -> Triple("调整水平", "逆时针旋转手机，让粉线贴合白色虚线", BrandPink)
-        }
-        isPitch -> Triple(
-            "调整俯仰",
-            if (cue == GuidanceCue.PITCH_UP) "抬高手机镜头" else "降低手机镜头",
-            BrandPink
-        )
-        isYaw -> Triple(
-            "调整方向",
-            if (cue == GuidanceCue.YAW_LEFT) "向左转动手机" else "向右转动手机",
-            BrandPink
-        )
-        else -> Triple("调整构图", "", BrandPink)
+    val (title, subtitle) = when {
+        isPitch -> "调整俯仰" to if (cue == GuidanceCue.PITCH_UP) "抬高手机镜头" else "降低手机镜头"
+        isYaw -> "调整方向" to if (cue == GuidanceCue.YAW_LEFT) "向左转动手机" else "向右转动手机"
+        rollAligned -> "水平已对齐" to "保持当前角度"
+        cue == GuidanceCue.ROLL_CLOCKWISE -> "调整水平" to "顺时针旋转手机"
+        else -> "调整水平" to "逆时针旋转手机"
     }
 
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = "第 1 步 · 调整手机姿态",
-            color = Color.White.copy(alpha = 0.72f),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-        Box(
-            modifier = Modifier.size(300.dp, 146.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                drawRoundRect(
-                    color = Color.Black.copy(alpha = 0.82f),
-                    topLeft = Offset(0f, 0f),
-                    size = Size(size.width, size.height),
-                    cornerRadius = CornerRadius(26.dp.toPx(), 26.dp.toPx())
-                )
-            }
-
-            when {
-                isPitch -> PitchGuide(cue)
-                isYaw -> YawGuide(cue)
-                else -> RollGuide(horizonAngleDeg)
-            }
+    // Figma：引导线直接叠加在预览上，不用深色卡片遮挡画面
+    Box(Modifier.fillMaxSize()) {
+        when {
+            isPitch -> PitchGuide(cue)
+            isYaw -> YawGuide(cue)
+            else -> RollGuide(horizonAngleDeg)
         }
-
-        Spacer(modifier = Modifier.height(12.dp))
         Column(
-            modifier = Modifier.background(Color.Black.copy(alpha = 0.72f), RoundedCornerShape(12.dp))
-                .padding(horizontal = 12.dp, vertical = 7.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 188.dp)
+                .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
                 text = title,
-                color = color,
-                fontSize = 17.sp,
+                color = if (rollAligned && !isPitch && !isYaw) GuideAligned else BrandPink,
+                fontSize = 16.sp,
                 fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center
             )
             if (subtitle.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = subtitle,
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Normal,
-                    textAlign = TextAlign.Center
-                )
+                Spacer(Modifier.height(3.dp))
+                Text(subtitle, color = Color.White.copy(alpha = .85f), fontSize = 12.sp)
             }
         }
     }
@@ -710,69 +680,86 @@ private fun RotatingOverlay(horizonAngleDeg: Float?, cue: GuidanceCue?) {
 @Composable
 private fun RollGuide(rollDeg: Float?) {
     val aligned = rollDeg != null && kotlin.math.abs(rollDeg) <= ROTATION_TOLERANCE_DEG
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize()) {
-            val cy = size.height * 0.46f
-            val half = size.width * 0.32f
-            val angle = Math.toRadians((rollDeg ?: 0f).coerceIn(-20f, 20f).toDouble())
-            val dx = (half * kotlin.math.cos(angle)).toFloat()
-            val dy = (half * kotlin.math.sin(angle)).toFloat()
-            drawLine(Color.White.copy(alpha = 0.85f), Offset(size.width / 2f - half, cy),
-                Offset(size.width / 2f + half, cy), 3.dp.toPx(),
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(10.dp.toPx(), 8.dp.toPx())))
-            drawLine(if (aligned) GuideAligned else BrandPink,
-                Offset(size.width / 2f - dx, cy - dy), Offset(size.width / 2f + dx, cy + dy),
-                4.dp.toPx(), StrokeCap.Round)
+    Canvas(Modifier.fillMaxSize()) {
+        val cy = size.height * 0.46f
+        // Figma：橙色虚线目标水平线横贯预览
+        drawLine(
+            GuideRollAccent.copy(alpha = 0.95f),
+            Offset(0f, cy), Offset(size.width, cy), 3.dp.toPx(),
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(16.dp.toPx(), 10.dp.toPx())),
+        )
+        val half = size.width * 0.23f
+        val angle = Math.toRadians((rollDeg ?: 0f).coerceIn(-20f, 20f).toDouble())
+        val dx = (half * kotlin.math.cos(angle)).toFloat()
+        val dy = (half * kotlin.math.sin(angle)).toFloat()
+        drawLine(
+            if (aligned) GuideAligned else GuideMoveAccent,
+            Offset(size.width / 2f - dx, cy - dy),
+            Offset(size.width / 2f + dx, cy + dy),
+            4.dp.toPx(), StrokeCap.Round,
+        )
+        // 旋转方向弧线（真实 IMU 角度决定方向）
+        if (rollDeg != null && !aligned) {
+            val clockwise = rollDeg < 0f
+            val r = 24.dp.toPx()
+            val cx = size.width * 0.16f
+            val startAngle = if (clockwise) 300f else 240f
+            val sweep = if (clockwise) 130f else -130f
+            drawArc(
+                Color.White, startAngle, sweep, false,
+                Offset(cx - r, cy - r), Size(r * 2, r * 2),
+                style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round),
+            )
+            val endRad = Math.toRadians((startAngle + sweep).toDouble())
+            val ex = cx + r * kotlin.math.cos(endRad).toFloat()
+            val ey = cy + r * kotlin.math.sin(endRad).toFloat()
+            val sign = if (clockwise) 1f else -1f
+            drawLine(Color.White, Offset(ex, ey), Offset(ex - 10.dp.toPx(), ey - sign * 12.dp.toPx()), 2.5.dp.toPx(), StrokeCap.Round)
+            drawLine(Color.White, Offset(ex, ey), Offset(ex + 10.dp.toPx(), ey - sign * 4.dp.toPx()), 2.5.dp.toPx(), StrokeCap.Round)
         }
-        Text("白色虚线＝目标水平  ·  ${if (aligned) "绿线＝已对齐" else if (rollDeg == null) "正在读取水平角度" else "粉线＝当前角度"}",
-            color = Color.White.copy(alpha = 0.8f), fontSize = 10.sp,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 13.dp))
     }
 }
 
 @Composable
 private fun PitchGuide(cue: GuidanceCue?) {
     val up = cue == GuidanceCue.PITCH_UP
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize()) {
-            val cx = size.width / 2f
-            val top = size.height * 0.24f
-            val bottom = size.height * 0.70f
-            drawLine(Color.White.copy(alpha = 0.85f), Offset(cx, top), Offset(cx, bottom),
-                3.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(10.dp.toPx(), 8.dp.toPx())))
-            val start = if (up) bottom else top
-            val end = if (up) top else bottom
-            drawLine(BrandPink, Offset(cx + 28.dp.toPx(), start), Offset(cx + 28.dp.toPx(), end),
-                4.dp.toPx(), StrokeCap.Round)
-            val sign = if (up) 1f else -1f
-            drawLine(BrandPink, Offset(cx + 28.dp.toPx(), end), Offset(cx + 18.dp.toPx(), end + sign * 12.dp.toPx()), 4.dp.toPx())
-            drawLine(BrandPink, Offset(cx + 28.dp.toPx(), end), Offset(cx + 38.dp.toPx(), end + sign * 12.dp.toPx()), 4.dp.toPx())
-        }
-        Text("白色虚线＝目标  ·  粉色箭头＝镜头移动方向", color = Color.White.copy(alpha = 0.8f),
-            fontSize = 10.sp, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 13.dp))
+    Canvas(Modifier.fillMaxSize()) {
+        val cy = size.height * 0.46f
+        drawLine(
+            GuideRollAccent.copy(alpha = 0.95f),
+            Offset(0f, cy), Offset(size.width, cy), 3.dp.toPx(),
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(16.dp.toPx(), 10.dp.toPx())),
+        )
+        val cx = size.width / 2f
+        val top = cy - 80.dp.toPx()
+        val bottom = cy + 80.dp.toPx()
+        val start = if (up) bottom else top
+        val end = if (up) top else bottom
+        drawLine(GuideMoveAccent, Offset(cx, start), Offset(cx, end), 5.dp.toPx(), StrokeCap.Round)
+        val sign = if (up) 1f else -1f
+        drawLine(GuideMoveAccent, Offset(cx, end), Offset(cx - 12.dp.toPx(), end + sign * 16.dp.toPx()), 5.dp.toPx(), StrokeCap.Round)
+        drawLine(GuideMoveAccent, Offset(cx, end), Offset(cx + 12.dp.toPx(), end + sign * 16.dp.toPx()), 5.dp.toPx(), StrokeCap.Round)
     }
 }
 
 @Composable
 private fun YawGuide(cue: GuidanceCue?) {
     val left = cue == GuidanceCue.YAW_LEFT
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val cx = size.width / 2f
-            val cy = size.height * 0.47f
-            val half = size.width * 0.30f
-            drawLine(Color.White.copy(alpha = 0.85f), Offset(cx - half, cy), Offset(cx + half, cy),
-                3.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(10.dp.toPx(), 8.dp.toPx())))
-            val start = if (left) cx + half * 0.65f else cx - half * 0.65f
-            val end = if (left) cx - half * 0.25f else cx + half * 0.25f
-            drawLine(BrandPink, Offset(start, cy - 18.dp.toPx()), Offset(end, cy - 18.dp.toPx()),
-                4.dp.toPx(), StrokeCap.Round)
-            val sign = if (left) 1f else -1f
-            drawLine(BrandPink, Offset(end, cy - 18.dp.toPx()), Offset(end + sign * 12.dp.toPx(), cy - 28.dp.toPx()), 4.dp.toPx())
-            drawLine(BrandPink, Offset(end, cy - 18.dp.toPx()), Offset(end + sign * 12.dp.toPx(), cy - 8.dp.toPx()), 4.dp.toPx())
-        }
-        Text("沿粉色箭头转动手机  ·  无需移动身体", color = Color.White.copy(alpha = 0.8f),
-            fontSize = 10.sp, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 13.dp))
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val cy = size.height * 0.46f
+        drawLine(
+            GuideRollAccent.copy(alpha = 0.95f),
+            Offset(0f, cy), Offset(size.width, cy), 3.dp.toPx(),
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(16.dp.toPx(), 10.dp.toPx())),
+        )
+        val cx = size.width / 2f
+        val half = size.width * 0.18f
+        val start = if (left) cx + half else cx - half
+        val end = if (left) cx - half else cx + half
+        drawLine(GuideMoveAccent, Offset(start, cy), Offset(end, cy), 5.dp.toPx(), StrokeCap.Round)
+        val sign = if (left) -1f else 1f
+        drawLine(GuideMoveAccent, Offset(end, cy), Offset(end - sign * 16.dp.toPx(), cy - 12.dp.toPx()), 5.dp.toPx(), StrokeCap.Round)
+        drawLine(GuideMoveAccent, Offset(end, cy), Offset(end - sign * 16.dp.toPx(), cy + 12.dp.toPx()), 5.dp.toPx(), StrokeCap.Round)
     }
 }
 

@@ -389,24 +389,19 @@ private fun AuthFieldIconCanvas(icon: AuthFieldIcon, modifier: Modifier) {
                 modifier = modifier
             )
         }
-        // PERSON / LOCK 暂无新图标，保持 Canvas 手绘
-        else -> {
-            Canvas(modifier) {
-                val color = Color.Black.copy(alpha = 0.9f)
-                val stroke = Stroke(width = 1.7.dp.toPx(), cap = StrokeCap.Round)
-                when (icon) {
-                    AuthFieldIcon.PERSON -> {
-                        drawCircle(color, radius = size.minDimension * 0.13f, center = Offset(size.width / 2, size.height * 0.3f), style = stroke)
-                        drawArc(color, 200f, 140f, false, topLeft = Offset(size.width * 0.23f, size.height * 0.47f), size = Size(size.width * 0.54f, size.height * 0.43f), style = stroke)
-                        drawLine(color, Offset(size.width * 0.25f, size.height * 0.82f), Offset(size.width * 0.75f, size.height * 0.82f), strokeWidth = stroke.width, cap = StrokeCap.Round)
-                    }
-                    AuthFieldIcon.LOCK -> {
-                        drawRoundRect(color, topLeft = Offset(size.width * 0.22f, size.height * 0.42f), size = Size(size.width * 0.56f, size.height * 0.45f), cornerRadius = CornerRadius(2.dp.toPx()), style = stroke)
-                        drawArc(color, 180f, 180f, false, topLeft = Offset(size.width * 0.32f, size.height * 0.12f), size = Size(size.width * 0.36f, size.height * 0.5f), style = stroke)
-                    }
-                    else -> {} // 不会发生（已在上面处理）
-                }
-            }
+        AuthFieldIcon.PERSON -> {
+            Image(
+                painter = painterResource(R.drawable.ic_login_person),
+                contentDescription = "账号",
+                modifier = modifier
+            )
+        }
+        AuthFieldIcon.LOCK -> {
+            Image(
+                painter = painterResource(R.drawable.ic_login_lock),
+                contentDescription = "密码",
+                modifier = modifier
+            )
         }
     }
 }

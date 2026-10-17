@@ -50,6 +50,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -67,12 +68,13 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.aicamera.R
 import com.example.aicamera.data.AuthRepository
 import com.example.aicamera.data.db.CommunityComment
 import com.example.aicamera.data.db.CommunityPost
 import com.example.aicamera.ui.auth.SystemBarsAppearance
-import com.example.aicamera.ui.components.HeartOutlineIcon
 import com.example.aicamera.ui.components.SettingsOutlineIcon
+import com.example.aicamera.ui.theme.BrandLike
 import com.example.aicamera.ui.theme.BrandOnSurface
 import com.example.aicamera.ui.theme.BrandOnSurfaceMuted
 import com.example.aicamera.ui.theme.BrandPink
@@ -92,15 +94,6 @@ import kotlinx.coroutines.flow.flowOf
  * - 作品/点赞/收藏：2 列卡片（图片 + 标题 + 作者 + 点赞数）
  * - 评论：评论列表
  */
-private val ProfileBackground = Brush.linearGradient(
-    colors = listOf(
-        Color(0xFFFFE8F4),
-        Color(0xFFF5E3F8),
-        Color(0xFFD8D0FF),
-        Color(0xFFFFFFFF),
-    ),
-)
-
 /** Profile Tab 枚举 */
 private enum class ProfileTab(val label: String) {
     WORKS("作品"),
@@ -193,16 +186,19 @@ fun ProfileScreen(
         label = "profile gallery enter",
     )
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(ProfileBackground)
-            .statusBarsPadding(),
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Figma 原图背景
+        Image(
+            painter = painterResource(R.drawable.bg_pure),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
+                .statusBarsPadding()
                 .padding(horizontal = 20.dp)
                 .graphicsLayer {
                     alpha = headerProgress
@@ -221,20 +217,21 @@ fun ProfileScreen(
                     avatarUri = avatarUri,
                     fallbackAvatar = authorAvatar(username),
                     onClick = { if (isCurrentUser) avatarPicker.launch("image/*") },
-                    modifier = Modifier.size(78.dp),
+                    modifier = Modifier.size(64.dp),
                 )
                 Column(
                     modifier = Modifier
-                        .padding(start = 16.dp)
-                        .weight(1f),
+                        .padding(start = 14.dp)
+                        .weight(1f)
+                        .clickable(enabled = isCurrentUser) { onNavigateToEditProfile?.invoke() },
                 ) {
                     Text(
                         text = username,
                         color = BrandOnSurface,
-                        fontSize = 22.sp,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                     )
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(5.dp))
                     Text(
                         text = bio,
                         color = BrandOnSurfaceMuted,
@@ -264,25 +261,8 @@ fun ProfileScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            // 当前用户：编辑资料；他人：关注/已关注
-            if (isCurrentUser) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Color.White.copy(alpha = 0.72f))
-                        .clickable { onNavigateToEditProfile?.invoke() }
-                        .padding(vertical = 12.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "编辑资料",
-                        color = BrandOnSurface,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            } else {
+            // 他人主页：关注/已关注（本人编辑资料改为点昵称进入，对齐 Figma 紧凑头部）
+            if (!isCurrentUser) {
                 FollowButton(
                     currentUser = currentUser,
                     targetUser = username,
@@ -561,7 +541,7 @@ private fun ProfileTabBar(
                 .padding(bottom = 4.dp)
                 .offset { androidx.compose.ui.unit.IntOffset(indicatorOffset.roundToPx(), 0) }
                 .size(width = 24.dp, height = 2.dp)
-                .background(BrandOnSurface, RoundedCornerShape(1.dp)),
+                .background(Color.Black, RoundedCornerShape(1.dp)),
         )
     }
 }
@@ -613,27 +593,23 @@ private fun ProfilePostCard(
 
     val (title, _) = remember(post.body) { splitPostBody(post.body) }
 
+    // Figma：卡片透明填充/透明边框，背景图直接透出；保留点击进入详情
     Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color.White.copy(alpha = 0.72f))
-            // 点卡片打开作品详情（此前卡片完全不可点，点赞/收藏的作品都进不去）
-            .clickable(onClick = onClick)
-            .padding(8.dp),
+        modifier = modifier.clickable(onClick = onClick),
     ) {
         PostImage(
             assetKey = post.imageAssetKey,
             contentDescription = title,
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(0.95f)
-                .clip(RoundedCornerShape(12.dp)),
+                .aspectRatio(0.8f)
+                .clip(RoundedCornerShape(10.dp)),
         )
         Spacer(Modifier.height(8.dp))
         Text(
             text = title,
             color = BrandOnSurface,
-            fontSize = 12.sp,
+            fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -655,7 +631,7 @@ private fun ProfilePostCard(
             Text(
                 text = post.author,
                 color = BrandOnSurfaceMuted,
-                fontSize = 10.sp,
+                fontSize = 11.sp,
                 modifier = Modifier.padding(start = 4.dp).weight(1f),
                 maxLines = 1,
             )
@@ -665,17 +641,17 @@ private fun ProfilePostCard(
                     viewModel?.toggleLike(post.id, currentUser)
                 }
             ) {
-                HeartOutlineIcon(
-                    modifier = Modifier.size(14.dp),
-                    tint = if (liked) BrandPink else BrandOnSurfaceMuted,
-                    filled = liked,
-                    fillColor = BrandPink,
+                Image(
+                    painter = painterResource(R.drawable.ic_feed_heart),
+                    contentDescription = null,
+                    modifier = Modifier.size(15.dp),
+                    colorFilter = ColorFilter.tint(if (liked) BrandLike else BrandOnSurfaceMuted),
                 )
                 Spacer(Modifier.size(2.dp))
                 Text(
                     text = "${post.likes}",
-                    color = if (liked) BrandPink else BrandOnSurfaceMuted,
-                    fontSize = 10.sp,
+                    color = if (liked) BrandLike else BrandOnSurfaceMuted,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
                 )
             }
