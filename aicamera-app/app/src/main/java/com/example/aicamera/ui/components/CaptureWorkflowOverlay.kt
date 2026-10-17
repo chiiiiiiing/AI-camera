@@ -33,6 +33,8 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -93,18 +95,18 @@ fun CaptureWorkflowOverlay(
     showHorizon: Boolean = true,
     overlayAlpha: Float = 1f,
     guideLines: List<GuideLine> = emptyList(),
+    /** 人像 / 自拍模式：把主体框画成虚线人形轮廓（姿势引导），而不是矩形。 */
+    poseGuide: Boolean = false,
     /** 底部工具栏高度，用于抬高底部对齐的引导文案，避免被工具栏遮挡。 */
     bottomBarHeight: Dp = 0.dp,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        if (state in listOf(
-                CaptureWorkflowState.ANALYZING, CaptureWorkflowState.ROTATING,
-                CaptureWorkflowState.GUIDING, CaptureWorkflowState.READY,
-                CaptureWorkflowState.NO_SUBJECT, CaptureWorkflowState.UPSIDE_DOWN
-            )) {
+        // IDLE 也绘制辅助线：AI/几何检测到的目标区、主体框应当在取景时就能看到，
+        // 而不是必须按下快门进入引导后才出现（否则用户会觉得 AI 没有任何作用）。
+        if (state != CaptureWorkflowState.CAPTURING && state != CaptureWorkflowState.SAVED) {
             WorkflowGuideLines(state, cue, horizonAngleDeg, guideLines,
-                showGrid, showSubjectBox, showTargetZone, showHorizon, overlayAlpha)
+                showGrid, showSubjectBox, showTargetZone, showHorizon, overlayAlpha, poseGuide)
         }
         if (state != CaptureWorkflowState.IDLE) {
             WorkflowProgress(
@@ -204,7 +206,8 @@ fun CaptureWorkflowOverlay(
 private fun WorkflowGuideLines(
     state: CaptureWorkflowState, cue: GuidanceCue?, rollDeg: Float?,
     guideLines: List<GuideLine>, showGrid: Boolean, showSubjectBox: Boolean,
-    showTargetZone: Boolean, showHorizon: Boolean, overlayAlpha: Float
+    showTargetZone: Boolean, showHorizon: Boolean, overlayAlpha: Float,
+    poseGuide: Boolean = false
 ) {
     Canvas(Modifier.fillMaxSize()) {
         val opacity = overlayAlpha.coerceIn(0.25f, 1f)
@@ -217,17 +220,27 @@ private fun WorkflowGuideLines(
                     Offset(size.width, size.height * fraction), 1.dp.toPx())
             }
         }
-        if (state in listOf(CaptureWorkflowState.GUIDING, CaptureWorkflowState.READY)) {
+        if (state in listOf(
+                CaptureWorkflowState.IDLE,
+                CaptureWorkflowState.GUIDING,
+                CaptureWorkflowState.READY,
+                CaptureWorkflowState.NO_SUBJECT,
+                CaptureWorkflowState.ANALYZING
+            )) {
             guideLines.filter { it.visible }.forEach { line ->
                 when (line.type) {
                     GuideLineType.SUBJECT_BOX -> if (showSubjectBox) {
                         val box = GuideLineParser.parseSubjectBox(line.params)
+                        // 对齐设计稿「人形虚线轮廓」：改用虚线描边，不再是实线矩形框
                         drawRoundRect(
                             color = (if (box.aligned) GuideAligned else BrandPink).copy(alpha = opacity),
                             topLeft = Offset(box.x * size.width, box.y * size.height),
                             size = Size(box.width * size.width, box.height * size.height),
                             cornerRadius = CornerRadius(10.dp.toPx()),
-                            style = Stroke(width = 2.dp.toPx())
+                            style = Stroke(
+                                width = 2.dp.toPx(),
+                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 6.dp.toPx()))
+                            )
                         )
                     }
                     GuideLineType.TARGET_ZONE -> if (showTargetZone) {
@@ -240,6 +253,28 @@ private fun WorkflowGuideLines(
                     else -> Unit
                 }
             }
+        }
+        // 推荐取景范围：只要进入引导阶段就画出来，不依赖是否存在目标圈。
+        // 风景等无主体场景没有 target_zone，但用户仍需要看到"推荐的画面范围"。
+        if (showTargetZone &&
+            state in listOf(CaptureWorkflowState.GUIDING, CaptureWorkflowState.READY)
+        ) {
+            val left = size.width * 0.10f
+            val top = size.height * 0.12f
+            val right = size.width * 0.90f
+            val bottom = size.height * 0.80f
+            drawRoundRect(
+                color = Color.White.copy(alpha = opacity * 0.45f),
+                topLeft = Offset(left, top),
+                size = Size(right - left, bottom - top),
+                cornerRadius = CornerRadius(18.dp.toPx()),
+                style = Stroke(
+                    width = 1.5.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(
+                        floatArrayOf(10.dp.toPx(), 8.dp.toPx())
+                    )
+                )
+            )
         }
         if (showHorizon && state == CaptureWorkflowState.ROTATING &&
             cue in listOf(GuidanceCue.ROLL_CLOCKWISE, GuidanceCue.ROLL_COUNTERCLOCKWISE) &&
@@ -256,7 +291,81 @@ private fun WorkflowGuideLines(
                 Offset(center.x - dx, center.y - dy), Offset(center.x + dx, center.y + dy),
                 3.dp.toPx(), StrokeCap.Round)
         }
+
+        // 人像 / 自拍姿势引导：画一个虚线人形目标轮廓。
+        // 人脸框只框住脸，不能直接当全身轮廓用，所以按画面比例画固定的
+        // 人形目标（对齐设计稿「白色虚线人形」），让用户把人放进轮廓里。
+        if (poseGuide && state in listOf(
+                CaptureWorkflowState.GUIDING,
+                CaptureWorkflowState.NO_SUBJECT,
+                CaptureWorkflowState.READY
+            )) {
+            drawPoseTargetSilhouette(
+                color = (if (state == CaptureWorkflowState.READY) GuideAligned else Color.White)
+                    .copy(alpha = opacity * 0.92f)
+            )
+        }
     }
+}
+
+/** 虚线人形目标轮廓（人像/自拍姿势引导） */
+private fun DrawScope.drawPoseTargetSilhouette(color: Color) {
+    // 控制轮廓落在取景区内：底部工具栏约占画面下方 20%，
+    // 人形轮廓的脚不能画到工具栏下面。
+    val h = size.height * 0.46f
+    val bottom = size.height * 0.78f
+    val topY = bottom - h
+    val cx = size.width * 0.5f
+    val headR = h * 0.07f
+    val dash = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 7.dp.toPx()))
+    val stroke = Stroke(
+        width = 2.dp.toPx(),
+        pathEffect = dash,
+        cap = StrokeCap.Round,
+        join = StrokeJoin.Round
+    )
+
+    // 头
+    drawCircle(
+        color = color,
+        radius = headR,
+        center = Offset(cx, topY + headR),
+        style = stroke
+    )
+
+    // 躯干 + 双腿闭合轮廓
+    val body = Path().apply {
+        moveTo(cx, topY + headR * 2.05f)
+        lineTo(cx + h * 0.17f, topY + h * 0.245f)   // 右肩
+        lineTo(cx + h * 0.115f, topY + h * 0.56f)   // 右胯
+        lineTo(cx + h * 0.075f, bottom)             // 右脚
+        lineTo(cx + h * 0.02f, bottom)              // 右脚内侧
+        lineTo(cx, topY + h * 0.63f)                // 裆
+        lineTo(cx - h * 0.02f, bottom)              // 左脚内侧
+        lineTo(cx - h * 0.075f, bottom)             // 左脚
+        lineTo(cx - h * 0.115f, topY + h * 0.56f)   // 左胯
+        lineTo(cx - h * 0.17f, topY + h * 0.245f)   // 左肩
+        close()
+    }
+    drawPath(body, color, style = stroke)
+
+    // 双臂
+    drawLine(
+        color,
+        Offset(cx + h * 0.17f, topY + h * 0.245f),
+        Offset(cx + h * 0.25f, topY + h * 0.53f),
+        strokeWidth = 2.dp.toPx(),
+        cap = StrokeCap.Round,
+        pathEffect = dash
+    )
+    drawLine(
+        color,
+        Offset(cx - h * 0.17f, topY + h * 0.245f),
+        Offset(cx - h * 0.25f, topY + h * 0.53f),
+        strokeWidth = 2.dp.toPx(),
+        cap = StrokeCap.Round,
+        pathEffect = dash
+    )
 }
 
 @Composable

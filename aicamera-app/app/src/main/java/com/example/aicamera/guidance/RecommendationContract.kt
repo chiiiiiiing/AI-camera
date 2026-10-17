@@ -135,7 +135,7 @@ data class ExecutionQualityEvidence(
         (subjectHighlights==null || subjectHighlights in 0f..1f)
 }
 
-enum class ExecutionComparison { INITIAL, COMPARABLE, CACHED, CONTEXT_CHANGED, QUALITY_REGRESSED, UNATTRIBUTED_MOTION }
+enum class ExecutionComparison { INITIAL, COMPARABLE, CACHED, CONTEXT_CHANGED, QUALITY_REGRESSED, UNATTRIBUTED_MOTION, PHOTOMETRIC_SETTLING }
 
 /** Relative technical checks are not an absolute aesthetic score; low/high key images are valid. */
 class ExecutionQualityGuard {
@@ -167,26 +167,59 @@ class ExecutionQualityGuard {
         }
         // Accumulate signed residuals: bounded detector jitter cancels, persistent small
         // subject drift does not. A per-step threshold would miss a slow autonomous subject.
-        val unverifiedMotion=kotlin.math.hypot(unverifiedDx,unverifiedDy)>.012f
-        // A different subject/view invalidates the original technical baseline.
-        if(current.viewportVersion!=last.viewportVersion || current.family!=last.family ||
-            current.subjectTrackingId!=last.subjectTrackingId || (a==null)!=(b==null) ||
-            current.sampledAtMs-last.sampledAtMs>2000 ||
-            (a!=null && b!=null && (b.width/a.width !in .8f..1.25f || b.height/a.height !in .8f..1.25f))) {
+        // ★ 手持轻微抖动不该被判成"主体自己在动"：旧阈值 0.012 过于灵敏，
+        //   正常呼吸/手抖就会不断触发。放宽到 0.035。
+        val unverifiedMotion=kotlin.math.hypot(unverifiedDx,unverifiedDy)>.035f
+        // 跟踪 ID 变化只说明检测器重新分配了 ID（人稍微一动就会变），
+        // 不等于换人/换场景。重置对比基准即可，但不要向用户报"画面发生变化"。
+        if(current.subjectTrackingId!=last.subjectTrackingId) {
+            baseline=current
+            preferenceBaseline=current.takeIf{it.preferenceScore!=null}
+            motionAnchor=current;unverifiedDx=0f;unverifiedDy=0f
+            lastReasons=listOf("subject_tracking_reassigned")
+            // 静默跳过这一帧：既不清空引导进度，也不给用户弹"画面发生变化"。
+            return ExecutionComparison.CACHED
+        }
+        // 主体"出现/消失"的单帧抖动不算换场景：检测器 4Hz、人一低头就会丢一帧，
+        // 旧逻辑会因此报"画面发生变化"并打断引导。这里只悄悄重置基准。
+        if((a==null)!=(b==null)) {
+            baseline=current
+            preferenceBaseline=current.takeIf{it.preferenceScore!=null}
+            motionAnchor=current;unverifiedDx=0f;unverifiedDy=0f
+            lastReasons=listOf("subject_presence_changed")
+            return ExecutionComparison.CACHED
+        }
+        // 场景分类（family）抖动、手持靠近/远离导致的主体框缩放，
+        // 都不等于"换了场景"。它们只重置技术基准，不向用户报"画面发生变化"。
+        if(current.family!=last.family ||
+            (a!=null && b!=null && (b.width/a.width !in .65f..1.55f || b.height/a.height !in .65f..1.55f))) {
+            baseline=current
+            preferenceBaseline=current.takeIf{it.preferenceScore!=null}
+            motionAnchor=current;unverifiedDx=0f;unverifiedDy=0f
+            lastReasons=listOf("soft_context_reset")
+            return ExecutionComparison.CACHED
+        }
+        // 只有真正的视口切换或长时间断档才视为换了场景。
+        if(current.viewportVersion!=last.viewportVersion ||
+            current.sampledAtMs-last.sampledAtMs>2000) {
             baseline=current
             preferenceBaseline=current.takeIf{it.preferenceScore!=null}
             motionAnchor=current;unverifiedDx=0f;unverifiedDy=0f
             lastReasons=listOf("comparison_context_changed")
             return ExecutionComparison.CONTEXT_CHANGED
         }
-        if(kotlin.math.abs(current.meanLuma-last.meanLuma)>.08f || kotlin.math.abs(current.lumaStd-last.lumaStd)>.07f) {
+        // ★ 曝光/对比度容差同样放宽：手持时自动曝光持续微调，
+        //   旧阈值（0.08 / 0.07）几乎每帧都触发，把引导反复打断。
+        if(kotlin.math.abs(current.meanLuma-last.meanLuma)>.16f || kotlin.math.abs(current.lumaStd-last.lumaStd)>.14f) {
             // AE settling is not evidence of successful camera execution. Hold the transient
             // frame, but retain the pre-action technical baseline: persistent lost highlights
             // or blur must not become the new acceptable state merely because AE stabilized.
+            // Distinct from CONTEXT_CHANGED: a brief exposure shift is not a new scene, so the
+            // caller must not reset pose/position guidance progress or surface "scene changed".
             preferenceBaseline=current.takeIf{it.preferenceScore!=null}
             motionAnchor=current;unverifiedDx=0f;unverifiedDy=0f
             lastReasons=listOf("photometric_context_changed")
-            return ExecutionComparison.CONTEXT_CHANGED
+            return ExecutionComparison.PHOTOMETRIC_SETTLING
         }
         val start=baseline ?: last
         val sharpWorse=start.subjectSharpness?.let { old -> current.subjectSharpness?.let { old>.04f && it<old*.70f } } == true

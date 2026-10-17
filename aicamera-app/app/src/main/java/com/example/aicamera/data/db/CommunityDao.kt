@@ -51,6 +51,18 @@ interface CommunityDao {
     @Delete
     suspend fun deleteLike(like: CommunityLike)
 
+    /** 读改写放进同一事务，避免快速连点导致重复插入或计数漂移 */
+    @Transaction
+    suspend fun toggleLikeAtomic(postId: Long, username: String) {
+        if (isLiked(postId, username)) {
+            deleteLike(CommunityLike(postId, username))
+            decrementLikes(postId)
+        } else {
+            insertLike(CommunityLike(postId, username))
+            incrementLikes(postId)
+        }
+    }
+
     // ── 收藏 ──
     @Query("SELECT COUNT(*) FROM community_favorites WHERE post_id = :postId AND username = :username")
     suspend fun isFavorited(postId: Long, username: String): Boolean
@@ -67,15 +79,29 @@ interface CommunityDao {
     @Delete
     suspend fun deleteFavorite(favorite: CommunityFavorite)
 
-    @Query("UPDATE community_posts SET likes = likes + 1 WHERE id = :postId")
+    /** 收藏数走独立列 favorites，不能写 likes */
+    @Query("UPDATE community_posts SET favorites = favorites + 1 WHERE id = :postId")
     suspend fun incrementFavorites(postId: Long)
 
-    @Query("UPDATE community_posts SET likes = likes - 1 WHERE id = :postId AND likes > 0")
+    @Query("UPDATE community_posts SET favorites = favorites - 1 WHERE id = :postId AND favorites > 0")
     suspend fun decrementFavorites(postId: Long)
+
+    @Transaction
+    suspend fun toggleFavoriteAtomic(postId: Long, username: String) {
+        if (isFavorited(postId, username)) {
+            deleteFavorite(CommunityFavorite(postId, username))
+            decrementFavorites(postId)
+        } else {
+            insertFavorite(CommunityFavorite(postId, username))
+            incrementFavorites(postId)
+        }
+    }
 
     // ── 评论 ──
     @Query("SELECT * FROM community_comments WHERE author = :username ORDER BY created_at DESC")
     fun getCommentsByAuthor(username: String): Flow<List<CommunityComment>>
+
+    // ── 关注 ──
     @Query("SELECT COUNT(*) FROM user_follows WHERE follower = :follower AND following = :following")
     suspend fun isFollowing(follower: String, following: String): Boolean
 
@@ -87,6 +113,15 @@ interface CommunityDao {
 
     @Delete
     suspend fun deleteFollow(follow: UserFollow)
+
+    @Transaction
+    suspend fun toggleFollowAtomic(follower: String, following: String) {
+        if (isFollowing(follower, following)) {
+            deleteFollow(UserFollow(follower, following))
+        } else {
+            insertFollow(UserFollow(follower, following))
+        }
+    }
 
     @Query("SELECT COUNT(*) FROM user_follows WHERE following = :username")
     suspend fun followerCount(username: String): Int
@@ -112,4 +147,35 @@ interface CommunityDao {
 
     @Query("UPDATE community_posts SET image_asset_key = :newKey WHERE image_asset_key = :oldKey")
     suspend fun replaceDemoAsset(oldKey: String, newKey: String)
+
+    // ── 昵称迁移：改昵称后社区数据不断链 ──
+    @Query("UPDATE community_posts SET author = :newName WHERE author = :oldName")
+    suspend fun renamePostAuthor(oldName: String, newName: String)
+
+    @Query("UPDATE community_comments SET author = :newName WHERE author = :oldName")
+    suspend fun renameCommentAuthor(oldName: String, newName: String)
+
+    @Query("UPDATE community_likes SET username = :newName WHERE username = :oldName")
+    suspend fun renameLikeUser(oldName: String, newName: String)
+
+    @Query("UPDATE community_favorites SET username = :newName WHERE username = :oldName")
+    suspend fun renameFavoriteUser(oldName: String, newName: String)
+
+    @Query("UPDATE user_follows SET follower = :newName WHERE follower = :oldName")
+    suspend fun renameFollowFollower(oldName: String, newName: String)
+
+    @Query("UPDATE user_follows SET following = :newName WHERE following = :oldName")
+    suspend fun renameFollowFollowing(oldName: String, newName: String)
+
+    /** 事务内一次性迁移全部作者引用，避免中途失败留下半截数据 */
+    @Transaction
+    suspend fun renameAuthorEverywhere(oldName: String, newName: String) {
+        if (oldName == newName) return
+        renamePostAuthor(oldName, newName)
+        renameCommentAuthor(oldName, newName)
+        renameLikeUser(oldName, newName)
+        renameFavoriteUser(oldName, newName)
+        renameFollowFollower(oldName, newName)
+        renameFollowFollowing(oldName, newName)
+    }
 }

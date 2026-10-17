@@ -34,13 +34,32 @@ class CameraControls(
      * 通过滑动条设置变焦。
      */
     fun setZoomRatio(ratio: Float, camera: Camera): Boolean {
-        val maxZoom = camera.cameraInfo.zoomState.value?.maxZoomRatio
-            ?: CameraConfig.MAX_ZOOM_RATIO
-        val clamped = ratio.coerceIn(CameraConfig.MIN_ZOOM_RATIO, maxZoom)
+        val state = camera.cameraInfo.zoomState.value
+        val maxZoom = state?.maxZoomRatio ?: CameraConfig.MAX_ZOOM_RATIO
+        // 下限取硬件实际最小倍率（支持超广角 0.5×–0.8× 的机型）；
+        // 拿不到 CameraInfo 时才回退到 1×。
+        val minZoom = state?.minZoomRatio ?: CameraConfig.MIN_ZOOM_RATIO
+        val clamped = ratio.coerceIn(minZoom, maxZoom)
 
-        if (kotlin.math.abs(clamped - currentZoomRatio) < 0.005f) return true
+        // 同时对比「本地记录」和「硬件实际值」：
+        // 双指捏合是 dispatcher 直接写硬件、不会更新本地 currentZoomRatio，
+        // 只比本地值会导致捏合后再点同一个快捷倍率被误判为「无需变化」而不生效。
+        val hardwareZoom = state?.zoomRatio ?: currentZoomRatio
+        if (kotlin.math.abs(clamped - currentZoomRatio) < 0.005f &&
+            kotlin.math.abs(clamped - hardwareZoom) < 0.005f
+        ) return true
 
         return applyZoomRatio(clamped, camera)
+    }
+
+    /**
+     * 切换摄像头后同步本地变焦基准。
+     *
+     * 新 Camera 实例的变焦会回到 1×，但旧实现没有更新本地记录，
+     * 导致 UI 仍显示切换前的倍率、而实际画面是 1×。
+     */
+    fun syncZoomBaseline(ratio: Float) {
+        currentZoomRatio = ratio
     }
 
     /**

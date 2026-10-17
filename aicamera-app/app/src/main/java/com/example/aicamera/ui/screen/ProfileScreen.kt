@@ -123,7 +123,7 @@ fun ProfileScreen(
     SystemBarsAppearance(light = true)
     val context = LocalContext.current
     val authRepo = remember { AuthRepository.getInstance(context) }
-    val currentUser = authRepo.currentUsername ?: "摄影师"
+    val currentUser = authRepo.displayUsername
     val isCurrentUser = profileUsername == null || profileUsername == currentUser
     val username = profileUsername ?: currentUser
     val bio = if (isCurrentUser) {
@@ -157,6 +157,9 @@ fun ProfileScreen(
         communityViewModel?.getCommentsByAuthor(username) ?: kotlinx.coroutines.flow.flowOf(emptyList())
     }
     val userComments by commentsFlow.collectAsState(initial = emptyList())
+
+    // 点作品卡片 → 详情弹层（作品 / 点赞 / 收藏 三个 Tab 共用）
+    var selectedPost by remember { mutableStateOf<CommunityPost?>(null) }
 
     // 首次加载过渡，避免四 Tab 在数据未就绪时闪现空态
     var contentLoading by remember(username) { mutableStateOf(true) }
@@ -322,6 +325,7 @@ fun ProfileScreen(
                                 currentUser = currentUser,
                                 viewModel = communityViewModel,
                                 onNavigateToProfile = onNavigateToProfile,
+                                onPostClick = { selectedPost = it },
                             )
                         }
                     }
@@ -337,6 +341,7 @@ fun ProfileScreen(
                                 currentUser = currentUser,
                                 viewModel = communityViewModel,
                                 onNavigateToProfile = onNavigateToProfile,
+                                onPostClick = { selectedPost = it },
                             )
                         }
                     }
@@ -352,6 +357,7 @@ fun ProfileScreen(
                                 currentUser = currentUser,
                                 viewModel = communityViewModel,
                                 onNavigateToProfile = onNavigateToProfile,
+                                onPostClick = { selectedPost = it },
                             )
                         }
                     }
@@ -374,6 +380,21 @@ fun ProfileScreen(
             ProfileSettingsButton(
                 modifier = Modifier.align(Alignment.TopEnd).padding(top = 12.dp, end = 18.dp),
                 onClick = onNavigateToSettings,
+            )
+        }
+
+        // 作品详情弹层：作品 / 点赞 / 收藏 三个 Tab 的卡片都从这里打开。
+        // 之前连入口都没有（PostDetailDialog 写好了但全工程没人调用），
+        // 所以点赞和收藏的作品点不开。
+        val post = selectedPost
+        if (post != null && communityViewModel != null) {
+            PostDetailDialog(
+                post = post,
+                viewModel = communityViewModel,
+                currentUser = currentUser,
+                onDismiss = { selectedPost = null },
+                onNavigateToProfile = onNavigateToProfile,
+                communityAssetMapper = { key -> communityAssetResource(key ?: "") },
             )
         }
     }
@@ -553,6 +574,7 @@ private fun ProfilePostGrid(
     currentUser: String,
     viewModel: CommunityViewModel?,
     onNavigateToProfile: (String) -> Unit,
+    onPostClick: (CommunityPost) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -564,6 +586,7 @@ private fun ProfilePostGrid(
                         currentUser = currentUser,
                         viewModel = viewModel,
                         onNavigateToProfile = onNavigateToProfile,
+                        onClick = { onPostClick(post) },
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -581,6 +604,7 @@ private fun ProfilePostCard(
     currentUser: String,
     viewModel: CommunityViewModel?,
     onNavigateToProfile: (String) -> Unit,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val liked by remember(post.id, currentUser, viewModel) {
@@ -593,6 +617,8 @@ private fun ProfilePostCard(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
             .background(Color.White.copy(alpha = 0.72f))
+            // 点卡片打开作品详情（此前卡片完全不可点，点赞/收藏的作品都进不去）
+            .clickable(onClick = onClick)
             .padding(8.dp),
     ) {
         PostImage(

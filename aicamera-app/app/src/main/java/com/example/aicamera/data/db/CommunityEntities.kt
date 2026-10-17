@@ -14,6 +14,8 @@ data class CommunityPost(
     @ColumnInfo(name = "image_asset_key") val imageAssetKey: String?,
     @ColumnInfo(name = "elapsed_text") val elapsedText: String,  // "3 分钟前"
     @ColumnInfo(name = "likes") val likes: Int = 0,
+    /** 收藏数，与点赞数分开统计 */
+    @ColumnInfo(name = "favorites", defaultValue = "0") val favorites: Int = 0,
     @ColumnInfo(name = "comments_count") val commentsCount: Int = 0,
     @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis()
 )

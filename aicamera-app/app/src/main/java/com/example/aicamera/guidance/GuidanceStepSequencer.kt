@@ -398,19 +398,25 @@ class GuidanceStepSequencer {
         const val ZOOM_MIN_CHANGE = 0.12f
 
         /** 变焦到位后的稳定观察期 */
-        const val ZOOM_SETTLE_MS = 400L
+        const val ZOOM_SETTLE_MS = 250L
 
         /** ZOOM 步最长停留（兜底前进，绝卡死） */
         const val ZOOM_STEP_TIMEOUT_MS = 4_500L
 
-        /** 每步最短停留：让分步指引肉眼可感知，不会一闪而过 */
-        const val MIN_STEP_DWELL_MS = 700L
+        /**
+         * 每步最短停留。
+         *
+         * 旧值 700ms × 最多三步（ZOOM/LEVEL/SUBJECT）叠加是拍摄提速的主要瓶颈，
+         * 最佳情况下单这一项就要 2.1s。压到 200ms —— 仍足够让状态文案被感知，
+         * 不会一闪而过，但不再是主导耗时的部分。
+         */
+        const val MIN_STEP_DWELL_MS = 200L
 
         /** 无传感器信号跳过帧数 */
         const val LEVEL_NO_SIGNAL_SKIP_FRAMES = 30
 
         /** 主体对齐稳定帧数 */
-        const val SUBJECT_ALIGNED_FRAMES = 6
+        const val SUBJECT_ALIGNED_FRAMES = 4
 
         /** DONE 回退帧数 */
         const val DONE_REGRESS_FRAMES = 4
