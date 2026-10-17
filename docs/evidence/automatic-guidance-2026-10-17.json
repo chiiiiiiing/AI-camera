@@ -1,6 +1,6 @@
 {
   "date": "2026-10-17",
-  "code_commit": "12ca7a87bfe649a2cf12c83621090d4aec382731",
+  "code_commit": "8b285cb03670922135c7536879d6a28e570e76ea",
   "local_jvm_tests": 374,
   "local_jvm_passed": true,
   "v9_asset_gate_passed": true,
@@ -12,5 +12,6 @@
   "human_aesthetic_gain_verified": false,
   "preference_heads_enabled": false,
   "evidence_scope": "Deterministic rules, state/lifecycle tests and controlled geometry execution; no claim of live scene accuracy or aesthetic gain.",
-  "ci_checks": "https://github.com/chiiiiiiing/AI-camera/pull/5/checks"
+  "ci_checks": "https://github.com/chiiiiiiing/AI-camera/pull/5/checks",
+  "local_jvm_core_commit": "12ca7a87bfe649a2cf12c83621090d4aec382731"
 }
