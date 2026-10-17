@@ -19,7 +19,7 @@ class ExecutionQualityGuardTest {
     }
     @Test fun `auto exposure settling is not credited to guidance`() {
         val g=ExecutionQualityGuard();g.compare(sample(1))
-        assertEquals(ExecutionComparison.CONTEXT_CHANGED,g.compare(sample(2).copy(meanLuma=.62f)))
+        assertEquals(ExecutionComparison.PHOTOMETRIC_SETTLING,g.compare(sample(2).copy(meanLuma=.62f)))
         assertEquals(ExecutionComparison.COMPARABLE,g.compare(sample(3).copy(meanLuma=.62f)))
     }
     @Test fun `exposure change cannot erase persistent subject highlight or sharpness loss`() {
@@ -27,14 +27,14 @@ class ExecutionQualityGuardTest {
             sample(2).copy(lumaStd=.30f,subjectSharpness=.06f))
         for(changed in losses) {
             val g=ExecutionQualityGuard();g.compare(sample(1))
-            assertEquals(ExecutionComparison.CONTEXT_CHANGED,g.compare(changed))
+            assertEquals(ExecutionComparison.PHOTOMETRIC_SETTLING,g.compare(changed))
             assertEquals(ExecutionComparison.QUALITY_REGRESSED,g.compare(changed.copy(observationId=3,sampledAtMs=1500,subjectObservationId=3)))
         }
     }
     @Test fun `transient exposure damage can recover without replacing the original baseline`() {
         val g=ExecutionQualityGuard();g.compare(sample(1))
-        assertEquals(ExecutionComparison.CONTEXT_CHANGED,g.compare(sample(2).copy(meanLuma=.62f,subjectHighlights=.2f)))
-        assertEquals(ExecutionComparison.CONTEXT_CHANGED,g.compare(sample(3)))
+        assertEquals(ExecutionComparison.PHOTOMETRIC_SETTLING,g.compare(sample(2).copy(meanLuma=.62f,subjectHighlights=.2f)))
+        assertEquals(ExecutionComparison.PHOTOMETRIC_SETTLING,g.compare(sample(3)))
         assertEquals(ExecutionComparison.COMPARABLE,g.compare(sample(4)))
     }
     @Test fun `subject movement without background motion cannot count as camera execution`() {
@@ -147,10 +147,13 @@ class ExecutionQualityGuardTest {
         assertEquals(GuidanceFeedback.WORSENING,c.decision.value.feedback)
         assertEquals(CompositionSessionController.GuidanceAction.HoldStill,c.action.value)
     }
-    @Test fun `exposure change pauses and fresh stable observations can recover`() {
+    @Test fun `exposure change alone holds without resetting pose progress and recovers`() {
+        // A pure photometric blip (no real quality loss) must not read as "scene changed":
+        // that wipes lockedTarget/pose progress and shows a misleading message on every small
+        // movement the AE reacts to. It should just hold this one frame and recover quietly.
         val c=active();for(i in 1L..8)c.observe(observation(i))
         c.observe(observation(9).copy(executionQuality=sample(9).copy(meanLuma=.62f)))
-        assertEquals(GuidanceFeedback.SCENE_CHANGED,c.decision.value.feedback)
+        assertEquals(GuidanceFeedback.INSUFFICIENT_EVIDENCE,c.decision.value.feedback)
         for(i in 10L..20)c.observe(observation(i).copy(executionQuality=sample(i).copy(meanLuma=.62f)))
         assertEquals(CompositionSessionController.State.Ready,c.state.value)
     }
@@ -158,7 +161,7 @@ class ExecutionQualityGuardTest {
         val c=active();for(i in 1L..8)c.observe(observation(i))
         assertEquals(CompositionSessionController.State.Ready,c.state.value)
         c.observe(observation(9).copy(executionQuality=sample(9).copy(meanLuma=.62f,subjectHighlights=.2f)))
-        assertEquals(GuidanceFeedback.SCENE_CHANGED,c.decision.value.feedback)
+        assertEquals(GuidanceFeedback.INSUFFICIENT_EVIDENCE,c.decision.value.feedback)
         for(i in 10L..20)c.observe(observation(i).copy(executionQuality=sample(i).copy(meanLuma=.62f,subjectHighlights=.2f)))
         assertEquals(GuidanceFeedback.WORSENING,c.decision.value.feedback)
         assertFalse(c.state.value is CompositionSessionController.State.Ready)

@@ -283,6 +283,13 @@ class CompositionSessionController {
                 hold(input,GuidanceFeedback.SCENE_CHANGED)
                 return
             }
+            if(executionComparison==ExecutionComparison.PHOTOMETRIC_SETTLING) {
+                // Exposure settling after a real adjustment is not a scene change: hold this
+                // one frame without wiping lockedTarget/pose progress, so rotation/position
+                // guidance keeps advancing once the next frame's photometrics are stable.
+                hold(input,GuidanceFeedback.INSUFFICIENT_EVIDENCE)
+                return
+            }
             if(executionComparison==ExecutionComparison.QUALITY_REGRESSED) {
                 // A closer target is not a success if the measured image becomes worse.
                 pausedTarget=input.targetId ?: "${input.targetCx}:${input.targetCy}:${input.pitchTargetDegrees}:${input.yawTargetDegrees}"

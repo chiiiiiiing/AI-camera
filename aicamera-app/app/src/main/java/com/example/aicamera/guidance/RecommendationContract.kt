@@ -135,7 +135,7 @@ data class ExecutionQualityEvidence(
         (subjectHighlights==null || subjectHighlights in 0f..1f)
 }
 
-enum class ExecutionComparison { INITIAL, COMPARABLE, CACHED, CONTEXT_CHANGED, QUALITY_REGRESSED, UNATTRIBUTED_MOTION }
+enum class ExecutionComparison { INITIAL, COMPARABLE, CACHED, CONTEXT_CHANGED, QUALITY_REGRESSED, UNATTRIBUTED_MOTION, PHOTOMETRIC_SETTLING }
 
 /** Relative technical checks are not an absolute aesthetic score; low/high key images are valid. */
 class ExecutionQualityGuard {
@@ -183,10 +183,12 @@ class ExecutionQualityGuard {
             // AE settling is not evidence of successful camera execution. Hold the transient
             // frame, but retain the pre-action technical baseline: persistent lost highlights
             // or blur must not become the new acceptable state merely because AE stabilized.
+            // Distinct from CONTEXT_CHANGED: a brief exposure shift is not a new scene, so the
+            // caller must not reset pose/position guidance progress or surface "scene changed".
             preferenceBaseline=current.takeIf{it.preferenceScore!=null}
             motionAnchor=current;unverifiedDx=0f;unverifiedDy=0f
             lastReasons=listOf("photometric_context_changed")
-            return ExecutionComparison.CONTEXT_CHANGED
+            return ExecutionComparison.PHOTOMETRIC_SETTLING
         }
         val start=baseline ?: last
         val sharpWorse=start.subjectSharpness?.let { old -> current.subjectSharpness?.let { old>.04f && it<old*.70f } } == true
