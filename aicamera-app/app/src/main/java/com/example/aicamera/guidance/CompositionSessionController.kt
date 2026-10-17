@@ -307,9 +307,27 @@ class CompositionSessionController {
                 !GuidanceGeometry.isSubjectAligned(input.subjectCx, input.subjectCy,
                     target.targetCx ?: .5f, target.targetCy ?: .5f, target.targetTolerance, input.coordinateAspectRatio))
             val wasVerifying = _state.value is State.Ready || _state.value is State.Verifying
-            if ((requireRoll && (abs(input.rawRollDegrees ?: input.rollDegrees ?: Float.NaN) > horizonPolicy.enterLevelToleranceDeg || input.isUpright != true)) || (positionBad && wasVerifying))
+            val rollBad = requireRoll && (abs(input.rawRollDegrees ?: input.rollDegrees ?: Float.NaN) > horizonPolicy.enterLevelToleranceDeg || input.isUpright != true)
+            if (rollBad && wasVerifying)
                 hold(input, GuidanceFeedback.INSUFFICIENT_EVIDENCE)
-            else if(input.observedAnchorKind == ObservedAnchorKind.OBJECT && input.imuObservationId > lastImuId) {
+            else if (rollBad) {
+                // IMU itself updates far slower than camera frames (sensor ~5Hz vs ~15-30fps).
+                // Re-showing the SAME rotate action on a cached IMU sample is correct — the
+                // device is still tilted — but calling hold() here overwrote it with HoldStill
+                // on every repeated frame, so rotate/pitch/yaw guidance flashed for one frame
+                // and then vanished until the next fresh IMU sample. Keep emitting the action
+                // computed from this (still valid, just not brand-new) reading instead.
+                val rawRoll = input.rawRollDegrees
+                val action = if (rawRoll != null && rawRoll.isFinite()) {
+                    if (rawRoll > 0) GuidanceAction.RotateCounterClockwise else GuidanceAction.RotateClockwise
+                } else GuidanceAction.HoldStill
+                _state.value = State.Adjusting(action, 0f)
+                _action.value = action
+                _decision.value = GuidanceDecision(action, input.targetId, measuredError(input),
+                    GuidanceFeedback.ADJUSTING, input.subjectObservationId, reasons = executionGuard.lastReasons)
+            } else if (positionBad && wasVerifying) {
+                hold(input, GuidanceFeedback.INSUFFICIENT_EVIDENCE)
+            } else if(input.observedAnchorKind == ObservedAnchorKind.OBJECT && input.imuObservationId > lastImuId) {
                 // Fresh IMU may establish level while a detector sample is cached; it never
                 // advances position stability or Ready. This avoids a five-second level delay.
                 if(!requireRoll || (input.isUpright == true && abs(input.rollDegrees ?: Float.NaN)<=horizonPolicy.enterLevelToleranceDeg))
