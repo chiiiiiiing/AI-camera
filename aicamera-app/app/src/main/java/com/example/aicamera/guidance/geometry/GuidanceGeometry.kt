@@ -8,7 +8,7 @@ import kotlin.math.hypot
  * 构图几何 → GuidanceCue 纯逻辑层（无 Android 依赖，可直接 JVM 单测）。
  *
  * ## 职责
- * 按 docs/10 第 6 节约定，把「当前帧几何」与「模板目标」做差值，
+ * 按 docs/引导动画制作与接入规范.md 的坐标约定，把「当前帧几何」与「模板目标」做差值，
  * 产出 14 种 GuidanceCue 中可可靠支持的部分：
  * - ROLL_CLOCKWISE / ROLL_COUNTERCLOCKWISE（水平角超阈）
  * - MOVE_LEFT / MOVE_RIGHT / MOVE_UP / MOVE_DOWN（主体中心偏离目标区）
@@ -53,7 +53,7 @@ object GuidanceGeometry {
     /**
      * 计算引导指令。
      *
-     * 优先级与 docs/10 的 guidanceCueFromGeometry 一致：ROLL > PITCH > YAW > 平移。
+     * 本层几何优先级：ROLL > 有验证目标的 PITCH > 有验证目标的 YAW > 平移；最终动作由会话控制器决定。
      *
      * @param subjectCx 主体中心 x（归一化显示坐标），无主体传 null
      * @param subjectCy 主体中心 y（归一化显示坐标），无主体传 null

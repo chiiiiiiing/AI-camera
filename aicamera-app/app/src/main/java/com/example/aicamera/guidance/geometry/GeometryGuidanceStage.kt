@@ -77,8 +77,9 @@ class GeometryGuidanceStage @Inject constructor(
         if (input !is FakeInferenceOutput) return input
         val oldTarget = input.compositionTarget
         val targetFace = structure?.singleFace(android.os.SystemClock.elapsedRealtime())
-        val targetValid = oldTarget == null || (targetFace != null && oldTarget.accepts(targetFace, structure?.faceYawDegrees) && oldTarget.subjectTrackingId == structure?.trackingId &&
-            oldTarget.viewportVersion == structure?.viewportVersion && targetFace != null)
+        val targetValid = oldTarget == null || (targetFace != null &&
+            oldTarget.accepts(targetFace, structure?.faceYawDegrees, structure?.facingDirectionX) &&
+            oldTarget.subjectTrackingId == structure?.trackingId && oldTarget.viewportVersion == structure?.viewportVersion)
         val sceneFresh = input.sceneAnalysis?.isFresh(android.os.SystemClock.elapsedRealtime()) != false
         val faceOutput = if (targetValid && sceneFresh) input else input.copy(compositionTarget = null,
             confidence = if(sceneFresh) input.confidence else 0f,
@@ -266,6 +267,13 @@ class GeometryGuidanceStage @Inject constructor(
         return output.copy(
             guideLines = newLines,
             guidanceCue = cue,
+            // Fresh geometry can revoke a cached coaching tip immediately. Keep
+            // the original scene/advice timestamps: display frames do not renew evidence.
+            sceneAnalysis = output.sceneAnalysis?.let { scene ->
+                scene.copy(techniqueAdvice = scene.techniqueAdvice?.takeIf {
+                    it.isValidFor(scene, structure, android.os.SystemClock.elapsedRealtime())
+                })
+            },
             // Template similarity is not geometric evidence of alignment.
             compositionProgress = boostedProgress,
             // 标注模板主体期望：分步引导序列器据此决定是否需要 SUBJECT 步

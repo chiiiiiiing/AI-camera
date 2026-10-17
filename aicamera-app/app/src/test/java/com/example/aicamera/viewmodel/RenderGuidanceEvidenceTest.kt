@@ -49,6 +49,87 @@ class RenderGuidanceEvidenceTest {
         mapOf("center_x" to .4f, "center_y" to .3f, "radius" to .08f,
             "anchor_kind" to (kind ?: "subject"), "coordinate_aspect_ratio" to .75f))
 
+    private val lookingFace = StructureObservation(1, 0, 7, 1,
+        NormalizedBox(.45f, .2f, .65f, .6f), faceYawDegrees = 22f, trackingId = 9,
+        facingDirectionX = 1f)
+
+    private fun lookRoomOutput(face: StructureObservation? = lookingFace,
+                               targetX: Float = .4f): FakeInferenceOutput {
+        val target = CompositionTarget("rule:face:look-room", NormalizedPoint(targetX, .4f), .06f, 7,
+            "photography_technique_facing_space", subjectTrackingId = 9, requiredFacingDirectionX = 1f)
+        return FakeInferenceOutput(SceneType.NORMAL, CompositionStrategy.ADAPTIVE, .9f, 128f,
+            listOf(FakeGuideLine("target_zone", true, mapOf("center_x" to targetX,
+                "center_y" to .4f, "radius" to .06f, "anchor_kind" to "face"))),
+            expectsSubject = true, structureObservation = face, compositionTarget = target)
+    }
+
+    private fun timed(frame: CompositionSessionController.FrameObservation, id: Long) = frame.copy(
+        frameId = id, timestampMs = id * 250, subjectSampledAtMs = id * 250,
+        subjectObservationId = id, imuObservationId = id, imuSampledAtMs = id * 250,
+        rollDegrees = 0f, rawRollDegrees = 0f, isUpright = true)
+
+    @Test fun `look room target remains authorized only by matching fresh face and head orientation`() {
+        val valid = observation(lookRoomOutput())
+        assertEquals("rule:face:look-room", valid.targetId)
+        assertEquals(.4f, valid.targetCx!!, 0f)
+        for (face in listOf(null, lookingFace.copy(facingDirectionX = null),
+            lookingFace.copy(facingDirectionX = -1f), lookingFace.copy(sampledAtMs = -751),
+            lookingFace.copy(sampledAtMs = 1), lookingFace.copy(trackingId = 10),
+            lookingFace.copy(viewportVersion = 8), lookingFace.copy(faceCount = 2))) {
+            val invalid = observation(lookRoomOutput(face))
+            assertNull("old cached recommendation must lose target authority: $face", invalid.targetId)
+            assertNull(invalid.targetCx)
+            assertNull(invalid.targetCy)
+            assertEquals(-2L, invalid.targetViewportVersion)
+        }
+    }
+
+    @Test fun `new head direction loss cancels locked move while recommendation stays cached`() {
+        val output = lookRoomOutput()
+        val controller = CompositionSessionController().apply { startAnalysis(); onAnalysisComplete() }
+        val valid = observation(output)
+        for (id in 1L..8L) controller.observe(timed(valid, id))
+        assertEquals(CompositionSessionController.GuidanceAction.MoveRight, controller.action.value)
+        // Same target/model output, only the independently sampled structure changes.
+        val lost = observation(output.copy(structureObservation = lookingFace.copy(observationId = 9,
+            facingDirectionX = null)))
+        controller.observe(timed(lost, 9))
+        assertEquals(CompositionSessionController.GuidanceAction.HoldStill, controller.action.value)
+        assertNull(controller.decision.value.targetId)
+        assertNull(controller.decision.value.displayEvidence)
+    }
+
+    @Test fun `reversed head orientation immediately revokes ready and capture authorization`() {
+        val output = lookRoomOutput(targetX = lookingFace.face!!.centerX)
+        val controller = CompositionSessionController().apply { startAnalysis(); onAnalysisComplete() }
+        val valid = observation(output)
+        for (id in 1L..16L) controller.observe(timed(valid, id))
+        assertEquals(CompositionSessionController.State.Ready, controller.state.value)
+        assertTrue(controller.confirmReadyForCapture(4000))
+        val reversed = observation(output.copy(structureObservation = lookingFace.copy(observationId = 17,
+            facingDirectionX = -1f)))
+        controller.observe(timed(reversed, 17))
+        assertFalse(controller.state.value is CompositionSessionController.State.Ready)
+        assertFalse(controller.confirmReadyForCapture(4250))
+        assertEquals(GuidanceFeedback.INSUFFICIENT_EVIDENCE, controller.decision.value.feedback)
+        assertNull(controller.decision.value.displayEvidence)
+    }
+
+    @Test fun `head independent framing is not rejected for missing head direction`() {
+        val original = lookRoomOutput(lookingFace.copy(facingDirectionX = null))
+        val actual = observation(original.copy(compositionTarget = original.compositionTarget!!.copy(
+            source = "photography_rule", requiredFacingDirectionX = null)))
+        assertEquals("rule:face:look-room", actual.targetId)
+        assertEquals(.4f, actual.targetCx!!, 0f)
+    }
+
+    @Test fun `validated composition target replaces stale decorative target coordinates`() {
+        val output = lookRoomOutput().copy(guideLines = listOf(target("face")))
+        val actual = observation(output)
+        assertEquals(output.compositionTarget!!.center.y, actual.targetCy!!, 0f)
+        assertEquals(output.compositionTarget!!.tolerance, actual.targetTolerance, 0f)
+    }
+
     @Test
     fun `face observations never receive generic whole subject targets`() {
         assertNull(observation(listOf(target())).targetCx)

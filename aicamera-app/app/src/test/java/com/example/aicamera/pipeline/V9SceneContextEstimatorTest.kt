@@ -65,6 +65,53 @@ class V9SceneContextEstimatorTest {
         assertNull(context.sceneCategory)
     }
 
+    @Test
+    fun `weak similarity cannot turn unanimous unrelated references into scene evidence`() {
+        val context = estimator.estimate(listOf(
+            hit("a", .3f, "portrait", "closeup_portrait", "centered_subject"),
+            hit("b", .2f, "portrait", "closeup_portrait", "centered_subject")
+        ), mixedLight)
+        assertNull(context.photoType)
+        assertNull(context.sceneCategory)
+        assertEquals("mixed", context.lightingQuality)
+    }
+
+    @Test
+    fun `a single reference and duplicated ids are not independent scene consensus`() {
+        val row = hit("same", .95f, "portrait", "closeup_portrait", "centered_subject")
+        for (rows in listOf(listOf(row), List(8) { row })) {
+            val context = estimator.estimate(rows, mixedLight)
+            assertNull(context.photoType)
+            assertNull(context.sceneCategory)
+            assertNull(context.preferredComposition)
+        }
+    }
+
+    @Test
+    fun `out of range similarities are rejected instead of manufacturing confident votes`() {
+        val context = estimator.estimate(listOf(
+            hit("a", 2f, "landscape", "natural_landscape", "centered_subject"),
+            hit("b", Float.NaN, "landscape", "natural_landscape", "centered_subject"),
+            hit("c", Float.POSITIVE_INFINITY, "landscape", "natural_landscape", "centered_subject")
+        ), mixedLight)
+        assertNull(context.photoType)
+        assertEquals(0f, context.sceneConfidence, 0f)
+    }
+
+    @Test
+    fun `unknown majority is not discarded from the consensus denominator`() {
+        val context = estimator.estimate(listOf(
+            hit("u1", .98f, "unknown", "unknown", "unknown"),
+            hit("u2", .97f, "unknown", "unknown", "unknown"),
+            hit("u3", .96f, "unknown", "unknown", "unknown"),
+            hit("p1", .80f, "portrait", "closeup_portrait", "centered_subject"),
+            hit("p2", .79f, "portrait", "closeup_portrait", "centered_subject")
+        ), mixedLight)
+        assertNull(context.photoType)
+        assertNull(context.sceneCategory)
+        assertEquals(0f, context.sceneConfidence, 0f)
+    }
+
     private fun hit(
         id: String,
         score: Float,

@@ -89,6 +89,20 @@ internal class MultiSceneReferences private constructor(
 
 /** Pure policy and pixel kernel are shared by live analysis and deterministic regression tests. */
 internal object MultiScenePolicy {
+    /** Missing semantic evidence is explicit; it never invents a horizon or complete plant. */
+    fun guidanceLimitations(family: SceneFamily, live: ObjectObservation?, hasTarget: Boolean,
+        nativeAvailable: Boolean): List<String> = when (family) {
+        SceneFamily.FOOD, SceneFamily.STILL_LIFE -> when {
+            !nativeAvailable -> listOf("object_input_unavailable")
+            live == null -> listOf("object_unstable_or_ambiguous")
+            !hasTarget -> listOf("no_compatible_object_reference")
+            else -> emptyList()
+        }
+        SceneFamily.NATURAL_LANDSCAPE, SceneFamily.URBAN_LANDSCAPE -> listOf("no_verified_landscape_target")
+        SceneFamily.PLANT -> listOf("unverified_complete_plant")
+        SceneFamily.UNKNOWN -> listOf("scene_unconfirmed")
+        SceneFamily.PORTRAIT -> emptyList()
+    }
     // COCO boxes for plants/vases do not reliably contain an entire plant/bouquet.
     val objectClasses = setOf(39,40,41,45,46,47,48,49,50,51,52,53,54,55,73,74,77)
     fun dominant(detections: List<ObjectDetection>): ObjectDetection? {
@@ -185,42 +199,46 @@ internal data class MultiSceneResult(val observation: SceneAnalysisObservation, 
 /** One serial detector call per second. No worker timeout can leave an orphaned inference running. */
 internal class MultiSceneAnalyzer(directory: File, metadata: (String) -> TemplateMeta?) : Closeable {
     private val refs=MultiSceneReferences.load(directory,metadata)
+    private val detectorFile=refs?.modelFile ?: MultiSceneDetectorAssets.load(directory)
     private var detector: NanoDetRuntime?=null
     private var detectorAttempted=false
     private var lastDetectionAt=Long.MIN_VALUE
     private var cooldownUntil=0L
     private var observationId=0L
     private var objectId=0L
+    private var personId=0L
+    private var previousPerson: PersonSceneObservation?=null
     private var trackingId=0
     private var previous: ObjectObservation?=null
     private var previousAppearance: List<Float>?=null
     private var locked: ObjectCompositionTarget?=null
     private var excludedId: String?=null
     private var scene=SceneFamily.UNKNOWN
-    private var pending=SceneFamily.UNKNOWN
-    private var sceneSamples=0
+    private val autoScene = AutoScenePolicy()
     private var viewport=Long.MIN_VALUE
 
     fun analyze(bitmap: Bitmap, context: SceneContext, hits: List<SearchHit>, viewportVersion: Long, aspect: Float, nowMs: Long, sampledAtMs: Long = nowMs,
-        frame: PreprocessedFrame? = null): MultiSceneResult {
+        frame: PreprocessedFrame? = null, structure: StructureObservation? = null): MultiSceneResult {
         if(viewport!=viewportVersion) { reset(); viewport=viewportVersion }
-        val candidate=MultiScenePolicy.family(context)
-        if(candidate==pending) sceneSamples++ else { pending=candidate; sceneSamples=1 }
-        if(candidate!=scene) {
-            previous=null; locked=null
-            scene=if(sceneSamples>=2) candidate else SceneFamily.UNKNOWN
-        }
         val pixels=IntArray(bitmap.width*bitmap.height); bitmap.getPixels(pixels,0,bitmap.width,0,0,bitmap.width,bitmap.height)
         val layout=MultiScenePolicy.layout(pixels,bitmap.width,bitmap.height)
-        val objectScene=scene==SceneFamily.FOOD || scene==SceneFamily.STILL_LIFE
         val nativeAvailable=frame?.analysisBitmap!=null && frame.detectionBitmap!=null && frame.detectionTransform!=null
-        if(objectScene && !nativeAvailable) { previous=null;previousAppearance=null;locked=null }
-        if(objectScene && nativeAvailable && refs!=null && nowMs>=cooldownUntil && (lastDetectionAt==Long.MIN_VALUE || nowMs-lastDetectionAt>=1000)) {
+        val visibleFace = structure?.let { it.valid && it.viewportVersion==viewportVersion && it.faceCount>0 &&
+            it.observationId>0 && nowMs>=it.sampledAtMs && nowMs-it.sampledAtMs<=750 } == true
+        if(!nativeAvailable || visibleFace) { previous=null;previousAppearance=null;previousPerson=null;locked=null }
+        // Detection discovers subjects independently of retrieval's scene vote. Otherwise a
+        // wrong landscape vote would prevent the object detector from ever correcting it.
+        if(!visibleFace && nativeAvailable && detectorFile!=null && nowMs>=cooldownUntil && (lastDetectionAt==Long.MIN_VALUE || nowMs-lastDetectionAt>=1000)) {
             lastDetectionAt=nowMs
             try {
-                if(!detectorAttempted) { detectorAttempted=true; detector=NanoDetRuntime(refs.modelFile) }
+                if(!detectorAttempted) { detectorAttempted=true; detector=NanoDetRuntime(detectorFile) }
                 val detections=frame?.let { detector?.detectNative(it) }.orEmpty()
                 val finished=android.os.SystemClock.elapsedRealtime()
+                val person=if(finished-nowMs<=250 && finished-sampledAtMs<=750) detections.filter {
+                    it.classId==0 && it.confidence.isFinite() && it.confidence in .65f..1f &&
+                        it.box.width*it.box.height>=.04f
+                }.maxByOrNull { it.box.width*it.box.height } else null
+                previousPerson=person?.let { PersonSceneObservation(++personId,sampledAtMs,viewportVersion,it.box,it.confidence) }
                 val primary=if(finished-nowMs<=250 && finished-sampledAtMs<=750) MultiScenePolicy.dominant(detections)
                     ?.takeUnless{MultiScenePolicy.hasUncertainCompetitor(it,detections)} else null
                 if(finished-nowMs>250) cooldownUntil=finished+5000
@@ -240,29 +258,33 @@ internal class MultiSceneAnalyzer(directory: File, metadata: (String) -> Templat
                     previous=ObjectObservation(++objectId,sampledAtMs,viewportVersion,trackingId,primary.classId,primary.box,primary.confidence,
                         if(same) before!!.stableSamples+1 else 1,aspect)
                 }
-            } catch (_: Exception) { previous=null; locked=null; cooldownUntil=nowMs+5000 }
+            } catch (_: Exception) { previous=null; previousPerson=null; locked=null; cooldownUntil=nowMs+5000 }
         }
-        if(!objectScene) { previous=null; locked=null }
-        val live=previous?.takeIf{it.isFresh(nowMs)}
+        val detected=previous?.takeIf{it.isFresh(nowMs)}
+        val automatic=autoScene.resolve(context,structure,detected,sampledAtMs,nowMs,viewportVersion,previousPerson)
+        if(scene!=automatic.family) locked=null
+        scene=automatic.family
+        val objectScene=scene==SceneFamily.FOOD || scene==SceneFamily.STILL_LIFE
+        val live=detected?.takeIf{objectScene}
         if(live==null) locked=null
         val ranked=hits.map { hit ->
             val ref=refs?.records?.get(hit.templateId)
             val layoutGain=if(ref?.layout!=null && abs(ln((ref.aspect/aspect).toDouble()))<=.20 && scene!=SceneFamily.UNKNOWN && scene!=SceneFamily.PORTRAIT)
                 MultiScenePolicy.layoutBonus(layout,ref.layout) else 0f
-            val objectGain=if(live!=null && ref!=null) (if(ref.sceneCategory==context.sceneCategory && MultiScenePolicy.compatible(live,ref)) .10f else -.03f) else 0f
+            val objectGain=if(live!=null && ref!=null) (if(MultiScenePolicy.family(SceneContext(sceneCategory=ref.sceneCategory))==scene && MultiScenePolicy.compatible(live,ref)) .10f else -.03f) else 0f
             hit.copy(rerankScore=hit.rerankScore+layoutGain+objectGain)
         }.sortedWith(compareByDescending<SearchHit>{it.rerankScore}.thenBy{it.templateId})
         if(live!=null) {
             locked?.let { target ->
                 val id=target.id.removePrefix("object:")
-                if(!target.accepts(live) || refs?.records?.get(id)?.sceneCategory!=context.sceneCategory ||
+                if(!target.accepts(live) || refs?.records?.get(id)?.let { MultiScenePolicy.family(SceneContext(sceneCategory=it.sceneCategory)) }!=scene ||
                     ranked.none{it.templateId==id && it.cosine>=.70f}) locked=null
             }
             if(locked==null) {
                 for(hit in ranked) {
                     if(hit.cosine<.75f || "object:${hit.templateId}"==excludedId) continue
                     val ref=refs?.records?.get(hit.templateId) ?: continue
-                    if(ref.sceneCategory!=context.sceneCategory || !MultiScenePolicy.compatible(live,ref)) continue
+                    if(MultiScenePolicy.family(SceneContext(sceneCategory=ref.sceneCategory))!=scene || !MultiScenePolicy.compatible(live,ref)) continue
                     val b=MultiScenePolicy.mappedBox(ref,aspect) ?: continue
                     val keep=abs(live.box.centerX-b.centerX)<=.06f && abs(live.box.centerY-b.centerY)<=.06f
                     val target=ObjectCompositionTarget("object:${hit.templateId}",NormalizedPoint(if(keep) live.box.centerX else b.centerX,
@@ -272,9 +294,10 @@ internal class MultiSceneAnalyzer(directory: File, metadata: (String) -> Templat
                 }
             }
         }
-        return MultiSceneResult(SceneAnalysisObservation(++observationId,sampledAtMs,viewportVersion,scene,layout,live,detector!=null),locked,ranked)
+        return MultiSceneResult(SceneAnalysisObservation(++observationId,sampledAtMs,viewportVersion,scene,layout,live,detector!=null,
+            MultiScenePolicy.guidanceLimitations(scene,live,locked!=null,nativeAvailable)),locked,ranked)
     }
     fun replan() { excludedId=locked?.id; locked=null }
-    fun reset() { previous=null; previousAppearance=null; locked=null; excludedId=null; scene=SceneFamily.UNKNOWN; pending=SceneFamily.UNKNOWN; sceneSamples=0; viewport=Long.MIN_VALUE }
+    fun reset() { previous=null; previousPerson=null; previousAppearance=null; locked=null; excludedId=null; scene=SceneFamily.UNKNOWN; autoScene.reset(); viewport=Long.MIN_VALUE; lastDetectionAt=Long.MIN_VALUE }
     override fun close() { detector?.close(); detector=null; reset() }
 }

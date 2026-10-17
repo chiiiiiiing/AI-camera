@@ -12,7 +12,9 @@ data class StructureObservation(
     val faceYawDegrees: Float? = null,
     val trackingId: Int? = null,
     val valid: Boolean = true,
-    val aspectRatio: Float = 1f
+    val aspectRatio: Float = 1f,
+    /** Head facing in the displayed image, not eye gaze: -1 left, +1 right, null uncertain. */
+    val facingDirectionX: Float? = null
 ) {
     fun singleFace(nowMs: Long): NormalizedBox? = face?.takeIf {
         valid && faceCount == 1 && observationId > 0 && nowMs >= sampledAtMs &&
@@ -31,9 +33,11 @@ data class CompositionTarget(
     val subjectTrackingId: Int? = null,
     val referenceFaceHeight: Float? = null,
     val referenceFaceAspectRatio: Float? = null,
-    val referenceYawDegrees: Float? = null
+    val referenceYawDegrees: Float? = null,
+    val requiredFacingDirectionX: Float? = null
 ) {
-    fun accepts(face: NormalizedBox, yaw: Float? = null): Boolean {
+    fun accepts(face: NormalizedBox, yaw: Float? = null, facingDirectionX: Float? = null): Boolean {
+        if(requiredFacingDirectionX!=null && requiredFacingDirectionX!=facingDirectionX) return false
         val dx = center.x-face.centerX; val dy = center.y-face.centerY
         if (kotlin.math.abs(dx) > .28f || kotlin.math.abs(dy) > .28f ||
             face.left+dx < .03f || face.right+dx > .97f || face.top+dy < .03f || face.bottom+dy > .97f) return false
@@ -53,8 +57,24 @@ data class GuidanceDecision(
     val feedback: GuidanceFeedback,
     val observationId: Long,
     val replanRequested: Boolean = false,
-    val reasons: List<String> = emptyList()
+    val reasons: List<String> = emptyList(),
+    /** Geometry from the same accepted observation and locked target as this decision. */
+    val displayEvidence: GuidanceDisplayEvidence? = null
 )
+
+data class GuidanceDisplayEvidence(
+    val observedAtMs: Long,
+    val expiresAtMs: Long,
+    val viewportVersion: Long,
+    val anchorKind: ObservedAnchorKind,
+    val subject: NormalizedPoint?,
+    val subjectBox: NormalizedBox?,
+    val target: NormalizedPoint?,
+    val targetRadius: Float,
+    val rollDegrees: Float?
+) {
+    fun isFresh(nowMs: Long) = nowMs >= observedAtMs && nowMs <= expiresAtMs
+}
 
 enum class SceneFamily { UNKNOWN, PORTRAIT, FOOD, STILL_LIFE, PLANT, NATURAL_LANDSCAPE, URBAN_LANDSCAPE }
 enum class ObservedAnchorKind { FACE, OBJECT, NONE }
@@ -110,7 +130,9 @@ data class SceneAnalysisObservation(
     val family: SceneFamily,
     val layout: SceneLayout,
     val objectObservation: ObjectObservation? = null,
-    val detectorAvailable: Boolean = false
+    val detectorAvailable: Boolean = false,
+    val guidanceLimitations: List<String> = emptyList(),
+    val techniqueAdvice: PhotographyTechniqueAdvice? = null
 ) {
     fun isFresh(nowMs: Long): Boolean = observationId > 0 && nowMs >= sampledAtMs && nowMs-sampledAtMs <= 1500
 }

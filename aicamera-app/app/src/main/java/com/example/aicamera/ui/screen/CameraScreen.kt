@@ -61,6 +61,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -77,6 +78,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.aicamera.camera.CameraGestureDispatcher
+import com.example.aicamera.camera.CameraConfig.CameraFace
 import com.example.aicamera.data.AuthRepository
 import com.example.aicamera.filter.PresetFilter
 import com.example.aicamera.filter.CustomFilterConfig
@@ -84,12 +86,14 @@ import com.example.aicamera.guidance.AlignmentFlashOverlay
 import com.example.aicamera.guidance.CompositionSessionController
 import com.example.aicamera.guidance.GuidanceCue
 import com.example.aicamera.guidance.GuidancePhase
-import com.example.aicamera.guidance.toGuidanceCue
+import com.example.aicamera.guidance.GuidancePresentation
+import com.example.aicamera.guidance.SceneFamily
 import com.example.aicamera.ui.components.CaptureWorkflowOverlay
 import com.example.aicamera.ui.components.CaptureWorkflowState
 import com.example.aicamera.ui.components.CaptureResultSheet
 import com.example.aicamera.ui.components.FocusExposureOverlay
 import com.example.aicamera.ui.components.CompactProPanel
+import com.example.aicamera.ui.components.PhotographyTechniqueCard
 import com.example.aicamera.ui.components.compositionLabelText
 import com.example.aicamera.ui.state.SettingsState
 import com.example.aicamera.ui.theme.BrandPink
@@ -145,34 +149,50 @@ fun CameraScreen(
     val customFilters by cameraViewModel.customFilters.collectAsStateWithLifecycle()
     val customActive by cameraViewModel.customFilterActive.collectAsStateWithLifecycle()
     val configuration = LocalConfiguration.current
-    val guidanceState by renderViewModel.guidanceState.collectAsStateWithLifecycle()
     val renderInput by renderViewModel.renderInput.collectAsStateWithLifecycle()
     val pipelineState by pipelineViewModel.pipelineState.collectAsStateWithLifecycle()
+    val sceneAnalysis by pipelineViewModel.sceneAnalysis.collectAsStateWithLifecycle()
+    var sceneDisplayTime by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
+    LaunchedEffect(sceneAnalysis) {
+        sceneDisplayTime = android.os.SystemClock.elapsedRealtime()
+        sceneAnalysis?.let {
+            // Each deadline only expires evidence. It never rotates or advances a tip.
+            val expirations = listOfNotNull(it.sampledAtMs + 1501L,
+                it.techniqueAdvice?.let { advice ->
+                    minOf(advice.expiresAtMs, advice.sampledAtMs + 1500L) + 1L
+                }).distinct().sorted()
+            for (expiresAt in expirations) {
+                delay((expiresAt - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(1L))
+                sceneDisplayTime = android.os.SystemClock.elapsedRealtime()
+            }
+        }
+    }
+    val sceneNow = maxOf(sceneDisplayTime, android.os.SystemClock.elapsedRealtime())
+    val automaticSceneObservation = sceneAnalysis?.takeIf { it.isFresh(sceneNow) }
+    val automaticScene = automaticSceneObservation?.family ?: SceneFamily.UNKNOWN
+    val techniqueAdvice = automaticSceneObservation?.takeIf { it.family != SceneFamily.UNKNOWN }
+        ?.let { scene ->
+            scene.techniqueAdvice?.takeIf {
+                it.viewportVersion == scene.viewportVersion && sceneNow >= it.sampledAtMs &&
+                    sceneNow - it.sampledAtMs <= 1500L && sceneNow <= it.expiresAtMs
+            }
+        }
     // ★ 统一构图会话控制器状态（替代旧双工作流）
     val sessionState by renderViewModel.sessionController.state.collectAsStateWithLifecycle()
     val sessionDecision by renderViewModel.sessionController.decision.collectAsStateWithLifecycle()
-    // 将控制器状态映射到 UI overlay 所需的状态枚举
-    val hasRealSubject = renderInput.guideLines.any {
-        it.visible && it.type.name == "SUBJECT_BOX" && it.params["real"] == true &&
-            it.params["anchor_kind"] == "face"
+    var presentationTime by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
+    LaunchedEffect(sessionDecision, sessionState) {
+        presentationTime = android.os.SystemClock.elapsedRealtime()
+        sessionDecision.displayEvidence?.let {
+            delay((it.expiresAtMs - presentationTime + 1L).coerceAtLeast(1L))
+            presentationTime = android.os.SystemClock.elapsedRealtime()
+        }
     }
-    val expectsSubject = renderInput.guideLines.any {
-        it.visible && it.type.name == "TARGET_ZONE" && it.params["anchor_kind"] == "face"
-    }
-    val workflowState = mapSessionState(sessionState, hasRealSubject, expectsSubject)
-    // The action shown during capture must come from the controller deciding Ready.
-    val workflowCue = when (val current = sessionState) {
-        is CompositionSessionController.State.Adjusting -> current.action.toGuidanceCue()
-        CompositionSessionController.State.Verifying,
-        CompositionSessionController.State.Ready -> GuidanceCue.SUBJECT_ALIGNED
-        else -> GuidanceCue.NONE
-    }
-    val workflowPhase = when (sessionState) {
-        CompositionSessionController.State.Ready -> GuidancePhase.ALIGNED
-        CompositionSessionController.State.Verifying -> GuidancePhase.NEAR
-        is CompositionSessionController.State.Adjusting -> GuidancePhase.ADJUST
-        else -> GuidancePhase.NEUTRAL
-    }
+    val presentation = GuidancePresentation.from(sessionState, sessionDecision,
+        maxOf(presentationTime, android.os.SystemClock.elapsedRealtime()))
+    val workflowState = mapSessionState(presentation.state)
+    val workflowCue = presentation.cue
+    val workflowPhase = presentation.phase
     // 拍照后构图说明标签（null = 不显示）
     var compositionLabel by remember { mutableStateOf<String?>(null) }
     // 拍后结果确认页（不生成伪审美分数）
@@ -253,6 +273,7 @@ fun CameraScreen(
     var cameraInitialized by remember { mutableStateOf(false) }
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     LaunchedEffect(configuration.orientation, uiState.cameraBindVersion) {
+        pipelineViewModel.invalidateSceneRecognition(uiState.cameraFace == CameraFace.FRONT)
         delay(100)
         previewView?.display?.rotation?.let(cameraViewModel::updateTargetRotation)
     }
@@ -268,9 +289,6 @@ fun CameraScreen(
         )
     }
 
-    // 构图模式（队友设计：静物/风景/人像）
-    var guideMode by remember { mutableStateOf(CameraGuideMode.COFFEE) }
-
     // 定时拍照（关 / 3s / 10s）
     var timerMode by remember { mutableStateOf(TimerMode.OFF) }
     var countdown by remember { mutableStateOf(0) }  // >0 = 倒计时进行中
@@ -281,18 +299,14 @@ fun CameraScreen(
         onDispose { shutterSound.release() }
     }
 
-    // ── 构图达标反馈：进入 ALIGNED 相位瞬间 → 震动 + 绿边闪烁 ──
+    // Feedback follows the controller's live Ready lease, never the legacy geometry phase.
     val haptic = LocalHapticFeedback.current
     var showAlignFlash by remember { mutableStateOf(false) }
-    var prevGuidancePhase by remember { mutableStateOf(GuidancePhase.NEUTRAL) }
-    LaunchedEffect(guidanceState.phase) {
-        val entered = guidanceState.phase == GuidancePhase.ALIGNED &&
-                prevGuidancePhase != GuidancePhase.ALIGNED
-        if (entered) {
+    LaunchedEffect(presentation.ready) {
+        if (presentation.ready) {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             showAlignFlash = true
-        }
-        prevGuidancePhase = guidanceState.phase
+        } else showAlignFlash = false
     }
 
     // 订阅 focusCircle → Compose 对焦框及曝光条（旧 View 叠加层已卸载）
@@ -460,38 +474,6 @@ fun CameraScreen(
         }
     }
 
-    /** ★ 从当前帧 AI 输出实时提取构图目标中心点（来自 target_zone，不是 subject_box） */
-    fun liveTargetCenter(): Pair<Float, Float>? {
-        // ★ 修复：target 来自 target_zone（AI/模板指定的构图目标位置）
-        val targetZone = renderInput.guideLines.find {
-            it.visible && it.type.name == "TARGET_ZONE" && it.params["anchor_kind"] == "face"
-        }
-        val tcx = (targetZone?.params?.get("center_x") as? Number)?.toFloat()
-        val tcy = (targetZone?.params?.get("center_y") as? Number)?.toFloat()
-        if (tcx != null && tcy != null && tcx.isFinite() && tcy.isFinite() &&
-            tcx in 0f..1f && tcy in 0f..1f) return tcx to tcy
-        return null
-    }
-
-    /** ★ 获取当前真实主体中心点（来自真实检测，非模板占位框） */
-    fun liveSubjectCenter(): Pair<Float, Float>? {
-        val subjectBox = renderInput.guideLines.find {
-            it.visible && it.type.name == "SUBJECT_BOX" && it.params["anchor_kind"] == "face"
-        }
-        // 只取真实检测框（real=true），忽略模板占位
-        val isReal = subjectBox?.params?.get("real") == true
-        if (!isReal) return null
-        val sx = (subjectBox?.params?.get("x") as? Number)?.toFloat()
-        val sy = (subjectBox?.params?.get("y") as? Number)?.toFloat()
-        val sw = (subjectBox?.params?.get("width") as? Number)?.toFloat()
-        val sh = (subjectBox?.params?.get("height") as? Number)?.toFloat()
-        val scx = if (sx != null && sw != null) sx + sw / 2f else null
-        val scy = if (sy != null && sh != null) sy + sh / 2f else null
-        if (scx != null && scy != null && scx.isFinite() && scy.isFinite() &&
-            scx in 0f..1f && scy in 0f..1f) return scx to scy
-        return null
-    }
-
     /** 从 AI 输出提取中文构图说明（与拍后确认页共用同一映射） */
     fun compositionDescription(): String =
         compositionLabelText(renderInput.compositionStrategy, renderInput.sceneType)
@@ -510,17 +492,21 @@ fun CameraScreen(
                 // 与手动快门共用同步守卫，避免 Ready 自动拍摄与手动拍摄重复提交。
                 if (!captureInFlight && !uiState.isCapturing) {
                     captureInFlight = true
-                    compositionLabel = "正在对焦与测光"
-                    cameraViewModel.prepareForCapture()
-                    // AF/AE 完成后再次确认构图仍然有效，避免坏帧或过期观测触发拍摄。
-                    if (!renderViewModel.sessionController.confirmReadyForCapture(
-                            android.os.SystemClock.elapsedRealtime())) {
-                        captureInFlight = false
-                        return@LaunchedEffect
+                    var submitted = false
+                    try {
+                        compositionLabel = "正在对焦与测光"
+                        cameraViewModel.prepareForCapture()
+                        // AF/AE 完成后再次确认构图仍然有效，避免坏帧或过期观测触发拍摄。
+                        if (!renderViewModel.sessionController.confirmReadyForCapture(
+                                android.os.SystemClock.elapsedRealtime())) return@LaunchedEffect
+                        compositionLabel = compositionDescription()
+                        renderViewModel.sessionController.startCapture()
+                        cameraViewModel.takePhoto(saveToGallery = settings.saveOriginal)
+                        submitted = true
+                    } finally {
+                        // A withdrawn Ready cancels this effect during AF/AE; release its guard.
+                        if (!submitted) captureInFlight = false
                     }
-                    compositionLabel = compositionDescription()
-                    renderViewModel.sessionController.startCapture()
-                    cameraViewModel.takePhoto(saveToGallery = settings.saveOriginal)
                 }
                 // 结果确认页在真实保存成功事件后显示，避免 UI 提前宣称保存完成。
             }
@@ -650,12 +636,11 @@ fun CameraScreen(
             }
         }
 
-        // ── 第 3 层：顶部构图模式选择器（队友 GenWow 设计） ──
+        // ── 第 3 层：只读自动识别状态与设置入口 ──
         if (uiState.isInitialized && !showCaptureResult) {
             CameraTopBar(
                 modifier = Modifier.align(Alignment.TopCenter),
-                selectedMode = guideMode,
-                onModeSelected = { guideMode = it },
+                family = automaticScene,
                 onSettingsClick = onNavigateToSettings,
             )
         }
@@ -674,6 +659,34 @@ fun CameraScreen(
                 inferenceType = pipelineState.inferenceType,
                 degraded = v9DegradedReason != null
             )
+        }
+
+        // Optional coaching belongs to the idle preview. It never competes with a live
+        // movement instruction, receives a success state, or covers editing/capture controls.
+        if (allPermissionsGranted && uiState.isInitialized && techniqueAdvice != null &&
+            sessionState is CompositionSessionController.State.Idle &&
+            !captureInFlight && !uiState.isCapturing && countdown == 0 &&
+            !showCaptureResult && !showPublishSheet && captureError == null &&
+            !showFilterPanel && !showFilterEditor && !settings.proModeEnabled &&
+            !showExposureSlider && compositionLabel == null
+        ) {
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .padding(start = 16.dp, end = 16.dp, top = 96.dp,
+                        bottom = floatingControlsBottom + 56.dp),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                // Small landscape windows and large accessibility text keep the preview
+                // controls usable; optional coaching waits until there is room for it.
+                if (maxHeight >= (72f * density.fontScale + 28f).dp) {
+                    PhotographyTechniqueCard(
+                        advice = techniqueAdvice,
+                        modifier = Modifier.widthIn(max = 400.dp).fillMaxWidth()
+                    )
+                }
+            }
         }
 
         // ── 滤镜小组件：默认收起，点击后才展开 ──
@@ -714,7 +727,12 @@ fun CameraScreen(
                     .onSizeChanged { bottomBarHeightPx = it.height },
                 latestPhotoUri = uiState.latestPhotoUri,
                 onTakePhoto = { triggerCapture() },
-                onToggleCamera = { cameraViewModel.toggleCamera() },
+                onToggleCamera = {
+                    pipelineViewModel.invalidateSceneRecognition()
+                    cameraViewModel.toggleCamera()
+                    pipelineViewModel.invalidateSceneRecognition(
+                        cameraViewModel.uiState.value.cameraFace == CameraFace.FRONT)
+                },
                 onOpenGallery = onNavigateToGallery,
                 zoomRatio = uiState.zoomRatio,
                 onZoomChange = {
@@ -722,7 +740,7 @@ fun CameraScreen(
                     cameraViewModel.setZoom(it)
                 },
                 isCapturing = uiState.isCapturing,
-                aligned = guidanceState.phase == GuidancePhase.ALIGNED,
+                aligned = presentation.ready,
                 proEnabled = settings.proModeEnabled,
                 onTogglePro = {
                     showFilterPanel = false
@@ -770,38 +788,25 @@ fun CameraScreen(
 
         // ── ★ 构图-拍摄工作流叠加层（目标点每帧实时更新） ──
         if (uiState.isInitialized) {
-            val horizonLine = renderInput.guideLines.find { it.type.name == "HORIZON_LEVEL" }
-            val horizonAngle = (horizonLine?.params?.get("angle_degrees") as? Number)?.toFloat()
-            val targetCenter = liveTargetCenter()
-            val subjectCenter = liveSubjectCenter()
+            val evidence = presentation.evidence
             CaptureWorkflowOverlay(
                 state = workflowState,
                 cue = workflowCue,
                 phase = workflowPhase,
-                feedbackHint = when (sessionDecision.feedback) {
-                    com.example.aicamera.guidance.GuidanceFeedback.WORSENING -> when {
-                        "observed_subject_margin_regressed" in sessionDecision.reasons -> "先保持，主体太靠近画面边缘"
-                        "subject_sharpness_regressed" in sessionDecision.reasons -> "先保持，主体清晰度下降"
-                        "subject_highlights_regressed" in sessionDecision.reasons -> "先保持，主体亮部细节减少"
-                        else -> "先保持，刚才的调整没有改善构图"
-                    }
-                    com.example.aicamera.guidance.GuidanceFeedback.NO_PROGRESS -> "先保持，暂未找到更有效的调整"
-                    com.example.aicamera.guidance.GuidanceFeedback.SCENE_CHANGED -> "画面发生变化，先保持重新确认"
-                    com.example.aicamera.guidance.GuidanceFeedback.VERIFYING -> "位置合适，请保持稳定"
-                    com.example.aicamera.guidance.GuidanceFeedback.INSUFFICIENT_EVIDENCE -> "先保持，正在确认可用的构图依据"
-                    else -> null
-                },
-                targetNx = targetCenter?.first,
-                targetNy = targetCenter?.second,
-                horizonAngleDeg = horizonAngle,
-                subjectNx = subjectCenter?.first,
-                subjectNy = subjectCenter?.second,
+                paused = presentation.paused,
+                verifying = presentation.verifying,
+                feedbackHint = presentation.hint,
+                targetNx = evidence?.target?.x,
+                targetNy = evidence?.target?.y,
+                horizonAngleDeg = evidence?.rollDegrees,
+                subjectNx = evidence?.subject?.x,
+                subjectNy = evidence?.subject?.y,
                 showGrid = settings.showGrid,
                 showSubjectBox = settings.showSubjectBox,
                 showTargetZone = settings.showTargetZone,
                 showHorizon = settings.showHorizon,
                 overlayAlpha = settings.overlayAlpha,
-                guideLines = renderInput.guideLines,
+                guideLines = presentation.guideLines,
                 bottomBarHeight = measuredBottomBarHeight,
                 modifier = Modifier.fillMaxSize()
             )
@@ -1142,27 +1147,21 @@ private fun AiStatusChip(
 }
 
 // ────────────────────────────────────────────────────────────────
-// 顶部构图模式选择器（队友 CameraControls.kt CameraTopControls）
-// 三种模式：静物 / 风景 / 人像 + 右侧设置入口
+// 顶部显示自动识别结果；拍摄模式由有效观测决定，不接受用户覆盖。
 // ────────────────────────────────────────────────────────────────
-
-/** 顶部构图模式（队友 CameraGuideMode） */
-private enum class CameraGuideMode(val description: String) {
-    COFFEE("静物构图模式"),
-    LANDSCAPE("风景构图模式"),
-    PORTRAIT("人像构图模式"),
-}
-
-/** 顶部 Icon glyph 标识 */
-private enum class TopGlyph { COFFEE, LANDSCAPE, PERSON, SETTINGS }
 
 @Composable
 private fun CameraTopBar(
     modifier: Modifier = Modifier,
-    selectedMode: CameraGuideMode,
-    onModeSelected: (CameraGuideMode) -> Unit,
+    family: SceneFamily,
     onSettingsClick: () -> Unit,
 ) {
+    val label = when (family) {
+        SceneFamily.PORTRAIT -> "自动 · 人像"
+        SceneFamily.FOOD, SceneFamily.STILL_LIFE, SceneFamily.PLANT -> "自动 · 静物"
+        SceneFamily.NATURAL_LANDSCAPE, SceneFamily.URBAN_LANDSCAPE -> "自动 · 风景"
+        SceneFamily.UNKNOWN -> "自动 · 识别中"
+    }
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -1172,99 +1171,22 @@ private fun CameraTopBar(
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            CameraGuideMode.entries.forEach { mode ->
-                TopModeControl(
-                    description = mode.description,
-                    selected = selectedMode == mode,
-                    glyph = when (mode) {
-                        CameraGuideMode.COFFEE -> TopGlyph.COFFEE
-                        CameraGuideMode.LANDSCAPE -> TopGlyph.LANDSCAPE
-                        CameraGuideMode.PORTRAIT -> TopGlyph.PERSON
-                    },
-                    onClick = { onModeSelected(mode) },
-                )
-            }
-        }
-        Spacer(Modifier.weight(1f))
-        TopModeControl(
-            description = "相机设置",
-            selected = false,
-            glyph = TopGlyph.SETTINGS,
-            onClick = onSettingsClick,
+        Text(
+            text = label,
+            color = if (family == SceneFamily.UNKNOWN) CameraControlMuted else CameraOnChrome,
+            fontSize = 13.sp,
+            modifier = Modifier
+                .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
+                .padding(horizontal = 12.dp, vertical = 6.dp),
         )
-    }
-}
-
-@Composable
-private fun TopModeControl(
-    description: String,
-    selected: Boolean,
-    glyph: TopGlyph,
-    onClick: () -> Unit,
-) {
-    val iconColor by androidx.compose.animation.animateColorAsState(
-        targetValue = if (selected) BrandPink else Color.White,
-        animationSpec = androidx.compose.animation.core.tween(GenWowMotion.ModeChangeMillis),
-        label = "top mode color",
-    )
-    val shellColor by androidx.compose.animation.animateColorAsState(
-        targetValue = if (selected) Color.White.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.06f),
-        animationSpec = androidx.compose.animation.core.tween(GenWowMotion.ModeChangeMillis),
-        label = "top mode shell",
-    )
-    Box(
-        modifier = Modifier
-            .size(48.dp)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            )
-            .semantics {
-                contentDescription = description
-                this.selected = selected
-            }
-            .padding(8.dp)
-            .background(shellColor, CircleShape),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (glyph == TopGlyph.SETTINGS) {
+        Spacer(Modifier.weight(1f))
+        IconButton(onClick = onSettingsClick) {
             Icon(
                 imageVector = Icons.Outlined.Settings,
-                contentDescription = null,
-                tint = iconColor,
-                modifier = Modifier.size(20.dp)
+                contentDescription = "相机设置",
+                tint = Color.White,
+                modifier = Modifier.size(20.dp),
             )
-        } else Canvas(Modifier.size(24.dp)) {
-            val color = iconColor
-            val stroke = Stroke(1.35.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round)
-            when (glyph) {
-                TopGlyph.COFFEE -> {
-                    drawRoundRect(color, Offset(7.dp.toPx(), 10.dp.toPx()), androidx.compose.ui.geometry.Size(8.dp.toPx(), 5.5.dp.toPx()), androidx.compose.ui.geometry.CornerRadius(1.2.dp.toPx()), style = stroke)
-                    drawArc(color, -82f, 164f, false, Offset(13.dp.toPx(), 10.6.dp.toPx()), androidx.compose.ui.geometry.Size(4.6.dp.toPx(), 3.5.dp.toPx()), style = stroke)
-                    drawLine(color, Offset(6.8.dp.toPx(), 17.dp.toPx()), Offset(15.8.dp.toPx(), 17.dp.toPx()), strokeWidth = stroke.width)
-                    drawLine(color, Offset(8.5.dp.toPx(), 7.8.dp.toPx()), Offset(8.5.dp.toPx(), 5.5.dp.toPx()), stroke.width, androidx.compose.ui.graphics.StrokeCap.Round)
-                    drawLine(color, Offset(12.dp.toPx(), 7.8.dp.toPx()), Offset(12.dp.toPx(), 4.9.dp.toPx()), stroke.width, androidx.compose.ui.graphics.StrokeCap.Round)
-                }
-                TopGlyph.LANDSCAPE -> {
-                    val path = androidx.compose.ui.graphics.Path().apply {
-                        moveTo(4.5.dp.toPx(), 16.dp.toPx())
-                        lineTo(9.5.dp.toPx(), 10.5.dp.toPx())
-                        lineTo(13.dp.toPx(), 13.2.dp.toPx())
-                        lineTo(17.4.dp.toPx(), 8.6.dp.toPx())
-                        lineTo(20.dp.toPx(), 16.dp.toPx())
-                    }
-                    drawPath(path, color, style = stroke)
-                    drawCircle(color, 1.35.dp.toPx(), Offset(7.dp.toPx(), 7.4.dp.toPx()), style = stroke)
-                    drawLine(color, Offset(4.5.dp.toPx(), 16.dp.toPx()), Offset(20.dp.toPx(), 16.dp.toPx()), stroke.width, androidx.compose.ui.graphics.StrokeCap.Round)
-                }
-                TopGlyph.PERSON -> {
-                    drawCircle(color, 2.15.dp.toPx(), Offset(12.dp.toPx(), 8.dp.toPx()), style = stroke)
-                    drawArc(color, 198f, 144f, false, Offset(6.8.dp.toPx(), 11.dp.toPx()), androidx.compose.ui.geometry.Size(10.4.dp.toPx(), 8.6.dp.toPx()), style = stroke)
-                }
-                TopGlyph.SETTINGS -> Unit
-            }
         }
     }
 }

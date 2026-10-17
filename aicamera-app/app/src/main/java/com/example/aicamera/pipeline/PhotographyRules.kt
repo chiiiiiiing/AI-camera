@@ -10,6 +10,8 @@ internal data class FramingCandidate(val id: String, val crop: NormalizedBox, va
 /** Rules generate alternatives, not universal definitions of beauty or invented horizon labels. */
 internal object PhotographyRules {
     val FULL = NormalizedBox(0f,0f,1f,1f)
+    private fun valid(box: NormalizedBox) = listOf(box.left,box.top,box.right,box.bottom).all { it.isFinite() && it in 0f..1f } &&
+        box.width>0 && box.height>0
     fun applicable(family:SceneFamily,subject:NormalizedBox?):List<String> = buildList {
         add("preserve_current_lighting_style")
         if(subject!=null) { add("protect_observed_subject_margin");add("compare_local_subject_sharpness");add("compare_local_subject_highlights") }
@@ -24,12 +26,15 @@ internal object PhotographyRules {
         }
     }
     fun preserves(crop: NormalizedBox, subject: NormalizedBox?): Boolean {
+        if (!valid(crop) || (subject != null && !valid(subject))) return false
         if(crop.left<0 || crop.top<0 || crop.right>1 || crop.bottom>1 || crop.width<.82f || crop.height<.82f) return false
         return subject==null || (subject.left>=crop.left+.025f && subject.top>=crop.top+.025f &&
             subject.right<=crop.right-.025f && subject.bottom<=crop.bottom-.025f)
     }
     fun candidates(family: SceneFamily, subject: NormalizedBox?, layout: SceneLayout): List<FramingCandidate> {
         val current=FramingCandidate("current",FULL,listOf("preserve_current"))
+        if ((subject!=null && !valid(subject)) || layout.edgeGrid.size!=9 || layout.lumaGrid.size!=9 ||
+            (layout.edgeGrid+layout.lumaGrid).any { !it.isFinite() || it !in 0f..1f }) return listOf(current)
         // A face box does not protect hair/body, nor a vase box a whole bouquet.
         if(family==SceneFamily.UNKNOWN || family==SceneFamily.PORTRAIT || family==SceneFamily.PLANT) return listOf(current)
         if(family==SceneFamily.FOOD || family==SceneFamily.STILL_LIFE) {

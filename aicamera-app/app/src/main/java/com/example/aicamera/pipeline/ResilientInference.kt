@@ -95,6 +95,10 @@ class ResilientInference(
             compositionProgress = 0f,
             guidanceCue = com.example.aicamera.guidance.GuidanceCue.NONE,
             expectsSubject = false,
+            analysisCompleted = false,
+            sceneAnalysis = null,
+            compositionTarget = null,
+            objectTarget = null,
             filterRecommendation = null,
             autoZoomRecommendation = null
         ) else output
@@ -114,6 +118,10 @@ class ResilientInference(
     /** V9 returns a zero-confidence grid when embedding/index evaluation fails safely. */
     private fun isEmptyOutput(output: Any?): Boolean {
         if (output == null) return true
+        // Recognizing uncertainty is a successful analysis result, not thirty model failures.
+        // Confidence can remain zero and the controller still cannot authorize an action.
+        if (output is FakeInferenceOutput && output.analysisCompleted && output.sceneAnalysis != null &&
+            output.confidence.isFinite()) return false
         return output is FakeInferenceOutput &&
             (output.guideLines.isEmpty() || !output.confidence.isFinite() || output.confidence <= 0f)
     }
