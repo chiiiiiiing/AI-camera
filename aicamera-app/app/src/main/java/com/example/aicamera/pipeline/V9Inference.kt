@@ -62,6 +62,7 @@ class V9Inference(
     private val framingModel = FramingPreferenceModel.load(index.assetDirectory())
     private val framingEvaluator = FramingCandidateEvaluator()
     private val executionAnalyzer = ExecutionImageAnalyzer()
+    private val techniquePolicy = PhotographyTechniquePolicy()
     private var preferenceNextAt=0L
     private var structure: com.example.aicamera.guidance.StructureObservation? = null
     private var slowUntilMs = 0L
@@ -173,6 +174,8 @@ class V9Inference(
                 val measuredTracking=if(isPortrait) structure?.trackingId else observedObject?.trackingId
                 val pixels=IntArray(analysisBitmap.width*analysisBitmap.height)
                 analysisBitmap.getPixels(pixels,0,analysisBitmap.width,0,0,analysisBitmap.width,analysisBitmap.height)
+                val techniqueAdvice = techniquePolicy.recommend(sceneResult.observation, structure,
+                    TechniqueVisualAnalyzer.analyze(pixels, analysisBitmap.width, analysisBitmap.height, measuredSubject), now)
                 val preference=framingModel?.takeIf { frame.analysisBitmap!=null && now>=preferenceNextAt && now>=slowUntilMs &&
                     FramingPreferenceModel.scene(sceneResult.observation.family) in it.scenes }
                 var preferenceEmbedding:FloatArray?=null
@@ -219,7 +222,7 @@ class V9Inference(
                             "height" to b.height,"real" to true,"anchor_kind" to "object","class_id" to observed.classId,"aligned" to false)))
                     }
                     output.copy(guideLines = lines, compositionTarget = target, structureObservation = structure, analysisCompleted = true,
-                        sceneAnalysis = sceneResult.observation.copy(guidanceLimitations=if(target!=null || objectTarget!=null)
+                        sceneAnalysis = sceneResult.observation.copy(techniqueAdvice=techniqueAdvice, guidanceLimitations=if(target!=null || objectTarget!=null)
                             selected.reasons else (sceneResult.observation.guidanceLimitations+selected.reasons).distinct()),
                         objectTarget = objectTarget, recommendationRoute = selected.route,
                         // This legacy field gates evidence availability, not beauty probability.
@@ -376,6 +379,7 @@ class V9Inference(
         cropEvaluator.reset()
         framingEvaluator.reset()
         executionAnalyzer.reset()
+        techniquePolicy.reset()
         preferenceNextAt=0L
         structure = null
         filterStabilizer.reset()

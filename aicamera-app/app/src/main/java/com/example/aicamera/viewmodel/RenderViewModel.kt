@@ -322,6 +322,7 @@ class RenderViewModel @Inject constructor() : ViewModel() {
         output: FakeInferenceOutput,
         result: PipelineResult
     ): CompositionSessionController.FrameObservation {
+        val nowMs = android.os.SystemClock.elapsedRealtime()
         var roll: Float? = null
         var pitch: Float? = null
         var yaw: Float? = null
@@ -382,13 +383,28 @@ class RenderViewModel @Inject constructor() : ViewModel() {
         val objectScene = scene?.family == com.example.aicamera.guidance.SceneFamily.FOOD ||
             scene?.family == com.example.aicamera.guidance.SceneFamily.STILL_LIFE
         val faceScene = scene == null || scene.family == com.example.aicamera.guidance.SceneFamily.PORTRAIT
-        output.structureObservation?.takeIf { faceScene }?.let { structure ->
-            val rawFace = structure.singleFace(android.os.SystemClock.elapsedRealtime())
+        val structure = output.structureObservation?.takeIf { faceScene }
+        val rawFace = structure?.singleFace(nowMs)
+        structure?.let {
             subjectCx = rawFace?.centerX
             subjectCy = rawFace?.centerY
             hasRealSubject = rawFace != null
         }
-        val observedObject = scene?.objectObservation?.takeIf { objectScene && it.isFresh(android.os.SystemClock.elapsedRealtime()) }
+        // Model recommendations are sampled less often than face observations.
+        // A locked look-room target loses authority as soon as fresh head-facing
+        // evidence disappears/reverses, even if the next model run has not started.
+        val faceTarget = output.compositionTarget?.takeIf { target ->
+            structure != null && rawFace != null && target.viewportVersion == structure.viewportVersion &&
+                target.subjectTrackingId == structure.trackingId &&
+                target.accepts(rawFace, structure.faceYawDegrees, structure.facingDirectionX)
+        }
+        if (faceScene && output.compositionTarget != null) {
+            targetCx = faceTarget?.center?.x
+            targetCy = faceTarget?.center?.y
+            targetTol = faceTarget?.tolerance ?: .12f
+            coordinateAspectRatio = structure?.aspectRatio ?: 1f
+        }
+        val observedObject = scene?.objectObservation?.takeIf { objectScene && it.isFresh(nowMs) }
         val objectTarget = output.objectTarget?.takeIf { target -> observedObject?.let { target.accepts(it) } == true }
         if (!faceScene) {
             subjectCx = observedObject?.box?.centerX
@@ -401,7 +417,7 @@ class RenderViewModel @Inject constructor() : ViewModel() {
         }
         return CompositionSessionController.FrameObservation(
             frameId = nextObservationFrameId(result),
-            timestampMs = android.os.SystemClock.elapsedRealtime(),
+            timestampMs = nowMs,
             rollDegrees = roll,
             rawRollDegrees = output.rawRollDegrees,
             pitchDegrees = pitch,
@@ -425,8 +441,8 @@ class RenderViewModel @Inject constructor() : ViewModel() {
             imuSampledAtMs = output.imuSampledAtMs,
             faceCount = if(faceScene) output.structureObservation?.faceCount ?: 0 else 0,
             viewportVersion = scene?.viewportVersion ?: output.structureObservation?.viewportVersion ?: -1,
-            targetViewportVersion = objectTarget?.viewportVersion ?: output.compositionTarget?.viewportVersion ?: -2,
-            targetId = objectTarget?.id ?: output.compositionTarget?.id,
+            targetViewportVersion = objectTarget?.viewportVersion ?: faceTarget?.viewportVersion ?: -2,
+            targetId = objectTarget?.id ?: faceTarget?.id,
             qualityScore = output.qualityScore,
             qualityAcceptable = output.qualityAcceptable,
             observedAnchorKind = if(objectScene) com.example.aicamera.guidance.ObservedAnchorKind.OBJECT
@@ -434,12 +450,11 @@ class RenderViewModel @Inject constructor() : ViewModel() {
             rollObservable = output.rollObservable != false,
             executionQuality = output.executionQuality,
             executionQualityRequired = output.sceneAnalysis != null,
-            subjectBox = if (objectScene) observedObject?.box else if (faceScene)
-                output.structureObservation?.singleFace(android.os.SystemClock.elapsedRealtime()) else null,
-            guidanceLimitations = if (scene?.isFresh(android.os.SystemClock.elapsedRealtime()) == true) {
+            subjectBox = if (objectScene) observedObject?.box else rawFace,
+            guidanceLimitations = if (scene?.isFresh(nowMs) == true) {
                 if (faceScene) scene.guidanceLimitations + when {
                     output.structureObservation?.faceCount != 1 -> listOf("single_face_required")
-                    output.compositionTarget == null -> listOf("no_verified_portrait_target")
+                    faceTarget == null -> listOf("no_verified_portrait_target")
                     else -> emptyList()
                 } else scene.guidanceLimitations
             } else emptyList()

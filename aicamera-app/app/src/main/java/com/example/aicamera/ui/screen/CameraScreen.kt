@@ -93,6 +93,7 @@ import com.example.aicamera.ui.components.CaptureWorkflowState
 import com.example.aicamera.ui.components.CaptureResultSheet
 import com.example.aicamera.ui.components.FocusExposureOverlay
 import com.example.aicamera.ui.components.CompactProPanel
+import com.example.aicamera.ui.components.PhotographyTechniqueCard
 import com.example.aicamera.ui.components.compositionLabelText
 import com.example.aicamera.ui.state.SettingsState
 import com.example.aicamera.ui.theme.BrandPink
@@ -155,13 +156,27 @@ fun CameraScreen(
     LaunchedEffect(sceneAnalysis) {
         sceneDisplayTime = android.os.SystemClock.elapsedRealtime()
         sceneAnalysis?.let {
-            delay((it.sampledAtMs + 1501L - sceneDisplayTime).coerceAtLeast(1L))
-            sceneDisplayTime = android.os.SystemClock.elapsedRealtime()
+            // Each deadline only expires evidence. It never rotates or advances a tip.
+            val expirations = listOfNotNull(it.sampledAtMs + 1501L,
+                it.techniqueAdvice?.let { advice ->
+                    minOf(advice.expiresAtMs, advice.sampledAtMs + 1500L) + 1L
+                }).distinct().sorted()
+            for (expiresAt in expirations) {
+                delay((expiresAt - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(1L))
+                sceneDisplayTime = android.os.SystemClock.elapsedRealtime()
+            }
         }
     }
-    val automaticScene = sceneAnalysis?.takeIf {
-        it.isFresh(maxOf(sceneDisplayTime, android.os.SystemClock.elapsedRealtime()))
-    }?.family ?: SceneFamily.UNKNOWN
+    val sceneNow = maxOf(sceneDisplayTime, android.os.SystemClock.elapsedRealtime())
+    val automaticSceneObservation = sceneAnalysis?.takeIf { it.isFresh(sceneNow) }
+    val automaticScene = automaticSceneObservation?.family ?: SceneFamily.UNKNOWN
+    val techniqueAdvice = automaticSceneObservation?.takeIf { it.family != SceneFamily.UNKNOWN }
+        ?.let { scene ->
+            scene.techniqueAdvice?.takeIf {
+                it.viewportVersion == scene.viewportVersion && sceneNow >= it.sampledAtMs &&
+                    sceneNow - it.sampledAtMs <= 1500L && sceneNow <= it.expiresAtMs
+            }
+        }
     // ★ 统一构图会话控制器状态（替代旧双工作流）
     val sessionState by renderViewModel.sessionController.state.collectAsStateWithLifecycle()
     val sessionDecision by renderViewModel.sessionController.decision.collectAsStateWithLifecycle()
@@ -644,6 +659,34 @@ fun CameraScreen(
                 inferenceType = pipelineState.inferenceType,
                 degraded = v9DegradedReason != null
             )
+        }
+
+        // Optional coaching belongs to the idle preview. It never competes with a live
+        // movement instruction, receives a success state, or covers editing/capture controls.
+        if (allPermissionsGranted && uiState.isInitialized && techniqueAdvice != null &&
+            sessionState is CompositionSessionController.State.Idle &&
+            !captureInFlight && !uiState.isCapturing && countdown == 0 &&
+            !showCaptureResult && !showPublishSheet && captureError == null &&
+            !showFilterPanel && !showFilterEditor && !settings.proModeEnabled &&
+            !showExposureSlider && compositionLabel == null
+        ) {
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .padding(start = 16.dp, end = 16.dp, top = 96.dp,
+                        bottom = floatingControlsBottom + 56.dp),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                // Small landscape windows and large accessibility text keep the preview
+                // controls usable; optional coaching waits until there is room for it.
+                if (maxHeight >= (72f * density.fontScale + 28f).dp) {
+                    PhotographyTechniqueCard(
+                        advice = techniqueAdvice,
+                        modifier = Modifier.widthIn(max = 400.dp).fillMaxWidth()
+                    )
+                }
+            }
         }
 
         // ── 滤镜小组件：默认收起，点击后才展开 ──

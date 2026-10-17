@@ -42,12 +42,12 @@ internal class AdaptiveCompositionPlanner {
         else DirectPhotographyPolicy.objectSubject(obj,scene.family,nowMs,scene.viewportVersion)
         if(plan==null) { locked=null; return SelectedComposition(reasons=listOf("no_verified_subject_rule")) }
         locked?.let { current ->
-            val valid = current.portrait?.let { target -> face!=null && target.accepts(face,structure?.faceYawDegrees) } == true ||
+            val valid = current.portrait?.let { target -> face!=null && target.accepts(face,structure?.faceYawDegrees,structure?.facingDirectionX) } == true ||
                 current.objectTarget?.let { target -> obj!=null && target.accepts(obj) } == true
             val kept = (current.portrait?.source ?: current.objectTarget?.source) in
                 setOf("photography_rule_keep","current_compatible","current_compatible_object")
             // A new edge defect invalidates a KEEP lease even when still inside its circle.
-            val newDefect = kept && plan!=null && plan.minimumMarginBefore<.05f
+            val newDefect = kept && (plan.minimumMarginBefore<.05f || plan.selected?.intent==DirectFramingIntent.IMPROVE_FACING_SPACE)
             if(valid && !newDefect) return current
             locked=null
             if(!newDefect) return SelectedComposition(reasons=listOf("composition_target_invalidated"))

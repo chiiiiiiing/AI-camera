@@ -1,6 +1,7 @@
 package com.example.aicamera.guidance.geometry
 
 import com.example.aicamera.guidance.StructureObservation
+import com.example.aicamera.guidance.NormalizedPoint
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.util.Log
@@ -13,6 +14,7 @@ import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetector
 import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.google.mlkit.vision.face.Face
+import com.google.mlkit.vision.face.FaceLandmark
 import java.io.Closeable
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.Executor
@@ -25,7 +27,7 @@ import javax.inject.Singleton
  *
  * ## 设计要点
  * - 使用 bundled 模型 `com.google.mlkit:face-detection`（离线、无需 GMS）；
- * - FAST 模式 + 关地标/分类，480px 上限，单次约 15–40ms；
+ * - FAST 模式 + 面部地标，关闭分类，480px 上限；地标用于有条件的人脸朝向证据；
  * - **限频 + 缓存**：默认每 250ms 最多跑一次，其余帧返回上次结果
  *   （引导指令不需要 30fps，且管线本身 500ms–1s 抽帧）；
  * - **坐标系**：在「已转正 + (前摄)已镜像」的 Bitmap 上检测，
@@ -47,7 +49,7 @@ class FaceSubjectDetector @Inject constructor() : Closeable {
 
     private val options = FaceDetectorOptions.Builder()
         .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
-        .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_NONE)
+        .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
         .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_NONE)
         .setMinFaceSize(0.06f)
         .enableTracking()
@@ -62,7 +64,8 @@ class FaceSubjectDetector @Inject constructor() : Closeable {
     private var lastBox: NormalizedBox? = null
     @Volatile private var lastObservation: StructureObservation? = null
     private var observationId = 0L
-    private var viewportVersion = 0L
+    @Volatile private var viewportVersion = 0L
+    private val facingStabilizer = FacingDirection.Stabilizer()
     fun latestObservation(): StructureObservation? = lastObservation
     private val detectionInFlight = AtomicBoolean(false)
 
@@ -86,6 +89,7 @@ class FaceSubjectDetector @Inject constructor() : Closeable {
         lastRunAt = now
 
         val start = now
+        val startViewportVersion = viewportVersion
         var bitmap: Bitmap? = null
         var scaled: Bitmap? = null
         var detectionTask: Task<List<Face>>? = null
@@ -105,10 +109,12 @@ class FaceSubjectDetector @Inject constructor() : Closeable {
             val task = detector.process(image)
             detectionTask = task
             val faces = Tasks.await(task, detectTimeoutMs, TimeUnit.MILLISECONDS)
+            // A camera/coordinate reset while native detection was running invalidates its result.
+            if (viewportVersion != startViewportVersion) return null
 
-            // 4. 取最大人脸 → 归一化
+            // 4. 只接受单个人脸 → 归一化
             val best = faces.singleOrNull()
-            lastBox = best?.let { face ->
+            val detectedBox = best?.let { face ->
                 val w = detectorBitmap.width.toFloat()
                 val h = detectorBitmap.height.toFloat()
                 NormalizedBox(
@@ -118,14 +124,35 @@ class FaceSubjectDetector @Inject constructor() : Closeable {
                     bottom = (face.boundingBox.bottom / h).coerceIn(0f, 1f)
                 )
             }
-            lastObservation = StructureObservation(++observationId, start, viewportVersion,
-                faces.size, lastBox, best?.headEulerAngleY, best?.trackingId)
-            return lastBox
+            val facing = best?.let { face ->
+                fun point(type: Int): NormalizedPoint? = face.getLandmark(type)?.position?.let {
+                    NormalizedPoint(it.x / detectorBitmap.width, it.y / detectorBitmap.height)
+                }
+                detectedBox?.let { box -> FacingDirection.fromDisplayLandmarks(
+                    box, point(FaceLandmark.LEFT_EYE), point(FaceLandmark.RIGHT_EYE),
+                    point(FaceLandmark.NOSE_BASE), point(FaceLandmark.MOUTH_BOTTOM),
+                    face.headEulerAngleY, face.headEulerAngleX, detectorBitmap.width, detectorBitmap.height
+                ) }
+            }
+            return synchronized(this) {
+                if (viewportVersion != startViewportVersion) null else {
+                    lastBox = detectedBox
+                    lastObservation = StructureObservation(++observationId, start, startViewportVersion,
+                        faces.size, detectedBox, best?.headEulerAngleY, best?.trackingId,
+                        facingDirectionX = facingStabilizer.observe(facing, best?.trackingId, start, startViewportVersion))
+                    detectedBox
+                }
+            }
         } catch (e: Exception) {
             Log.w(TAG, "人脸检测失败: ${e.message}")
-            lastBox = null
-            lastObservation = StructureObservation(++observationId, start, viewportVersion, 0, null, valid = false)
-            return null // Never guide from an indefinitely stale face after repeated failures.
+            return synchronized(this) {
+                if (viewportVersion == startViewportVersion) {
+                    facingStabilizer.reset()
+                    lastBox = null
+                    lastObservation = StructureObservation(++observationId, start, startViewportVersion, 0, null, valid = false)
+                }
+                null // Never guide from an indefinitely stale face after repeated failures.
+            }
         } finally {
             lastDetectMs = android.os.SystemClock.elapsedRealtime() - start
             val ownedBitmap = bitmap
@@ -149,10 +176,12 @@ class FaceSubjectDetector @Inject constructor() : Closeable {
     }
 
     /** 清空缓存（切换摄像头后调用，避免旧朝向的框残留） */
+    @Synchronized
     fun resetCache() {
         lastBox = null
         lastObservation = null
         viewportVersion++
+        facingStabilizer.reset()
         lastRunAt = 0L
     }
 

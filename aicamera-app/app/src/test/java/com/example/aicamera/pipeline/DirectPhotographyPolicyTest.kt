@@ -127,4 +127,82 @@ class DirectPhotographyPolicyTest {
         assertNotEquals(original.id, later.id)
         assertTrue(original.id.startsWith("rule:face:2:4:"))
     }
+
+    @Test fun `measured head facing receives space in front with mirrored camera directions`() {
+        val rightBox = NormalizedBox(.66f, .3f, .86f, .62f)
+        val leftBox = NormalizedBox(1f - rightBox.right, rightBox.top, 1f - rightBox.left, rightBox.bottom)
+        val right = DirectPhotographyPolicy.portrait(face(rightBox).copy(facingDirectionX = 1f), 1200, 2)!!
+        val left = DirectPhotographyPolicy.portrait(face(leftBox).copy(facingDirectionX = -1f), 1200, 2)!!
+        assertEquals(DirectFramingIntent.IMPROVE_FACING_SPACE, right.selected!!.intent)
+        assertEquals(DirectFramingIntent.IMPROVE_FACING_SPACE, left.selected!!.intent)
+        assertEquals(DirectFramingIntent.KEEP, right.candidates.first().intent)
+        assertTrue(right.portraitTarget!!.center.x < rightBox.centerX)
+        assertTrue(left.portraitTarget!!.center.x > leftBox.centerX)
+        assertEquals(1f - right.portraitTarget!!.center.x, left.portraitTarget!!.center.x, .00001f)
+        assertEquals(GuidanceCue.MOVE_RIGHT, GuidanceGeometry.guidanceCue(rightBox.centerX, rightBox.centerY,
+            true, right.portraitTarget!!.center.x, right.portraitTarget!!.center.y,
+            right.portraitTarget!!.tolerance, coordinateAspectRatio = .75f))
+        assertEquals(GuidanceCue.MOVE_LEFT, GuidanceGeometry.guidanceCue(leftBox.centerX, leftBox.centerY,
+            true, left.portraitTarget!!.center.x, left.portraitTarget!!.center.y,
+            left.portraitTarget!!.tolerance, coordinateAspectRatio = .75f))
+        assertTrue("head_direction_not_eye_gaze" in right.reasons)
+        assertTrue("verify_new_background_and_quality_after_execution" in right.reasons)
+    }
+
+    @Test fun `head facing adjustment preserves vertical composition and subject scale`() {
+        val box = NormalizedBox(.66f, .25f, .86f, .61f)
+        val plan = DirectPhotographyPolicy.portrait(face(box).copy(facingDirectionX = 1f), 1200, 2)!!
+        val candidate = plan.selected!!
+        assertEquals(box.top, candidate.expectedSubjectBox.top, 0f)
+        assertEquals(box.bottom, candidate.expectedSubjectBox.bottom, 0f)
+        assertEquals(box.width, candidate.expectedSubjectBox.width, .00001f)
+        assertEquals(box.height, candidate.expectedSubjectBox.height, .00001f)
+        assertEquals(box.centerY, plan.portraitTarget!!.center.y, 0f)
+        assertTrue(candidate.displacement <= .12001f)
+        // The rule leaves useful look-room; it does not force an arbitrary third-line position.
+        assertTrue(kotlin.math.abs(candidate.center.x - 1f / 3f) > .1f)
+    }
+
+    @Test fun `unknown frontal or unsupported facing does not force thirds`() {
+        val box = NormalizedBox(.66f, .3f, .86f, .62f)
+        for (direction in listOf(null, 0f, .5f, Float.NaN)) {
+            val plan = DirectPhotographyPolicy.portrait(face(box).copy(facingDirectionX = direction), 1200, 2)!!
+            assertEquals(DirectFramingIntent.KEEP, plan.selected!!.intent)
+            assertEquals(box.centerX, plan.portraitTarget!!.center.x, 0f)
+            assertEquals(box.centerY, plan.portraitTarget!!.center.y, 0f)
+            assertNull(plan.portraitTarget!!.requiredFacingDirectionX)
+        }
+    }
+
+    @Test fun `edge protection takes priority over a head facing composition preference`() {
+        val box = NormalizedBox(.78f, .3f, .98f, .6f)
+        val plan = DirectPhotographyPolicy.portrait(face(box).copy(facingDirectionX = 1f), 1200, 2)!!
+        assertEquals(DirectFramingIntent.IMPROVE_OBSERVED_MARGIN, plan.selected!!.intent)
+        assertEquals("photography_rule_subject_margin", plan.portraitTarget!!.source)
+        assertNull(plan.portraitTarget!!.requiredFacingDirectionX)
+        assertFalse(plan.candidates.any { it.intent == DirectFramingIntent.IMPROVE_FACING_SPACE })
+    }
+
+    @Test fun `facing target rejects reversed or lost head direction even with same face geometry`() {
+        val observed = face(NormalizedBox(.66f, .3f, .86f, .62f)).copy(
+            facingDirectionX = 1f, faceYawDegrees = 20f)
+        val target = DirectPhotographyPolicy.portrait(observed, 1200, 2)!!.portraitTarget!!
+        assertEquals(1f, target.requiredFacingDirectionX!!, 0f)
+        assertTrue(target.accepts(observed.face!!, 20f, 1f))
+        assertFalse(target.accepts(observed.face!!, 20f, -1f))
+        assertFalse(target.accepts(observed.face!!, 20f, null))
+        assertFalse(target.accepts(observed.face!!, 20f, 0f))
+    }
+
+    @Test fun `healthy head facing space preserves existing placement in either direction`() {
+        val boxes = listOf(NormalizedBox(.22f, .18f, .38f, .42f) to 1f,
+            NormalizedBox(.62f, .18f, .78f, .42f) to -1f)
+        for ((box, direction) in boxes) {
+            val plan = DirectPhotographyPolicy.portrait(face(box).copy(facingDirectionX = direction), 1200, 2)!!
+            assertEquals(DirectFramingIntent.KEEP, plan.selected!!.intent)
+            assertEquals(1, plan.candidates.size)
+            assertEquals(box.centerX, plan.portraitTarget!!.center.x, 0f)
+            assertEquals(box.centerY, plan.portraitTarget!!.center.y, 0f)
+        }
+    }
 }

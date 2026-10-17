@@ -176,6 +176,60 @@ class AdaptiveCompositionPlannerTest {
         assertEquals(4, result.portrait!!.subjectTrackingId)
     }
 
+    @Test fun `new stable head facing can replace a previously locked keep target`() {
+        val planner = AdaptiveCompositionPlanner()
+        val box = NormalizedBox(.66f, .3f, .86f, .62f)
+        val first = planner.select(scene(), face(box), null, null, 1200)
+        assertEquals("photography_rule_keep", first.portrait!!.source)
+        val oriented = face(box, id = 8, time = 1300).copy(facingDirectionX = 1f)
+        val after = planner.select(scene(time = 1300, id = 8), oriented, null, null, 1400)
+        assertNotEquals(first.portrait!!.id, after.portrait!!.id)
+        assertEquals("photography_technique_facing_space", after.portrait!!.source)
+        assertEquals(RecommendationRoute.PHOTOGRAPHY_RULE, after.route)
+        assertTrue(after.portrait!!.center.x < box.centerX)
+        assertEquals(box.centerY, after.portrait!!.center.y, 0f)
+    }
+
+    @Test fun `facing target stays locked through execution instead of repeatedly asking for more space`() {
+        val planner = AdaptiveCompositionPlanner()
+        val firstFace = face(NormalizedBox(.66f, .3f, .86f, .62f)).copy(facingDirectionX = 1f)
+        val first = planner.select(scene(), firstFace, null, null, 1200)
+        for ((index, left) in listOf(.62f, .58f, .54f).withIndex()) {
+            val time = 1300L + index * 300
+            val id = 8L + index
+            val observed = face(NormalizedBox(left, .3f, left + .2f, .62f), id = id, time = time)
+                .copy(facingDirectionX = 1f)
+            val after = planner.select(scene(time = time, id = id), observed, null, null, time + 100)
+            assertEquals(first.portrait!!.id, after.portrait!!.id)
+            assertEquals(first.portrait!!.center, after.portrait!!.center)
+            assertEquals("photography_technique_facing_space", after.portrait!!.source)
+        }
+    }
+
+    @Test fun `reversed or missing facing revokes active technique target before replanning`() {
+        for (newDirection in listOf(-1f, null)) {
+            val planner = AdaptiveCompositionPlanner()
+            val box = NormalizedBox(.66f, .3f, .86f, .62f)
+            val first = planner.select(scene(), face(box).copy(facingDirectionX = 1f), null, null, 1200)
+            assertEquals("photography_technique_facing_space", first.portrait!!.source)
+            val changed = face(box, id = 8, time = 1300).copy(facingDirectionX = newDirection)
+            val after = planner.select(scene(time = 1300, id = 8), changed, null, null, 1400)
+            assertNull(after.portrait)
+            assertEquals(RecommendationRoute.OBSERVATION_ONLY, after.route)
+            assertEquals(listOf("composition_target_invalidated"), after.reasons)
+        }
+    }
+
+    @Test fun `healthy head facing space does not displace or replace a keep target`() {
+        val planner = AdaptiveCompositionPlanner()
+        val first = planner.select(scene(), face(), null, null, 1200)
+        val oriented = face(id = 8, time = 1300).copy(facingDirectionX = 1f)
+        val after = planner.select(scene(time = 1300, id = 8), oriented, null, null, 1400)
+        assertEquals(first.portrait!!.id, after.portrait!!.id)
+        assertEquals(first.portrait!!.center, after.portrait!!.center)
+        assertEquals("photography_rule_keep", after.portrait!!.source)
+    }
+
     @Test fun `real direct rule targets produce inward actions and verified ready after execution`() {
         for (family in listOf(SceneFamily.PORTRAIT, SceneFamily.FOOD, SceneFamily.STILL_LIFE)) {
             val planner = AdaptiveCompositionPlanner()

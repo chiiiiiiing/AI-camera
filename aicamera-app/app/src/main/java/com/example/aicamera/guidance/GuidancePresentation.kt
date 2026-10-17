@@ -76,6 +76,8 @@ data class GuidancePresentation(
                 "unverified_complete_plant" in d.reasons -> "可保留当前取景，暂无法确认植物的完整范围"
                 else -> "先保持，正在确认可用的构图依据"
             }
+            GuidanceFeedback.ADJUSTING, GuidanceFeedback.IMPROVING ->
+                if("head_facing_space" in d.reasons) "朝人物面朝的方向多留一些空间" else null
             else -> null
         }
     }

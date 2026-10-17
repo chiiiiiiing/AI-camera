@@ -10,7 +10,7 @@ import com.example.aicamera.guidance.geometry.NormalizedBox
 import kotlin.math.abs
 import kotlin.math.hypot
 
-internal enum class DirectFramingIntent { KEEP, IMPROVE_OBSERVED_MARGIN }
+internal enum class DirectFramingIntent { KEEP, IMPROVE_OBSERVED_MARGIN, IMPROVE_FACING_SPACE }
 
 /** The translated box predicts geometry only, never unseen pixels or aesthetic improvement. */
 internal data class DirectFramingCandidate(
@@ -33,8 +33,8 @@ internal data class DirectPhotographyPlan(
 )
 
 /**
- * A template-independent rule with a measurable objective: retain healthy composition, or
- * relieve a clearly observed subject-edge pressure using a small translation. It is not a
+ * Template-independent objectives: retain healthy composition, relieve measured edge
+ * pressure, or add space toward a reliably observed head direction. They are not a
  * learned aesthetic score. Face observations protect only the face, not hair or a full body.
  *
  * Callers lock the selected target across observations. Regenerating a KEEP target every
@@ -52,7 +52,9 @@ internal object DirectPhotographyPolicy {
         val obs = observation ?: return null
         if (obs.viewportVersion != viewportVersion || !obs.aspectRatio.isFinite() || obs.aspectRatio <= 0f) return null
         val box = obs.singleFace(nowMs)?.takeIf(::valid) ?: return null
-        val proposal = propose(box, listOf("face_only_protection", "preserve_current_lighting_style"))
+        val baseline = propose(box, listOf("face_only_protection", "preserve_current_lighting_style"))
+        val proposal = if(baseline.selected?.intent==DirectFramingIntent.KEEP)
+            facingSpace(box,obs.facingDirectionX,baseline) else baseline
         val selected = proposal.selected
         val target = selected?.let {
             CompositionTarget(
@@ -64,8 +66,9 @@ internal object DirectPhotographyPolicy {
                 subjectTrackingId = obs.trackingId,
                 referenceFaceHeight = box.height,
                 referenceFaceAspectRatio = box.width / box.height,
-                referenceYawDegrees = obs.faceYawDegrees?.takeIf { yaw -> yaw.isFinite() }
-            ).takeIf { candidate -> candidate.accepts(box, obs.faceYawDegrees) }
+                referenceYawDegrees = obs.faceYawDegrees?.takeIf { yaw -> yaw.isFinite() },
+                requiredFacingDirectionX = obs.facingDirectionX.takeIf { selected.intent==DirectFramingIntent.IMPROVE_FACING_SPACE }
+            ).takeIf { candidate -> candidate.accepts(box, obs.faceYawDegrees,obs.facingDirectionX) }
         }
         return proposal.copy(portraitTarget = target)
     }
@@ -97,6 +100,24 @@ internal object DirectPhotographyPolicy {
     private fun source(candidate: DirectFramingCandidate) = when (candidate.intent) {
         DirectFramingIntent.KEEP -> "photography_rule_keep"
         DirectFramingIntent.IMPROVE_OBSERVED_MARGIN -> "photography_rule_subject_margin"
+        DirectFramingIntent.IMPROVE_FACING_SPACE -> "photography_technique_facing_space"
+    }
+
+    private fun facingSpace(box:NormalizedBox,direction:Float?,baseline:DirectPhotographyPlan):DirectPhotographyPlan {
+        if(direction!=1f && direction!=-1f) return baseline
+        val front=if(direction>0) 1f-box.right else box.left
+        val behind=if(direction>0) box.left else 1f-box.right
+        if(front>=.30f || behind-front<.12f) return baseline
+        val dx=-direction*MAX_AXIS_SHIFT
+        val moved=NormalizedBox(box.left+dx,box.top,box.right+dx,box.bottom)
+        // The action is small and leaves observed face margins safe even at the tolerance edge.
+        if(moved.left<.13f || moved.right>.87f) return baseline
+        val reasons=listOf("head_facing_space","head_direction_not_eye_gaze","preserve_vertical_framing",
+            "verify_new_background_and_quality_after_execution","face_only_protection")
+        val candidate=DirectFramingCandidate(DirectFramingIntent.IMPROVE_FACING_SPACE,
+            NormalizedPoint(moved.centerX,moved.centerY),moved,margin(moved),abs(dx),reasons)
+        return baseline.copy(candidates=baseline.candidates+candidate,selected=candidate,
+            minimumMarginExpectedAfter=margin(moved),reasons=reasons)
     }
 
     private fun propose(box: NormalizedBox, protections: List<String>): DirectPhotographyPlan {
