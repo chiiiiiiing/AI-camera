@@ -14,6 +14,29 @@ import java.nio.ByteBuffer
  */
 class ResilientInferenceTest {
 
+    @Test fun `successful unknown analysis does not permanently disable automatic recognition`() {
+        var calls=0
+        val primary=object:IInference {
+            override val typeName="V9-ONNX"
+            override fun predict(buffer:ByteBuffer, frame:PreprocessedFrame):Any {
+                calls++
+                return FakeInferenceOutput(SceneType.NORMAL,CompositionStrategy.ADAPTIVE,0f,128f,emptyList(),
+                    analysisCompleted=true,sceneAnalysis=com.example.aicamera.guidance.SceneAnalysisObservation(
+                        calls.toLong(),calls*500L,1,com.example.aicamera.guidance.SceneFamily.UNKNOWN,
+                        com.example.aicamera.guidance.SceneLayout(List(9){.5f},List(9){.02f},.5f,0f,0f)))
+            }
+        }
+        val wrapper=ResilientInference(primary)
+        repeat(ResilientInference.EMPTY_BREAKER_THRESHOLD+5) {
+            val out=wrapper.predict(ByteBuffer.allocate(0),frame()) as FakeInferenceOutput
+            assertTrue(out.analysisCompleted)
+            assertEquals(0f,out.confidence,0f)
+            assertEquals(com.example.aicamera.guidance.SceneFamily.UNKNOWN,out.sceneAnalysis!!.family)
+        }
+        assertFalse(wrapper.isDegraded)
+        assertEquals(ResilientInference.EMPTY_BREAKER_THRESHOLD+5,calls)
+    }
+
     private fun frame(): PreprocessedFrame {
         val buf = ByteBuffer.allocateDirect(4 * 3 * 4) // 4 像素 RGB float
         repeat(4) {

@@ -84,7 +84,10 @@ class V9Inference(
             val embedding = runtime.embed(nchw)
 
             // Step 2: 检索 + 规则重排
-            val candidates = index.search(embedding, topK = 32)
+            val candidates = try { index.search(embedding, topK = 32) } catch (e: Exception) {
+                Log.w(CameraConfig.TAG, "[V9] 参考检索不可用，继续当前主体规则分析", e)
+                emptyList()
+            }
             // Step 3: 从同一张 224x224 bitmap 提取一次统计，供重排和两个推荐器复用。
             val stats = try {
                 colorStatsExtractor.extract(sourceBitmap)
@@ -94,7 +97,10 @@ class V9Inference(
             }
 
             val sceneContext = stats?.let { sceneContextEstimator.estimate(candidates, it) } ?: SceneContext()
-            val semantic = index.rerank(candidates, sceneContext, limit = 32)
+            val semantic = try { index.rerank(candidates, sceneContext, limit = 32) } catch (e: Exception) {
+                Log.w(CameraConfig.TAG, "[V9] 参考重排不可用，继续当前主体规则分析", e)
+                emptyList()
+            }
             val now = android.os.SystemClock.elapsedRealtime()
             val analysisBitmap = frame.analysisBitmap ?: sourceBitmap
             val sceneResult = multiScene.analyze(sourceBitmap, sceneContext, semantic, structure?.viewportVersion ?: -1L,
@@ -212,7 +218,7 @@ class V9Inference(
                         lines.add(FakeGuideLine("subject_box",true,mapOf("x" to b.left,"y" to b.top,"width" to b.width,
                             "height" to b.height,"real" to true,"anchor_kind" to "object","class_id" to observed.classId,"aligned" to false)))
                     }
-                    output.copy(guideLines = lines, compositionTarget = target, structureObservation = structure,
+                    output.copy(guideLines = lines, compositionTarget = target, structureObservation = structure, analysisCompleted = true,
                         sceneAnalysis = sceneResult.observation.copy(guidanceLimitations=if(target!=null || objectTarget!=null)
                             selected.reasons else (sceneResult.observation.guidanceLimitations+selected.reasons).distinct()),
                         objectTarget = objectTarget, recommendationRoute = selected.route,

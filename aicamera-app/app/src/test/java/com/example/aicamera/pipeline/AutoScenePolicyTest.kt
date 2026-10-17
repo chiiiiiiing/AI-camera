@@ -153,6 +153,55 @@ class AutoScenePolicyTest {
         assertEquals(SceneFamily.UNKNOWN, policy.resolve(landscape, null, null, 2600, 2600, 1).family)
     }
 
+    @Test fun `one second object cadence stays stable across cached half-second frames then expires`() {
+        val policy = AutoScenePolicy()
+        // The first detection does not yet establish a stable object track.
+        assertEquals(SceneFamily.UNKNOWN, policy.resolve(SceneContext(), null,
+            obj(1, 1000).copy(stableSamples = 1), 1000, 1000, 1).family)
+        assertEquals(SceneFamily.UNKNOWN, policy.resolve(SceneContext(), null, obj(2, 2000), 2000, 2000, 1).family)
+        assertEquals(SceneFamily.UNKNOWN, policy.resolve(SceneContext(), null, obj(2, 2000), 2500, 2500, 1).family)
+        assertEquals(SceneFamily.FOOD, policy.resolve(SceneContext(), null, obj(3, 3000), 3000, 3000, 1).family)
+        assertEquals(SceneFamily.FOOD, policy.resolve(SceneContext(), null, obj(3, 3000), 3500, 3500, 1).family)
+        assertEquals(SceneFamily.FOOD, policy.resolve(SceneContext(), null, obj(4, 4000), 4000, 4000, 1).family)
+        assertEquals(SceneFamily.UNKNOWN, policy.resolve(SceneContext(), null, obj(4, 4000), 5501, 5501, 1).family)
+    }
+
+    @Test fun `detected back-view person selects portrait without inventing a face target`() {
+        val policy = AutoScenePolicy()
+        policy.resolve(food, face(1, 1000, 0), obj(1, 1000), 1000, 1000, 1,
+            PersonSceneObservation(1, 1000, 1, box, .8f))
+        val noFace = face(2, 2000, 0)
+        val result = policy.resolve(food, noFace, obj(2, 2000), 2000, 2000, 1,
+            PersonSceneObservation(2, 2000, 1, box, .8f))
+        assertEquals(SceneFamily.PORTRAIT, result.family)
+        assertEquals(AutoSceneEvidence.PERSON, result.evidenceSource)
+        assertNull(noFace.singleFace(2000))
+        assertNull(result.context.sceneCategory)
+    }
+
+    @Test fun `face takes precedence over person and cached person cannot confirm a mode`() {
+        val policy = AutoScenePolicy()
+        val person = PersonSceneObservation(1, 1000, 1, box, .8f)
+        policy.resolve(food, null, null, 1000, 1000, 1, person)
+        assertEquals(SceneFamily.UNKNOWN, policy.resolve(food, null, null, 1500, 1500, 1, person).family)
+        policy.resolve(food, face(1, 2000), null, 2000, 2000, 1, person.copy(observationId = 2, sampledAtMs = 2000))
+        val result = policy.resolve(food, face(2, 2400), null, 2400, 2400, 1, person.copy(observationId = 2, sampledAtMs = 2000))
+        assertEquals(AutoSceneEvidence.FACE, result.evidenceSource)
+        assertEquals(SceneFamily.PORTRAIT, result.family)
+    }
+
+    @Test fun `unreliable stale and different-viewport person observations cannot establish portrait`() {
+        val person = PersonSceneObservation(1, 2000, 1, box, .8f)
+        val invalid = listOf(person.copy(confidence = .64f), person.copy(confidence = Float.NaN),
+            person.copy(sampledAtMs = 400), person.copy(sampledAtMs = 2100), person.copy(viewportVersion = 2),
+            person.copy(observationId = 0), person.copy(box = NormalizedBox(.5f, .5f, .6f, .6f)),
+            person.copy(box = box.copy(left = Float.NaN)))
+        for (bad in invalid) {
+            assertEquals(SceneFamily.UNKNOWN,
+                AutoScenePolicy().resolve(SceneContext(), null, null, 2000, 2000, 1, bad).family)
+        }
+    }
+
     private fun face(id: Long, time: Long, count: Int = 1) = StructureObservation(id, time, 1, count,
         box.takeIf { count == 1 }, trackingId = 1)
     private fun obj(id: Long, time: Long, classId: Int = 47) = ObjectObservation(id, time, 1, 1,

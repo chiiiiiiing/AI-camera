@@ -3,11 +3,21 @@ package com.example.aicamera.pipeline
 import com.example.aicamera.guidance.ObjectObservation
 import com.example.aicamera.guidance.SceneFamily
 import com.example.aicamera.guidance.StructureObservation
+import com.example.aicamera.guidance.geometry.NormalizedBox
 
 /** Analysis mode only: selecting PORTRAIT never by itself authorizes a subject or camera action. */
 enum class AutoPhotoMode { UNKNOWN, PORTRAIT, STILL_LIFE, LANDSCAPE }
 
-enum class AutoSceneEvidence { NONE, FACE, OBJECT, SEMANTIC_CONSENSUS }
+enum class AutoSceneEvidence { NONE, FACE, PERSON, OBJECT, SEMANTIC_CONSENSUS }
+
+/** A detected person establishes scene identity; its box never substitutes for a face target. */
+data class PersonSceneObservation(
+    val observationId: Long,
+    val sampledAtMs: Long,
+    val viewportVersion: Long,
+    val box: NormalizedBox,
+    val confidence: Float
+)
 
 data class AutoSceneDecision(
     val family: SceneFamily,
@@ -43,7 +53,8 @@ class AutoScenePolicy(
         objectObservation: ObjectObservation?,
         sampledAtMs: Long,
         nowMs: Long,
-        viewportVersion: Long
+        viewportVersion: Long,
+        personObservation: PersonSceneObservation? = null
     ): AutoSceneDecision {
         if (viewport != viewportVersion || nowMs < lastNow) {
             reset()
@@ -60,7 +71,7 @@ class AutoScenePolicy(
         }
         lastFrameSample = sampledAtMs
 
-        val candidate = candidate(context, structure, objectObservation, sampledAtMs, nowMs, viewportVersion)
+        val candidate = candidate(context, structure, objectObservation, personObservation, sampledAtMs, nowMs, viewportVersion)
             ?: run {
                 clearSelection()
                 return unknown(context, "scene_unconfirmed")
@@ -109,7 +120,7 @@ class AutoScenePolicy(
     private data class Candidate(val family: SceneFamily, val source: AutoSceneEvidence,
         val observationId: Long, val sampledAtMs: Long)
 
-    private fun candidate(context: SceneContext, face: StructureObservation?, obj: ObjectObservation?,
+    private fun candidate(context: SceneContext, face: StructureObservation?, obj: ObjectObservation?, person: PersonSceneObservation?,
         sampledAtMs: Long, nowMs: Long, viewportVersion: Long): Candidate? {
         val freshFace = face?.takeIf { it.valid && it.observationId > 0 && it.viewportVersion == viewportVersion &&
             it.sampledAtMs > 0 && it.sampledAtMs <= nowMs && nowMs - it.sampledAtMs <= 750 && it.faceCount >= 0 }
@@ -119,9 +130,17 @@ class AutoScenePolicy(
             val b = freshFace.face
             val validBox = b != null && listOf(b.left, b.top, b.right, b.bottom).all { it.isFinite() && it in 0f..1f } &&
                 b.width > 0f && b.height > 0f
-            if (freshFace.faceCount == 1 && !validBox) return null
-            return Candidate(SceneFamily.PORTRAIT, AutoSceneEvidence.FACE, freshFace.observationId, freshFace.sampledAtMs)
+            if (freshFace.faceCount > 1 || validBox)
+                return Candidate(SceneFamily.PORTRAIT, AutoSceneEvidence.FACE, freshFace.observationId, freshFace.sampledAtMs)
         }
+        val livePerson = person?.takeIf { it.observationId > 0 && it.viewportVersion == viewportVersion &&
+            it.sampledAtMs > 0 && it.sampledAtMs <= nowMs && nowMs - it.sampledAtMs <= 1500 &&
+            it.confidence.isFinite() && it.confidence in .65f..1f &&
+            listOf(it.box.left, it.box.top, it.box.right, it.box.bottom).all { value -> value.isFinite() && value in 0f..1f } &&
+            it.box.width > 0f && it.box.height > 0f && it.box.width * it.box.height >= .04f }
+        if (livePerson != null) return Candidate(SceneFamily.PORTRAIT, AutoSceneEvidence.PERSON,
+            livePerson.observationId, livePerson.sampledAtMs)
+        if (freshFace != null && freshFace.faceCount > 0) return null
         val liveObject = obj?.takeIf { it.viewportVersion == viewportVersion && it.isFresh(nowMs) &&
             it.confidence <= 1f && it.classId in SUPPORTED_OBJECT_CLASSES &&
             it.box.width * it.box.height in .02f..0.65f }
