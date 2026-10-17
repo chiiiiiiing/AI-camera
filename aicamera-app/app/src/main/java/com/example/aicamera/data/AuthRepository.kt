@@ -121,6 +121,17 @@ class AuthRepository private constructor(
     val currentUsername: String?
         get() = cachedActiveUser?.username
 
+    /**
+     * 页面统一使用的用户名。
+     *
+     * ★ 社区写入（发帖/点赞/收藏/评论）与个人主页查询必须使用**同一个值**。
+     * 之前相机页/社区页在未登录时回退成「用户」，个人主页却回退成「摄影师」，
+     * 结果游客的帖子、点赞、收藏、评论都写在「用户」名下，而个人空间查的是
+     * 「摄影师」，四个 Tab 全部为空——看起来像"数据库没打通"。
+     */
+    val displayUsername: String
+        get() = cachedActiveUser?.username?.takeIf { it.isNotBlank() } ?: GUEST_DISPLAY_NAME
+
     /** 当前用户头像 URI（本地路径） */
     val currentAvatarUri: String?
         get() = cachedActiveUser?.avatarUri?.takeIf { it.isNotBlank() }
@@ -604,6 +615,9 @@ class AuthRepository private constructor(
     }
 
     companion object {
+        /** 未登录/游客的统一显示名（写入社区与读取个人主页共用） */
+        const val GUEST_DISPLAY_NAME = "摄影师"
+
         private const val TAG = "AuthRepo"
         private const val PREF_NAME = "aicamera_auth"
         private const val KEY_USERS = "users_json"          // 旧 JSON 存储（迁移后删除）

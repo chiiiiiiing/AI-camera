@@ -168,7 +168,11 @@ fun EditProfileScreen(
                 if (trimmed.length !in 2..20) {
                     Toast.makeText(context, "昵称需要 2-20 个字符", Toast.LENGTH_SHORT).show()
                 } else {
-                    val oldName = authRepo.currentUsername
+                    // 用 displayUsername 而不是 currentUsername：
+                    // 游客没有真实用户名，其社区数据写在统一显示名（"摄影师"）下，
+                    // 首次设置昵称时也要把这些数据一起迁移过去，否则游客时期的
+                    // 作品/点赞/收藏会全部变孤儿。
+                    val oldName = authRepo.displayUsername
                     // 先迁移社区侧引用（帖子/评论/点赞/收藏/关注），再改本地用户名，
                     // 否则个人主页会立刻变空、旧作品变孤儿。
                     scope.launch {

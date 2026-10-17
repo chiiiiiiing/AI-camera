@@ -190,6 +190,18 @@ class RenderViewModel @Inject constructor() : ViewModel() {
         _guidanceStep.value = GuidanceStepSequencer.GuidanceStep.ZOOM
     }
 
+    // ── 人像 / 自拍模式：强制要求主体 ───────────────────────────
+    // 顶部「人像模式」此前只是改了图标颜色，既不影响模板也不影响引导，
+    // 所以选人像后仍然没有任何"把人放进画面"的提示。这里把模式选择
+    // 真正接进引导输入：人像（含自拍）一律要求画面里有真实主体。
+    private val _portraitGuide = MutableStateFlow(false)
+
+    fun setPortraitGuide(enabled: Boolean) {
+        if (_portraitGuide.value == enabled) return
+        _portraitGuide.value = enabled
+        resetGuidanceSteps()
+    }
+
     companion object {
         /** 场景防抖帧数：新场景需稳定约 4.5s（10fps × 45）才重开引导 */
         private const val SCENE_RESET_FRAMES = 45
@@ -262,7 +274,7 @@ class RenderViewModel @Inject constructor() : ViewModel() {
             isUpright = isUpright,
             subjectHeightFraction = subjectFrac,
             hasSubject = hasSubject,
-            expectsSubject = output.expectsSubject,
+            expectsSubject = output.expectsSubject || _portraitGuide.value,
             currentZoomRatio = currentZoomRatio,
             minZoomRatio = minZoomRatio,
             maxZoomRatio = maxZoomRatio,
@@ -412,7 +424,9 @@ class RenderViewModel @Inject constructor() : ViewModel() {
             targetCx = targetCx,
             targetCy = targetCy,
             targetTolerance = targetTol,
-            expectsSubject = output.expectsSubject || objectTarget != null,
+            // 人像/自拍模式强制要求主体：即使模板没标注 portrait，
+            // 也要给出「把人放进画面 / 移动主体到目标」的引导。
+            expectsSubject = output.expectsSubject || objectTarget != null || _portraitGuide.value,
             hasRealSubject = hasRealSubject,
             modelConfidence = output.confidence,
             pitchTargetDegrees = pitchTarget,
@@ -425,7 +439,14 @@ class RenderViewModel @Inject constructor() : ViewModel() {
             imuSampledAtMs = output.imuSampledAtMs,
             faceCount = if(faceScene) output.structureObservation?.faceCount ?: 0 else 0,
             viewportVersion = scene?.viewportVersion ?: output.structureObservation?.viewportVersion ?: -1,
-            targetViewportVersion = objectTarget?.viewportVersion ?: output.compositionTarget?.viewportVersion ?: -2,
+            // ★ 目标视口必须与实际视口一致，否则 validSubject 永远为 false：
+            //   -2 是"没有模板目标"时的旧哨兵值，而兜底目标（三分点）只以
+            //   target_zone 辅助线的形式存在，没有 compositionTarget，
+            //   于是 targetViewportVersion=-2 != viewportVersion，导致主体
+            //   明明已经对齐却一直卡在"正在确认可用的构图依据"。
+            targetViewportVersion = objectTarget?.viewportVersion
+                ?: output.compositionTarget?.viewportVersion
+                ?: (scene?.viewportVersion ?: output.structureObservation?.viewportVersion ?: -1),
             targetId = objectTarget?.id ?: output.compositionTarget?.id,
             qualityScore = output.qualityScore,
             qualityAcceptable = output.qualityAcceptable,

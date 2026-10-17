@@ -77,12 +77,11 @@ class CameraGestureDispatcher(
 
             override fun onScale(detector: ScaleGestureDetector): Boolean {
                 val scaleFactor = detector.scaleFactor
-                val maxHardware = camera.cameraInfo.zoomState.value?.maxZoomRatio
-                    ?: CameraConfig.MAX_ZOOM_RATIO
-                val newRatio = (currentZoomRatio * scaleFactor).coerceIn(
-                    CameraConfig.MIN_ZOOM_RATIO,
-                    minOf(CameraConfig.MAX_ZOOM_RATIO, maxHardware)
-                )
+                // 直接使用硬件可用范围，不再人为压上限（旧版本写死 3×）。
+                val zoomState = camera.cameraInfo.zoomState.value
+                val maxHardware = zoomState?.maxZoomRatio ?: CameraConfig.MAX_ZOOM_RATIO
+                val minHardware = zoomState?.minZoomRatio ?: CameraConfig.MIN_ZOOM_RATIO
+                val newRatio = (currentZoomRatio * scaleFactor).coerceIn(minHardware, maxHardware)
                 if (kotlin.math.abs(newRatio - currentZoomRatio) > 0.01f) {
                     currentZoomRatio = newRatio
                     camera.cameraControl.setZoomRatio(newRatio)

@@ -60,7 +60,17 @@ class GeometryGuidanceStage @Inject constructor(
         val previous = structure
         structure = faceDetector.latestObservation()?.copy(
             aspectRatio = imageProxy.analysisCrop().displayAspectRatio(imageProxy.imageInfo.rotationDegrees))
-        if (previous != null && previous.trackingId != structure?.trackingId) {
+        // trackingId 变化不再一律清空平滑与缓存：
+        // 只有检测框位置真的跳变（换人/大幅移动）时才重置，
+        // 否则人轻微一动就会导致主体框抖动、引导重新开始。
+        val prevBox = previous?.face
+        val newBox = structure?.face
+        val boxJumped = prevBox != null && newBox != null &&
+            (abs(prevBox.centerX - newBox.centerX) > 0.18f ||
+                abs(prevBox.centerY - newBox.centerY) > 0.18f)
+        if (previous != null && previous.trackingId != structure?.trackingId &&
+            (prevBox == null || newBox == null || boxJumped)
+        ) {
             subjectEmaX.reset(); subjectEmaY.reset(); lastFaceId = -1; cachedSmoothBox = null
         }
         return structure
@@ -137,12 +147,19 @@ class GeometryGuidanceStage @Inject constructor(
         val targetLine = output.guideLines.firstOrNull {
             it.type == "target_zone" && it.visible && it.params["anchor_kind"] == "face"
         }
-        val targetCx = targetLine?.floatParam("center_x") ?: 0.5f
-        val targetCy = targetLine?.floatParam("center_y") ?: 0.5f
-        val targetTol = targetLine?.floatParam("radius") ?: 0.12f
-        val hasTarget = targetLine != null && GuidanceGeometry.isValidTarget(
+        // ★ 模板没有可验证目标时，用「三分点」作为兜底推荐取景位置。
+        //   否则大多数场景下 AI 只输出场景标签，用户看不到任何"推荐聚焦位置"。
+        val useFallbackTarget = targetLine == null && smoothBox != null &&
+            output.confidence.isFinite() && output.confidence > 0f
+        val targetCx = targetLine?.floatParam("center_x")
+            ?: if (useFallbackTarget) FALLBACK_TARGET_X else 0.5f
+        val targetCy = targetLine?.floatParam("center_y")
+            ?: if (useFallbackTarget) FALLBACK_TARGET_Y else 0.5f
+        val targetTol = targetLine?.floatParam("radius")
+            ?: if (useFallbackTarget) FALLBACK_TARGET_TOL else 0.12f
+        val hasTarget = (targetLine != null && GuidanceGeometry.isValidTarget(
             targetLine.floatParam("center_x"), targetLine.floatParam("center_y"), targetTol
-        )
+        )) || useFallbackTarget
         val hasRecommendation = output.confidence.isFinite() && output.confidence > 0f
         val guidedSubject = smoothBox?.takeIf { hasTarget && hasRecommendation }
 
@@ -242,8 +259,10 @@ class GeometryGuidanceStage @Inject constructor(
             }
         }.toMutableList()
 
-        // 模板没给主体框但检测到了主体（如风景照里有人）→ 也画出来
-        if (smoothBox != null && expectsSubject && newLines.none { it.type == "subject_box" }) {
+        // 检测到真实主体就画出来（不再要求模板必须"期望主体"）。
+        // 旧逻辑只在 expectsSubject（人像模板）时才添加主体框，导致风景/静物
+        // 等模式下即使 AI 检测到人脸，预览上也没有任何 AI 辅助痕迹。
+        if (smoothBox != null && newLines.none { it.type == "subject_box" }) {
             val aligned = hasRecommendation && hasTarget && GuidanceGeometry.isSubjectAligned(
                 smoothBox.centerX, smoothBox.centerY, targetCx, targetCy, targetTol, coordinateAspectRatio
             )
@@ -258,6 +277,25 @@ class GeometryGuidanceStage @Inject constructor(
                         "real" to true,
                         "anchor_kind" to "face",
                         "aligned" to aligned
+                    )
+                )
+            )
+        }
+
+        // 兜底推荐目标也要画出来：用户需要看到"推荐聚焦位置"才能移动过去。
+        if (useFallbackTarget && newLines.none {
+                it.type == "target_zone" && it.visible && it.params["anchor_kind"] == "face"
+            }
+        ) {
+            newLines.add(
+                FakeGuideLine(
+                    type = "target_zone", visible = true,
+                    params = mapOf(
+                        "center_x" to FALLBACK_TARGET_X,
+                        "center_y" to FALLBACK_TARGET_Y,
+                        "radius" to FALLBACK_TARGET_TOL,
+                        "anchor_kind" to "face",
+                        "coordinate_aspect_ratio" to coordinateAspectRatio
                     )
                 )
             )
@@ -301,6 +339,12 @@ class GeometryGuidanceStage @Inject constructor(
 
     companion object {
         private const val TAG = "GeometryGuidance"
+
+        /** 模板无可用参考目标时的兜底推荐点（三分点）与容差 */
+        private const val FALLBACK_TARGET_X = 0.333f
+        private const val FALLBACK_TARGET_Y = 0.333f
+        /** 容差放宽到 0.20：主体进入圆框即算对齐，不要求与原目标点精确重合 */
+        private const val FALLBACK_TARGET_TOL = 0.20f
 
         /** EMA 平滑系数 */
         private const val HORIZON_EMA_ALPHA = 0.3f

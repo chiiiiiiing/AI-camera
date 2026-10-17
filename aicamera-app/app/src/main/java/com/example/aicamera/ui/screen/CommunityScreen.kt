@@ -119,7 +119,7 @@ fun CommunityScreen(
     val postsLoading by viewModel.postsLoading.collectAsState()
     val context = LocalContext.current
     val authRepo = remember { AuthRepository.getInstance(context) }
-    val currentUser = authRepo.currentUsername ?: "用户"
+    val currentUser = authRepo.displayUsername
     val followingUsers by remember(currentUser) {
         viewModel.getFollowing(currentUser)
     }.collectAsState(initial = emptyList())
@@ -130,6 +130,8 @@ fun CommunityScreen(
     var showComments by remember { mutableStateOf(false) }
     var selectedPostId by remember { mutableStateOf<Long?>(null) }
     var commentText by remember { mutableStateOf("") }
+    // 点卡片打开作品详情弹层
+    var selectedPost by remember { mutableStateOf<CommunityPost?>(null) }
 
     Column(Modifier.fillMaxSize().background(FeedBackground).statusBarsPadding()) {
         CommunityTopTabs(selectedIndex = selectedTab, onSelected = { selectedTab = it })
@@ -162,6 +164,7 @@ fun CommunityScreen(
                             onNavigateToProfile = onNavigateToProfile,
                             viewModel = viewModel,
                             currentUser = currentUser,
+                            onPostClick = { selectedPost = post },
                         )
                     }
                 }
@@ -187,6 +190,7 @@ fun CommunityScreen(
                             onNavigateToProfile = onNavigateToProfile,
                             viewModel = viewModel,
                             currentUser = currentUser,
+                            onPostClick = { selectedPost = post },
                         )
                     }
                 }
@@ -209,6 +213,19 @@ fun CommunityScreen(
                     currentUser = currentUser
                 )
             }
+        }
+
+        // 作品详情弹层（点信息流卡片打开）
+        val detailPost = selectedPost
+        if (detailPost != null) {
+            PostDetailDialog(
+                post = detailPost,
+                viewModel = viewModel,
+                currentUser = currentUser,
+                onDismiss = { selectedPost = null },
+                onNavigateToProfile = onNavigateToProfile,
+                communityAssetMapper = { key -> communityAssetResource(key ?: "") },
+            )
         }
     }
 }
@@ -280,9 +297,11 @@ private fun FeedPostItem(
     onNavigateToProfile: (String) -> Unit,
     viewModel: CommunityViewModel,
     currentUser: String,
+    onPostClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier.fillMaxWidth()) {
+    // 整张卡片可点：进入作品详情（点赞/收藏/评论/作者跳转都在详情里）
+    Column(modifier = modifier.fillMaxWidth().clickable(onClick = onPostClick)) {
         // 头部：头像 / 名称 / 时间 / 更多
         Row(
             modifier = Modifier.fillMaxWidth(),

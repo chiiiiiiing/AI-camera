@@ -153,6 +153,7 @@ class CompositionSessionController {
     private var lastImprovedAt = -1L
     private var replanned = false
     private var pausedTarget: String? = null
+    private var pausedAtMs: Long = 0L
     private var lastTimestamp = -1L
     private var lastTrackingId: Int? = null
     private var lastAcceptedAt = -1L
@@ -239,7 +240,11 @@ class CompositionSessionController {
             viewportVersion = input.viewportVersion
         }
         if (lastTrackingId != input.subjectTrackingId) {
-            resetCounters(resetFrameSequence = false)
+            // ★ 不再因为 trackingId 变化就清空全部计数。
+            //   ML Kit 在人轻微移动、遮挡一次、甚至每几百毫秒就会重新分配 trackingId，
+            //   旧逻辑会因此把 levelGoodFrames / positionGoodFrames / readySamples
+            //   全部清零，看起来就是"人稍微动一下，引导就重新开始判断"。
+            //   真正的换主体由后续的质量证据（框中心距离）与场景校验负责。
             lastTrackingId = input.subjectTrackingId
         }
         if ((lastAnchorKind != null && lastAnchorKind != input.observedAnchorKind) ||
@@ -261,7 +266,11 @@ class CompositionSessionController {
         val validSubject = !requiresSubject || ((input.observedAnchorKind == ObservedAnchorKind.OBJECT || input.faceCount == 1) && input.hasRealSubject &&
             input.subjectObservationId > 0 && input.timestampMs >= input.subjectSampledAtMs &&
             input.timestampMs-input.subjectSampledAtMs <= maxSubjectAge && input.targetViewportVersion == input.viewportVersion)
-        if (!input.modelConfidence.isFinite() || input.modelConfidence <= 0f || !validImu || !validSubject || !input.qualityAcceptable) {
+        // ★ qualityAcceptable 不再作为硬门槛：
+        //   它来自"98% 以上像素接近纯黑/纯白"的极端曝光判断，暗光或逆光场景下
+        //   会长期为 false，导致引导永远停在"先保持，正在确认可用的构图依据"。
+        //   画质信息仍会在质量校验里参与劣化判断，但不再阻断姿态/位置引导。
+        if (!input.modelConfidence.isFinite() || input.modelConfidence <= 0f || !validImu || !validSubject) {
             lockedTarget = null
             hold(input, GuidanceFeedback.INSUFFICIENT_EVIDENCE)
             return
@@ -272,30 +281,44 @@ class CompositionSessionController {
             val box=quality?.subjectBox
             val comparableSubject=!requiresSubject || (quality?.subjectTrackingId==input.subjectTrackingId && box!=null &&
                 input.subjectCx?.let { abs(it-box.centerX)<=.03f }==true && input.subjectCy?.let { abs(it-box.centerY)<=.03f }==true)
-            if(quality==null || !quality.isFresh(input.timestampMs) || quality.viewportVersion!=input.viewportVersion || !comparableSubject) {
-                hold(input,GuidanceFeedback.INSUFFICIENT_EVIDENCE)
-                return
-            }
-            executionComparison=if(quality.observationId<=lastExecutionId) ExecutionComparison.CACHED else executionGuard.compare(quality)
-            lastExecutionId=maxOf(lastExecutionId,quality.observationId)
-            if(executionComparison==ExecutionComparison.CONTEXT_CHANGED || executionComparison==ExecutionComparison.UNATTRIBUTED_MOTION) {
-                previousError=null;previousQuality=null;lastImprovedAt=input.timestampMs
-                hold(input,GuidanceFeedback.SCENE_CHANGED)
-                return
-            }
-            if(executionComparison==ExecutionComparison.PHOTOMETRIC_SETTLING) {
-                // Exposure settling after a real adjustment is not a scene change: hold this
-                // one frame without wiping lockedTarget/pose progress, so rotation/position
-                // guidance keeps advancing once the next frame's photometrics are stable.
-                hold(input,GuidanceFeedback.INSUFFICIENT_EVIDENCE)
-                return
-            }
-            if(executionComparison==ExecutionComparison.QUALITY_REGRESSED) {
-                // A closer target is not a success if the measured image becomes worse.
-                pausedTarget=input.targetId ?: "${input.targetCx}:${input.targetCy}:${input.pitchTargetDegrees}:${input.yawTargetDegrees}"
-                lockedTarget=null
-                hold(input,GuidanceFeedback.WORSENING)
-                return
+            // ★ 质量证据缺失/不可比时，不再直接 hold 卡死，而是跳过本帧的质量校验，
+            //   继续正常的姿态与位置引导。否则只要一次证据缺失（如检测采样错位），
+            //   用户就会永远停在"确认中"，既看不到下一步指令也不会自动拍摄。
+            val qualityUsable = quality != null && quality.isFresh(input.timestampMs) &&
+                quality.viewportVersion == input.viewportVersion && comparableSubject
+            if (!qualityUsable) {
+                executionComparison = ExecutionComparison.COMPARABLE
+            } else {
+                val q = quality!!  // qualityUsable 已保证非空
+                executionComparison = if (q.observationId <= lastExecutionId) {
+                    ExecutionComparison.CACHED
+                } else {
+                    executionGuard.compare(q)
+                }
+                lastExecutionId = maxOf(lastExecutionId, q.observationId)
+                if (executionComparison == ExecutionComparison.CONTEXT_CHANGED) {
+                    previousError = null; previousQuality = null; lastImprovedAt = input.timestampMs
+                    hold(input, GuidanceFeedback.SCENE_CHANGED)
+                    return
+                }
+                if (executionComparison == ExecutionComparison.UNATTRIBUTED_MOTION) {
+                    // 主体自身在小幅移动：跳过这一帧的推进，但不弹"画面发生变化"。
+                    return
+                }
+                if (executionComparison == ExecutionComparison.PHOTOMETRIC_SETTLING) {
+                    // 曝光/AE 微调既不是场景变化，也不是构图证据：这一帧直接跳过，
+                    // 保持当前引导文案和进度不变。之前这里调用 hold() 会反复把界面
+                    // 刷成"先保持，正在确认可用的构图依据"，手持时看起来像一直在重置。
+                    return
+                }
+                if (executionComparison == ExecutionComparison.QUALITY_REGRESSED) {
+                    // A closer target is not a success if the measured image becomes worse.
+                    pausedTarget = input.targetId
+                        ?: "${input.targetCx}:${input.targetCy}:${input.pitchTargetDegrees}:${input.yawTargetDegrees}"
+                    lockedTarget = null
+                    hold(input, GuidanceFeedback.WORSENING)
+                    return
+                }
             }
         }
         // Cached evidence may render, but can never confirm progress or Ready a second time.
@@ -347,7 +370,15 @@ class CompositionSessionController {
         if (requiresSubject) lastSubjectId = input.subjectObservationId
         val incomingId = input.targetId ?: "${input.targetCx}:${input.targetCy}:${input.pitchTargetDegrees}:${input.yawTargetDegrees}"
         if (pausedTarget != null) {
-            if (pausedTarget == incomingId || !replanned) { hold(input, _decision.value.feedback); return }
+            // ★ 暂停不能无限期：旧逻辑要求"目标 id 变化"或"已重新规划"才恢复，
+            //   但 WORSENING 分支从不请求重新规划（request = timedOut && !replanned），
+            //   于是同一目标下会永久 hold 在这条提示上，用户看到的就是"卡死"。
+            //   超过 PAUSE_TIMEOUT_MS 后强制恢复引导。
+            val pausedTooLong = input.timestampMs - pausedAtMs > PAUSE_TIMEOUT_MS
+            if (!pausedTooLong && (pausedTarget == incomingId || !replanned)) {
+                hold(input, _decision.value.feedback)
+                return
+            }
             pausedTarget = null
             previousError = null
             previousQuality = null
@@ -382,9 +413,11 @@ class CompositionSessionController {
             obs.timestampMs-lastImprovedAt >= 5000
         if (worseningCount >= 2 || timedOut) {
             val feedback = if (worseningCount >= 2) GuidanceFeedback.WORSENING else GuidanceFeedback.NO_PROGRESS
-            val request = timedOut && !replanned
+            // WORSENING 也要请求重新规划，否则 pausedTarget 永远无法解除。
+            val request = !replanned
             if (request) replanned = true
             pausedTarget = incomingId
+            pausedAtMs = obs.timestampMs
             lockedTarget = null
             hold(obs, feedback)
             _decision.value = GuidanceDecision(GuidanceAction.HoldStill, incomingId, error, feedback,
@@ -473,10 +506,15 @@ class CompositionSessionController {
         }
 
         // 3. 俯仰检查（水平已稳）
-        val pitchDelta = GuidanceGeometry.angleDelta(obs.pitchDegrees, obs.pitchTargetDegrees)
-        if (levelStable && pitchDelta != null &&
-            abs(pitchDelta) > GuidanceGeometry.PITCH_THRESHOLD_DEG
-        ) {
+        // ★ 没有"验证过的参考姿态"时，用「手机竖直」(pitch = 0°) 作为兜底目标。
+        //   旧逻辑要求 pitchTarget 非空，而没有模板提供 pose_target 时它永远是 null，
+        //   于是第三步"调整俯仰"从来不会出现。兜底目标用更宽的 12° 容差，
+        //   避免手持自然姿势被反复要求微调。
+        val hasVerifiedPitchTarget = obs.pitchTargetDegrees != null
+        val effectivePitchTarget = obs.pitchTargetDegrees ?: 0f
+        val pitchDelta = GuidanceGeometry.angleDelta(obs.pitchDegrees, effectivePitchTarget)
+        val pitchTolerance = if (hasVerifiedPitchTarget) GuidanceGeometry.PITCH_THRESHOLD_DEG else 12f
+        if (levelStable && pitchDelta != null && abs(pitchDelta) > pitchTolerance) {
             positionGoodFrames = 0
             return if (pitchDelta > 0) GuidanceAction.PitchDown
             else GuidanceAction.PitchUp
@@ -509,7 +547,11 @@ class CompositionSessionController {
                 obs.subjectCx, obs.subjectCy, true, obs.targetCx!!, obs.targetCy!!, obs.targetTolerance,
                 coordinateAspectRatio = obs.coordinateAspectRatio
             )
-            val positionOk = positionCue == GuidanceCue.SUBJECT_ALIGNED
+            // ★ 只要主体进入"推荐取景框"就视为构图达标即可拍摄，
+            //   不要求主体中心与目标点精确重合。产品口径：辅助不该逼用户做像素级对齐。
+            val insideRecommendedFrame = obs.subjectCx!! in 0.12f..0.88f &&
+                obs.subjectCy!! in 0.14f..0.78f
+            val positionOk = positionCue == GuidanceCue.SUBJECT_ALIGNED || insideRecommendedFrame
 
             if (positionOk && levelStable) {
                 positionGoodFrames++
@@ -534,11 +576,11 @@ class CompositionSessionController {
             }
         }
 
-        // Level alone cannot certify a pleasing composition. A non-subject
-        // reference needs an explicit, comparable target pose to verify.
-        if (levelStable && !obs.expectsSubject && !hasPositionEvidence(obs) &&
-            (pitchDelta != null || yawDelta != null)
-        ) {
+        // 水平已稳，且画面里没有可继续对齐的主体/位置目标 → 直接视为可拍。
+        // 旧逻辑额外要求"存在验证过的俯仰/偏航目标"，导致风景、静物等无主体场景
+        // 永远拿不到 Ready：用户按提示端平后一直停在"正在确认可用的构图依据"，
+        // 只能自己按快门，自动拍摄失效。
+        if (levelStable && !obs.expectsSubject && !hasPositionEvidence(obs)) {
             return GuidanceAction.Ready
         }
 
@@ -588,6 +630,9 @@ class CompositionSessionController {
          */
         const val READY_SAMPLE_COUNT = 2
         const val READY_HOLD_MS = 300L
+
+        /** "先保持/无改善"状态的最长停留：超过后强制恢复引导，避免永久卡死 */
+        const val PAUSE_TIMEOUT_MS = 2_500L
     }
 
     private fun resetCounters(resetFrameSequence: Boolean = true) {

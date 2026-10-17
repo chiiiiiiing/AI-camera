@@ -373,6 +373,7 @@ class CameraViewModel @Inject constructor(
             _uiState.update { it.copy(cameraFace = newFace) }
             // 切换成功 → Camera 实例已更换，通知 UI 重挂手势
             bumpBindVersion()
+            syncZoomAfterCameraSwitch()
         }
     }
 
@@ -380,7 +381,20 @@ class CameraViewModel @Inject constructor(
         if (cameraManager.switchCamera(face)) {
             _uiState.update { it.copy(cameraFace = face) }
             bumpBindVersion()
+            syncZoomAfterCameraSwitch()
         }
+    }
+
+    /**
+     * 切换摄像头后把倍率显示同步成新相机的真实倍率。
+     *
+     * 前后摄各自维护变焦状态，切换后硬件会回到各自的最小倍率（通常 1×），
+     * 但脚本的 UI 状态仍保留旧值，于是「画面是 1×、下方数字还是 2×」。
+     */
+    private fun syncZoomAfterCameraSwitch() {
+        val actual = cameraManager.camera?.cameraInfo?.zoomState?.value?.zoomRatio ?: 1f
+        controls.syncZoomBaseline(actual)
+        _uiState.update { it.copy(zoomRatio = actual) }
     }
 
     fun cycleFlash() {
@@ -400,6 +414,18 @@ class CameraViewModel @Inject constructor(
     fun setZoom(ratio: Float) {
         val camera = cameraManager.camera ?: return
         controls.setZoomRatio(ratio, camera)
+    }
+
+    /**
+     * 用户双指捏合变焦。
+     *
+     * 硬件倍率已由 [CameraGestureDispatcher] 直接写入 cameraControl，
+     * 这里负责把**同一倍率同步回 UI 状态**——否则底部变焦条显示的仍是旧值，
+     * 看起来像「捏合了但数字不动」。同时取消自动变焦斜坡，避免两者打架。
+     */
+    fun onPinchZoom(ratio: Float) {
+        autoZoomJob?.cancel()
+        _uiState.update { it.copy(zoomRatio = ratio) }
     }
 
     fun updateTargetRotation(rotation: Int) {

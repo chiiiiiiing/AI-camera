@@ -102,11 +102,13 @@ fun PostDetailDialog(
 
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     item {
-                        Image(
-                            painter = painterResource(communityAssetMapper(post.imageAssetKey)),
+                        // 用 PostImage 而不是 painterResource：
+                        // 用户发布的作品 imageAssetKey 是 content:// / file:// 的 Uri，
+                        // 直接查 drawable 映射会落到"默认图片"，看不到用户分享的照片。
+                        PostImage(
+                            assetKey = post.imageAssetKey,
                             contentDescription = post.body,
-                            modifier = Modifier.fillMaxWidth().aspectRatio(4f / 3f),
-                            contentScale = ContentScale.Crop
+                            modifier = Modifier.fillMaxWidth().aspectRatio(4f / 3f)
                         )
                     }
                     item {

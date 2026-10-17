@@ -62,7 +62,7 @@ fun CompactProPanel(
                 ProControl.ISO -> OptionRow(listOf("AUTO" to 0, "100" to 100, "200" to 200, "400" to 400, "800" to 800, "1600" to 1600), isoValue, onIsoChange)
                 ProControl.SHUTTER -> OptionRow(listOf("AUTO" to null, "1/15" to 66_666_667L, "1/30" to 33_333_333L, "1/60" to 16_666_667L, "1/125" to 8_000_000L, "1/250" to 4_000_000L, "1/500" to 2_000_000L), exposureTimeNs, onExposureTimeChange)
                 ProControl.WB -> OptionRow(listOf("AUTO" to CaptureRequest.CONTROL_AWB_MODE_AUTO, "日光" to CaptureRequest.CONTROL_AWB_MODE_DAYLIGHT, "阴天" to CaptureRequest.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT, "白炽灯" to CaptureRequest.CONTROL_AWB_MODE_INCANDESCENT, "荧光灯" to CaptureRequest.CONTROL_AWB_MODE_FLUORESCENT), awbMode, onAwbChange)
-                ProControl.ZOOM -> OptionRow(listOf(1f, 1.5f, 2f, 3f, zoomRange.second).distinct().filter { it in zoomRange.first..zoomRange.second }.map { "%.1fx".format(it) to it }, zoomRatio, onZoomChange)
+                ProControl.ZOOM -> OptionRow(listOf(0.8f, 1f, 1.5f, 2f, 3f, zoomRange.second).distinct().filter { it in zoomRange.first..zoomRange.second }.map { "%.1fx".format(it) to it }, zoomRatio, onZoomChange)
             }
         }
     }

@@ -77,6 +77,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.aicamera.camera.CameraConfig.CameraFace
 import com.example.aicamera.camera.CameraGestureDispatcher
 import com.example.aicamera.data.AuthRepository
 import com.example.aicamera.filter.PresetFilter
@@ -221,7 +222,7 @@ fun CameraScreen(
     val scope = rememberCoroutineScope()
     val communityViewModel: CommunityViewModel = hiltViewModel()
     val authRepo = remember { AuthRepository.getInstance(context) }
-    val currentUser = authRepo.currentUsername ?: "用户"
+    val currentUser = authRepo.displayUsername
 
     LaunchedEffect(Unit) {
         cameraViewModel.refreshImportedFilter()
@@ -269,9 +270,11 @@ fun CameraScreen(
     val gestureDispatcher = remember {
         CameraGestureDispatcher(
             onFocusCircle = { cx, cy -> cameraViewModel.onFocusTapped(cx, cy) },
-            onZoomChanged = {
-                // 用户捏合变焦 = 手动介入：取消自动变焦（序列器与斜坡同时让权）
-                cameraViewModel.cancelAutoZoom()
+            onZoomChanged = { ratio ->
+                // 用户捏合变焦 = 手动介入：同步 UI 倍率显示，并取消自动变焦
+                // （序列器与斜坡同时让权）。此前只取消自动变焦、不回写倍率，
+                // 导致捏合放大时底部倍率条不动。
+                cameraViewModel.onPinchZoom(ratio)
                 renderViewModel.cancelAutoZoom()
             },
             onFocusLocked = { locked -> cameraViewModel.setFocusLocked(locked) }
@@ -280,6 +283,14 @@ fun CameraScreen(
 
     // 构图模式（队友设计：静物/风景/人像）
     var guideMode by remember { mutableStateOf(CameraGuideMode.COFFEE) }
+
+    // 人像模式与前摄自拍都需要「主体 + 姿势」引导。
+    // 此前 guideMode 只改顶部图标颜色，不影响任何引导逻辑；
+    // 这里把它真正接进引导输入，并让人像/自拍显示人形轮廓目标。
+    val portraitGuide = guideMode == CameraGuideMode.PORTRAIT || uiState.cameraFace == CameraFace.FRONT
+    LaunchedEffect(portraitGuide) {
+        renderViewModel.setPortraitGuide(portraitGuide)
+    }
 
     // 定时拍照（关 / 3s / 10s）
     var timerMode by remember { mutableStateOf(TimerMode.OFF) }
@@ -684,6 +695,21 @@ fun CameraScreen(
                 inferenceType = pipelineState.inferenceType,
                 degraded = v9DegradedReason != null
             )
+            // AI 构图建议：把模型当前识别到的场景/构图策略显示出来，
+            // 否则"AI 已就绪"之后用户在画面上看不到任何 AI 的产出。
+            if (aiState.status == com.example.aicamera.pipeline.AiEngineManager.Status.READY &&
+                renderInput.sceneType != "unknown"
+            ) {
+                AiCompositionChip(
+                    label = compositionLabelText(
+                        renderInput.compositionStrategy,
+                        renderInput.sceneType
+                    ),
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(top = 100.dp, start = 12.dp)
+                )
+            }
         }
 
         // ── 滤镜小组件：默认收起，点击后才展开 ──
@@ -812,6 +838,8 @@ fun CameraScreen(
                 showHorizon = settings.showHorizon,
                 overlayAlpha = settings.overlayAlpha,
                 guideLines = renderInput.guideLines,
+                // 人像 / 自拍：显示人形轮廓姿势引导
+                poseGuide = portraitGuide,
                 bottomBarHeight = measuredBottomBarHeight,
                 modifier = Modifier.fillMaxSize()
             )
@@ -1108,6 +1136,27 @@ private fun mapSessionState(
  * COPY/LOAD/IDLE      → 灰点「AI 引擎加载中…」
  * FAILED（ONNX 加载失败，本地引导兜底）→ 黄点「AI 演示模式」
  */
+@Composable
+private fun AiCompositionChip(
+    label: String,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(999.dp))
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = "AI 构图 · $label",
+            color = CameraOnChrome.copy(alpha = 0.9f),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
 @Composable
 private fun AiStatusChip(
     modifier: Modifier = Modifier,
@@ -1482,21 +1531,48 @@ private fun ZoomStrip(
     onZoomChange: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val minZoom = maxOf(1f, zoomRange.first)
-    val maxZoom = minOf(3f, zoomRange.second).coerceAtLeast(minZoom)
+    // 不再写死上下限：完整使用硬件可用范围（超广角 0.5×～长焦最高倍率都能用）
+    val minZoom = zoomRange.first.coerceAtLeast(0.1f)
+    val maxZoom = zoomRange.second.coerceAtLeast(minZoom)
     val snappedZoom = zoomRatio.coerceIn(minZoom, maxZoom)
-    val intervalCount = (((maxZoom - minZoom) * 10f).toInt()).coerceAtLeast(1)
+    // 快捷档位：0.8 / 1 / 2 / 3 倍，仅保留当前硬件确实支持的
+    val presets = remember(minZoom, maxZoom) {
+        listOf(0.8f, 1f, 2f, 3f).filter { it >= minZoom - 0.001f && it <= maxZoom + 0.001f }
+    }
     Column(
         modifier = modifier
-            .width(220.dp)
+            .width(236.dp)
             .clip(RoundedCornerShape(999.dp))
             .background(Color.White.copy(alpha = 0.06f))
-            .padding(horizontal = 12.dp, vertical = 5.dp)
+            .padding(horizontal = 10.dp, vertical = 4.dp)
     ) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("${"%.1f".format(minZoom)}×", color = CameraOnChrome.copy(alpha = 0.55f), fontSize = 9.sp)
-            Text("${"%.1f".format(snappedZoom)}×", color = BrandPink, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            Text("${"%.1f".format(maxZoom)}×", color = CameraOnChrome.copy(alpha = 0.55f), fontSize = 9.sp)
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                presets.forEach { preset ->
+                    val selected = kotlin.math.abs(snappedZoom - preset) < 0.05f
+                    Text(
+                        text = formatZoomLabel(preset),
+                        color = if (selected) Color.Black else CameraOnChrome.copy(alpha = 0.8f),
+                        fontSize = 10.sp,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(if (selected) BrandPink else Color.White.copy(alpha = 0.07f))
+                            .clickable { onZoomChange(preset) }
+                            .padding(horizontal = 7.dp, vertical = 3.dp)
+                    )
+                }
+            }
+            Text(
+                text = formatZoomLabel(snappedZoom),
+                color = BrandPink,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
         Slider(
             value = snappedZoom,
@@ -1505,8 +1581,8 @@ private fun ZoomStrip(
                 onZoomChange(snapped)
             },
             valueRange = minZoom..maxZoom,
-            steps = (intervalCount - 1).coerceAtLeast(0),
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            // 不再传 steps：长焦机范围可达 10×，固定档位会变成上百格、拖动卡顿
+            modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
             colors = SliderDefaults.colors(
                 thumbColor = BrandPink,
                 activeTrackColor = BrandPink,
@@ -1516,6 +1592,13 @@ private fun ZoomStrip(
             )
         )
     }
+}
+
+/** 倍率标签：整数值显示「2×」，小数值显示「0.8×」 */
+private fun formatZoomLabel(value: Float): String {
+    val rounded = kotlin.math.round(value)
+    return if (kotlin.math.abs(value - rounded) < 0.05f) "${rounded.toInt()}×"
+    else "${"%.1f".format(value)}×"
 }
 
 // ── 系统预设滤镜选择条 ────────────────────────────────────────────

@@ -155,11 +155,39 @@ fun AppNavGraph(
                     renderViewModel = renderViewModel,
                     onNavigateToSettings = { navController.navigate(Routes.SETTINGS) },
                     onNavigateToGallery = {
-                        val intent = Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "image/*")
-                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        // 旧实现直接 ACTION_VIEW + 整个图片集合 URI，很多机型没有应用
+                        // 能处理这个"集合"URI，于是点了没反应（ActivityNotFoundException）。
+                        // 现在按可靠性从高到低逐级回退：
+                        // ① 用默认相册打开"最新一张照片"（普遍支持）
+                        // ② 再试打开图片集合
+                        // ③ 最后退到系统选图器
+                        val latest = com.example.aicamera.camera.CameraCapture.getLatestPhotoUri(context)
+                        val openedLatest = latest != null && runCatching {
+                            context.startActivity(Intent(Intent.ACTION_VIEW).apply {
+                                setDataAndType(latest, "image/*")
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            })
+                        }.isSuccess
+                        var opened = openedLatest
+                        if (!opened) {
+                            opened = runCatching {
+                                context.startActivity(Intent(Intent.ACTION_VIEW).apply {
+                                    setDataAndType(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "image/*")
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                })
+                            }.isSuccess
                         }
-                        context.startActivity(intent)
+                        if (!opened) {
+                            runCatching {
+                                context.startActivity(
+                                    Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
+                                )
+                            }.onFailure {
+                                android.widget.Toast.makeText(
+                                    context, "没有找到可用的相册应用", android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
                     },
                     onNavigateToEditProfile = { navController.navigate(Routes.EDIT_PROFILE) },
                     onNavigateToProfile = { username ->
@@ -257,7 +285,7 @@ fun AppNavGraph(
                 UserListScreen(
                     listType = "followers",
                     username = username,
-                    currentUser = authRepo.currentUsername ?: "摄影师",
+                    currentUser = authRepo.displayUsername,
                     onBack = { navController.popBackStack() },
                     onNavigateToProfile = { navController.navigate("${Routes.PROFILE}?username=${Uri.encode(it)}") },
                     viewModel = communityViewModel
@@ -278,7 +306,7 @@ fun AppNavGraph(
                 UserListScreen(
                     listType = "following",
                     username = username,
-                    currentUser = authRepo.currentUsername ?: "摄影师",
+                    currentUser = authRepo.displayUsername,
                     onBack = { navController.popBackStack() },
                     onNavigateToProfile = { navController.navigate("${Routes.PROFILE}?username=${Uri.encode(it)}") },
                     viewModel = communityViewModel

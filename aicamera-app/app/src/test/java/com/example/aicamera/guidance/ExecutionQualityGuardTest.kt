@@ -19,12 +19,12 @@ class ExecutionQualityGuardTest {
     }
     @Test fun `auto exposure settling is not credited to guidance`() {
         val g=ExecutionQualityGuard();g.compare(sample(1))
-        assertEquals(ExecutionComparison.PHOTOMETRIC_SETTLING,g.compare(sample(2).copy(meanLuma=.62f)))
-        assertEquals(ExecutionComparison.COMPARABLE,g.compare(sample(3).copy(meanLuma=.62f)))
+        assertEquals(ExecutionComparison.PHOTOMETRIC_SETTLING,g.compare(sample(2).copy(meanLuma=.75f)))
+        assertEquals(ExecutionComparison.COMPARABLE,g.compare(sample(3).copy(meanLuma=.75f)))
     }
     @Test fun `exposure change cannot erase persistent subject highlight or sharpness loss`() {
-        val losses=listOf(sample(2).copy(meanLuma=.62f,subjectHighlights=.2f),
-            sample(2).copy(lumaStd=.30f,subjectSharpness=.06f))
+        val losses=listOf(sample(2).copy(meanLuma=.75f,subjectHighlights=.2f),
+            sample(2).copy(lumaStd=.36f,subjectSharpness=.06f))
         for(changed in losses) {
             val g=ExecutionQualityGuard();g.compare(sample(1))
             assertEquals(ExecutionComparison.PHOTOMETRIC_SETTLING,g.compare(changed))
@@ -33,7 +33,7 @@ class ExecutionQualityGuardTest {
     }
     @Test fun `transient exposure damage can recover without replacing the original baseline`() {
         val g=ExecutionQualityGuard();g.compare(sample(1))
-        assertEquals(ExecutionComparison.PHOTOMETRIC_SETTLING,g.compare(sample(2).copy(meanLuma=.62f,subjectHighlights=.2f)))
+        assertEquals(ExecutionComparison.PHOTOMETRIC_SETTLING,g.compare(sample(2).copy(meanLuma=.75f,subjectHighlights=.2f)))
         assertEquals(ExecutionComparison.PHOTOMETRIC_SETTLING,g.compare(sample(3)))
         assertEquals(ExecutionComparison.COMPARABLE,g.compare(sample(4)))
     }
@@ -68,16 +68,18 @@ class ExecutionQualityGuardTest {
     }
     @Test fun `slow autonomous subject motion never claims successful camera movement`() {
         val g=ExecutionQualityGuard();g.compare(sample(1))
-        for(id in 2L..7L) {
+        val results=(2L..7L).map { id ->
             val shift=(id-1)*.02f
-            assertEquals(ExecutionComparison.UNATTRIBUTED_MOTION,g.compare(sample(id).copy(
-                subjectBox=NormalizedBox(.3f+shift,.3f,.7f+shift,.7f),backgroundDx=0f,backgroundDy=0f,comparedObservationId=id-1)))
+            g.compare(sample(id).copy(
+                subjectBox=NormalizedBox(.3f+shift,.3f,.7f+shift,.7f),backgroundDx=0f,backgroundDy=0f,comparedObservationId=id-1))
         }
+        // 单步 2% 在手持容差内，但持续漂移会被累计并识别为主体自行移动。
+        assertTrue(ExecutionComparison.UNATTRIBUTED_MOTION in results)
     }
     @Test fun `subthreshold movement accumulates instead of evading the motion guard`() {
         val g=ExecutionQualityGuard();g.compare(sample(1))
         val results=(2L..6L).map { id ->
-            val shift=(id-1)*.004f
+            val shift=(id-1)*.01f
             g.compare(sample(id).copy(subjectBox=NormalizedBox(.3f+shift,.3f,.7f+shift,.7f),
                 backgroundDx=0f,backgroundDy=0f,comparedObservationId=id-1))
         }
@@ -113,10 +115,15 @@ class ExecutionQualityGuardTest {
         val other=ExecutionQualityGuard();other.compare(sample(1).copy(preferenceScore=1f,preferenceModelId="one"))
         assertEquals(ExecutionComparison.COMPARABLE,other.compare(sample(2).copy(preferenceScore=.2f,preferenceModelId="two")))
     }
-    @Test fun `new lens scene or tracked subject invalidates previous comparison`() {
-        for(next in listOf(sample(2).copy(viewportVersion=2),sample(2).copy(family=SceneFamily.STILL_LIFE),sample(2).copy(subjectTrackingId=5))) {
+    @Test fun `new lens or scene invalidates previous comparison`() {
+        for(next in listOf(sample(2).copy(viewportVersion=2),sample(2).copy(family=SceneFamily.STILL_LIFE))) {
             val g=ExecutionQualityGuard();g.compare(sample(1));assertEquals(ExecutionComparison.CONTEXT_CHANGED,g.compare(next))
         }
+    }
+    @Test fun `detector reassigning a tracking id is not a scene change`() {
+        // 人稍微一动，ML Kit 就会重新分配 trackingId；这不该向用户报"画面发生变化"。
+        val g=ExecutionQualityGuard();g.compare(sample(1))
+        assertEquals(ExecutionComparison.CACHED,g.compare(sample(2).copy(subjectTrackingId=5)))
     }
     private fun active()=CompositionSessionController().apply{startAnalysis();onAnalysisComplete()}
     private fun observation(id:Long)=CompositionSessionController.FrameObservation(frameId=id,timestampMs=id*500,
@@ -152,17 +159,17 @@ class ExecutionQualityGuardTest {
         // that wipes lockedTarget/pose progress and shows a misleading message on every small
         // movement the AE reacts to. It should just hold this one frame and recover quietly.
         val c=active();for(i in 1L..8)c.observe(observation(i))
-        c.observe(observation(9).copy(executionQuality=sample(9).copy(meanLuma=.62f)))
+        c.observe(observation(9).copy(executionQuality=sample(9).copy(meanLuma=.75f)))
         assertEquals(GuidanceFeedback.INSUFFICIENT_EVIDENCE,c.decision.value.feedback)
-        for(i in 10L..20)c.observe(observation(i).copy(executionQuality=sample(i).copy(meanLuma=.62f)))
+        for(i in 10L..20)c.observe(observation(i).copy(executionQuality=sample(i).copy(meanLuma=.75f)))
         assertEquals(CompositionSessionController.State.Ready,c.state.value)
     }
     @Test fun `stable overexposed subject cannot regain ready after an exposure change`() {
         val c=active();for(i in 1L..8)c.observe(observation(i))
         assertEquals(CompositionSessionController.State.Ready,c.state.value)
-        c.observe(observation(9).copy(executionQuality=sample(9).copy(meanLuma=.62f,subjectHighlights=.2f)))
+        c.observe(observation(9).copy(executionQuality=sample(9).copy(meanLuma=.75f,subjectHighlights=.2f)))
         assertEquals(GuidanceFeedback.INSUFFICIENT_EVIDENCE,c.decision.value.feedback)
-        for(i in 10L..20)c.observe(observation(i).copy(executionQuality=sample(i).copy(meanLuma=.62f,subjectHighlights=.2f)))
+        for(i in 10L..20)c.observe(observation(i).copy(executionQuality=sample(i).copy(meanLuma=.75f,subjectHighlights=.2f)))
         assertEquals(GuidanceFeedback.WORSENING,c.decision.value.feedback)
         assertFalse(c.state.value is CompositionSessionController.State.Ready)
     }
