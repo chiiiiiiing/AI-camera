@@ -437,9 +437,9 @@ class RenderViewModel @Inject constructor() : ViewModel() {
             subjectBox = if (objectScene) observedObject?.box else if (faceScene)
                 output.structureObservation?.singleFace(android.os.SystemClock.elapsedRealtime()) else null,
             guidanceLimitations = if (scene?.isFresh(android.os.SystemClock.elapsedRealtime()) == true) {
-                if (faceScene) when {
+                if (faceScene) scene.guidanceLimitations + when {
                     output.structureObservation?.faceCount != 1 -> listOf("single_face_required")
-                    output.compositionTarget == null -> listOf("no_compatible_portrait_reference")
+                    output.compositionTarget == null -> listOf("no_verified_portrait_target")
                     else -> emptyList()
                 } else scene.guidanceLimitations
             } else emptyList()

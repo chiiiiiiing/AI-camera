@@ -73,6 +73,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.aicamera.camera.CameraGestureDispatcher
+import com.example.aicamera.camera.CameraConfig.CameraFace
 import com.example.aicamera.data.AuthRepository
 import com.example.aicamera.filter.PresetFilter
 import com.example.aicamera.filter.CustomFilterConfig
@@ -81,6 +82,7 @@ import com.example.aicamera.guidance.CompositionSessionController
 import com.example.aicamera.guidance.GuidanceCue
 import com.example.aicamera.guidance.GuidancePhase
 import com.example.aicamera.guidance.GuidancePresentation
+import com.example.aicamera.guidance.SceneFamily
 import com.example.aicamera.ui.components.CaptureWorkflowOverlay
 import com.example.aicamera.ui.components.CaptureWorkflowState
 import com.example.aicamera.ui.components.CaptureResultSheet
@@ -142,6 +144,18 @@ fun CameraScreen(
     val configuration = LocalConfiguration.current
     val renderInput by renderViewModel.renderInput.collectAsStateWithLifecycle()
     val pipelineState by pipelineViewModel.pipelineState.collectAsStateWithLifecycle()
+    val sceneAnalysis by pipelineViewModel.sceneAnalysis.collectAsStateWithLifecycle()
+    var sceneDisplayTime by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
+    LaunchedEffect(sceneAnalysis) {
+        sceneDisplayTime = android.os.SystemClock.elapsedRealtime()
+        sceneAnalysis?.let {
+            delay((it.sampledAtMs + 1501L - sceneDisplayTime).coerceAtLeast(1L))
+            sceneDisplayTime = android.os.SystemClock.elapsedRealtime()
+        }
+    }
+    val automaticScene = sceneAnalysis?.takeIf {
+        it.isFresh(maxOf(sceneDisplayTime, android.os.SystemClock.elapsedRealtime()))
+    }?.family ?: SceneFamily.UNKNOWN
     // ★ 统一构图会话控制器状态（替代旧双工作流）
     val sessionState by renderViewModel.sessionController.state.collectAsStateWithLifecycle()
     val sessionDecision by renderViewModel.sessionController.decision.collectAsStateWithLifecycle()
@@ -224,6 +238,7 @@ fun CameraScreen(
     var cameraInitialized by remember { mutableStateOf(false) }
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     LaunchedEffect(configuration.orientation, uiState.cameraBindVersion) {
+        pipelineViewModel.invalidateSceneRecognition(uiState.cameraFace == CameraFace.FRONT)
         delay(100)
         previewView?.display?.rotation?.let(cameraViewModel::updateTargetRotation)
     }
@@ -238,9 +253,6 @@ fun CameraScreen(
             onFocusLocked = { locked -> cameraViewModel.setFocusLocked(locked) }
         )
     }
-
-    // 构图模式（队友设计：静物/风景/人像）
-    var guideMode by remember { mutableStateOf(CameraGuideMode.COFFEE) }
 
     // 定时拍照（关 / 3s / 10s）
     var timerMode by remember { mutableStateOf(TimerMode.OFF) }
@@ -591,12 +603,11 @@ fun CameraScreen(
             }
         }
 
-        // ── 第 3 层：顶部构图模式选择器（队友 GenWow 设计） ──
+        // ── 第 3 层：只读自动识别状态与设置入口 ──
         if (uiState.isInitialized && !showCaptureResult) {
             CameraTopBar(
                 modifier = Modifier.align(Alignment.TopCenter),
-                selectedMode = guideMode,
-                onModeSelected = { guideMode = it },
+                family = automaticScene,
                 onSettingsClick = onNavigateToSettings,
             )
         }
@@ -655,7 +666,12 @@ fun CameraScreen(
                     .onSizeChanged { bottomBarHeightPx = it.height },
                 latestPhotoUri = uiState.latestPhotoUri,
                 onTakePhoto = { triggerCapture() },
-                onToggleCamera = { cameraViewModel.toggleCamera() },
+                onToggleCamera = {
+                    pipelineViewModel.invalidateSceneRecognition()
+                    cameraViewModel.toggleCamera()
+                    pipelineViewModel.invalidateSceneRecognition(
+                        cameraViewModel.uiState.value.cameraFace == CameraFace.FRONT)
+                },
                 onOpenGallery = onNavigateToGallery,
                 zoomRatio = uiState.zoomRatio,
                 onZoomChange = {
@@ -1032,27 +1048,21 @@ private fun AiStatusChip(
 }
 
 // ────────────────────────────────────────────────────────────────
-// 顶部构图模式选择器（队友 CameraControls.kt CameraTopControls）
-// 三种模式：静物 / 风景 / 人像 + 右侧设置入口
+// 顶部显示自动识别结果；拍摄模式由有效观测决定，不接受用户覆盖。
 // ────────────────────────────────────────────────────────────────
-
-/** 顶部构图模式（队友 CameraGuideMode） */
-private enum class CameraGuideMode(val description: String) {
-    COFFEE("静物构图模式"),
-    LANDSCAPE("风景构图模式"),
-    PORTRAIT("人像构图模式"),
-}
-
-/** 顶部 Icon glyph 标识 */
-private enum class TopGlyph { COFFEE, LANDSCAPE, PERSON, SETTINGS }
 
 @Composable
 private fun CameraTopBar(
     modifier: Modifier = Modifier,
-    selectedMode: CameraGuideMode,
-    onModeSelected: (CameraGuideMode) -> Unit,
+    family: SceneFamily,
     onSettingsClick: () -> Unit,
 ) {
+    val label = when (family) {
+        SceneFamily.PORTRAIT -> "自动 · 人像"
+        SceneFamily.FOOD, SceneFamily.STILL_LIFE, SceneFamily.PLANT -> "自动 · 静物"
+        SceneFamily.NATURAL_LANDSCAPE, SceneFamily.URBAN_LANDSCAPE -> "自动 · 风景"
+        SceneFamily.UNKNOWN -> "自动 · 识别中"
+    }
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -1062,91 +1072,22 @@ private fun CameraTopBar(
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            CameraGuideMode.entries.forEach { mode ->
-                TopModeControl(
-                    description = mode.description,
-                    selected = selectedMode == mode,
-                    glyph = when (mode) {
-                        CameraGuideMode.COFFEE -> TopGlyph.COFFEE
-                        CameraGuideMode.LANDSCAPE -> TopGlyph.LANDSCAPE
-                        CameraGuideMode.PORTRAIT -> TopGlyph.PERSON
-                    },
-                    onClick = { onModeSelected(mode) },
-                )
-            }
-        }
-        Spacer(Modifier.weight(1f))
-        TopModeControl(
-            description = "相机设置",
-            selected = false,
-            glyph = TopGlyph.SETTINGS,
-            onClick = onSettingsClick,
+        Text(
+            text = label,
+            color = if (family == SceneFamily.UNKNOWN) CameraControlMuted else CameraOnChrome,
+            fontSize = 13.sp,
+            modifier = Modifier
+                .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
+                .padding(horizontal = 12.dp, vertical = 6.dp),
         )
-    }
-}
-
-@Composable
-private fun TopModeControl(
-    description: String,
-    selected: Boolean,
-    glyph: TopGlyph,
-    onClick: () -> Unit,
-) {
-    val iconColor by androidx.compose.animation.animateColorAsState(
-        targetValue = if (selected) BrandPink else Color.White,
-        animationSpec = androidx.compose.animation.core.tween(GenWowMotion.ModeChangeMillis),
-        label = "top mode color",
-    )
-    val shellColor by androidx.compose.animation.animateColorAsState(
-        targetValue = if (selected) Color.White.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.06f),
-        animationSpec = androidx.compose.animation.core.tween(GenWowMotion.ModeChangeMillis),
-        label = "top mode shell",
-    )
-    Box(
-        modifier = Modifier
-            .size(32.dp)
-            .background(shellColor, CircleShape)
-            .clickable(onClick = onClick)
-            .semantics { contentDescription = description },
-        contentAlignment = Alignment.Center,
-    ) {
-        if (glyph == TopGlyph.SETTINGS) {
+        Spacer(Modifier.weight(1f))
+        IconButton(onClick = onSettingsClick) {
             Icon(
                 imageVector = Icons.Outlined.Settings,
-                contentDescription = null,
-                tint = iconColor,
-                modifier = Modifier.size(20.dp)
+                contentDescription = "相机设置",
+                tint = Color.White,
+                modifier = Modifier.size(20.dp),
             )
-        } else Canvas(Modifier.size(24.dp)) {
-            val color = iconColor
-            val stroke = Stroke(1.35.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round)
-            when (glyph) {
-                TopGlyph.COFFEE -> {
-                    drawRoundRect(color, Offset(7.dp.toPx(), 10.dp.toPx()), androidx.compose.ui.geometry.Size(8.dp.toPx(), 5.5.dp.toPx()), androidx.compose.ui.geometry.CornerRadius(1.2.dp.toPx()), style = stroke)
-                    drawArc(color, -82f, 164f, false, Offset(13.dp.toPx(), 10.6.dp.toPx()), androidx.compose.ui.geometry.Size(4.6.dp.toPx(), 3.5.dp.toPx()), style = stroke)
-                    drawLine(color, Offset(6.8.dp.toPx(), 17.dp.toPx()), Offset(15.8.dp.toPx(), 17.dp.toPx()), strokeWidth = stroke.width)
-                    drawLine(color, Offset(8.5.dp.toPx(), 7.8.dp.toPx()), Offset(8.5.dp.toPx(), 5.5.dp.toPx()), stroke.width, androidx.compose.ui.graphics.StrokeCap.Round)
-                    drawLine(color, Offset(12.dp.toPx(), 7.8.dp.toPx()), Offset(12.dp.toPx(), 4.9.dp.toPx()), stroke.width, androidx.compose.ui.graphics.StrokeCap.Round)
-                }
-                TopGlyph.LANDSCAPE -> {
-                    val path = androidx.compose.ui.graphics.Path().apply {
-                        moveTo(4.5.dp.toPx(), 16.dp.toPx())
-                        lineTo(9.5.dp.toPx(), 10.5.dp.toPx())
-                        lineTo(13.dp.toPx(), 13.2.dp.toPx())
-                        lineTo(17.4.dp.toPx(), 8.6.dp.toPx())
-                        lineTo(20.dp.toPx(), 16.dp.toPx())
-                    }
-                    drawPath(path, color, style = stroke)
-                    drawCircle(color, 1.35.dp.toPx(), Offset(7.dp.toPx(), 7.4.dp.toPx()), style = stroke)
-                    drawLine(color, Offset(4.5.dp.toPx(), 16.dp.toPx()), Offset(20.dp.toPx(), 16.dp.toPx()), stroke.width, androidx.compose.ui.graphics.StrokeCap.Round)
-                }
-                TopGlyph.PERSON -> {
-                    drawCircle(color, 2.15.dp.toPx(), Offset(12.dp.toPx(), 8.dp.toPx()), style = stroke)
-                    drawArc(color, 198f, 144f, false, Offset(6.8.dp.toPx(), 11.dp.toPx()), androidx.compose.ui.geometry.Size(10.4.dp.toPx(), 8.6.dp.toPx()), style = stroke)
-                }
-                TopGlyph.SETTINGS -> Unit
-            }
         }
     }
 }

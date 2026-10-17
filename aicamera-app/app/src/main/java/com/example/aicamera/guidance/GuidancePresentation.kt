@@ -65,7 +65,10 @@ data class GuidancePresentation(
             GuidanceFeedback.SCENE_CHANGED -> "画面发生变化，先保持重新确认"
             GuidanceFeedback.VERIFYING -> "位置合适，请保持稳定"
             GuidanceFeedback.INSUFFICIENT_EVIDENCE -> when {
+                "rule_execution_paused" in d.reasons -> "先保持，刚才的调整尚未得到有效验证"
+                "subject_margin_requires_unverified_scale_change" in d.reasons -> "先保持，当前主体范围不适合小幅取景调整"
                 "single_face_required" in d.reasons -> "先保持，正在确认单人拍摄主体"
+                "no_verified_portrait_target" in d.reasons -> "先保持，正在确认人像的可用构图依据"
                 "no_compatible_portrait_reference" in d.reasons -> "先保持，暂未找到适合当前人像的构图目标"
                 "object_unstable_or_ambiguous" in d.reasons -> "先保持，正在确认完整、稳定的主体"
                 "no_compatible_object_reference" in d.reasons -> "先保持，暂未找到适合当前物体的构图目标"

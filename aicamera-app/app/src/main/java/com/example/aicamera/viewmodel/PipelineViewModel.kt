@@ -1,13 +1,16 @@
 package com.example.aicamera.viewmodel
 
+import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.aicamera.camera.CameraConfig
 import com.example.aicamera.guidance.geometry.GeometryGuidanceStage
 import com.example.aicamera.guidance.geometry.ImuHorizonSensor
+import com.example.aicamera.guidance.SceneAnalysisObservation
 import com.example.aicamera.pipeline.AiEngineManager
 import com.example.aicamera.pipeline.FramePipeline
+import com.example.aicamera.pipeline.FakeInferenceOutput
 import com.example.aicamera.pipeline.PipelineResult
 import com.example.aicamera.pipeline.PipelineState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -54,6 +57,13 @@ class PipelineViewModel @Inject constructor(
     private val _pipelineState = MutableStateFlow(PipelineState())
     val pipelineState: StateFlow<PipelineState> = _pipelineState.asStateFlow()
 
+    /** Only real, sampled scene evidence supplies the automatic mode label. */
+    private val sceneRecognition = SceneRecognitionState()
+    val sceneAnalysis: StateFlow<SceneAnalysisObservation?> = sceneRecognition.observation
+
+    fun invalidateSceneRecognition(expectedIsFrontCamera: Boolean? = null) =
+        sceneRecognition.invalidate(SystemClock.elapsedRealtime(), expectedIsFrontCamera)
+
     private val _pipelineResults = MutableSharedFlow<PipelineResult>(
         replay = 0, extraBufferCapacity = 2
     )
@@ -98,12 +108,16 @@ class PipelineViewModel @Inject constructor(
 
         collectJob = viewModelScope.launch {
             frameFlow.collect { frameData ->
+                val sceneGeneration = sceneRecognition.frameGeneration()
                 // The scheduler closes rejected frames while paused as well.
                 pipeline.process(
                     imageProxy = frameData.imageProxy,
                     rotation = frameData.rotation,
                     isFrontCamera = frameData.isFrontCamera
                 ) { result ->
+                    val observedScene = (result.modelOutput as? FakeInferenceOutput)?.sceneAnalysis
+                    sceneRecognition.accept(sceneGeneration, observedScene,
+                        result.isFrontCamera, SystemClock.elapsedRealtime())
                     // ★ 不需要再包 launch；直接 tryEmit
                     _pipelineResults.tryEmit(result)
 
@@ -116,6 +130,7 @@ class PipelineViewModel @Inject constructor(
     }
 
     fun pause() {
+        invalidateSceneRecognition()
         horizonSensor.stop()
         pipeline.stop()
     }

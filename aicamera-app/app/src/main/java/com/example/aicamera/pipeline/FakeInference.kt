@@ -183,7 +183,8 @@ data class FakeInferenceOutput(
     val objectTarget: com.example.aicamera.guidance.ObjectCompositionTarget? = null,
     val rollObservable: Boolean? = null,
     val executionQuality: com.example.aicamera.guidance.ExecutionQualityEvidence? = null,
-    val framingComparison: FramingComparisonResult? = null
+    val framingComparison: FramingComparisonResult? = null,
+    val recommendationRoute: RecommendationRoute = RecommendationRoute.OBSERVATION_ONLY
 )
 
 data class FakeGuideLine(

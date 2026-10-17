@@ -55,6 +55,7 @@ class V9Inference(
 
     private val templateStabilizer = V9TemplateStabilizer()
     private val structureMatcher = V9StructureMatcher()
+    private val compositionPlanner = AdaptiveCompositionPlanner()
     private val multiScene = MultiSceneAnalyzer(index.assetDirectory(), index::getMetadata)
     private val qualityHead = index.qualityHead()
     private val cropEvaluator = QualityCropEvaluator()
@@ -65,7 +66,7 @@ class V9Inference(
     private var structure: com.example.aicamera.guidance.StructureObservation? = null
     private var slowUntilMs = 0L
     override fun updateStructure(observation: com.example.aicamera.guidance.StructureObservation?) { structure = observation }
-    override fun requestReplan() { structureMatcher.replan(); multiScene.replan(); templateStabilizer.reset(); cropEvaluator.reset(); framingEvaluator.reset(); executionAnalyzer.reset() }
+    override fun requestReplan() { compositionPlanner.replan(); structureMatcher.replan(); multiScene.replan(); templateStabilizer.reset(); cropEvaluator.reset(); framingEvaluator.reset(); executionAnalyzer.reset() }
 
 
     // ── IInference 实现 ───────────────────────────────────────
@@ -84,13 +85,6 @@ class V9Inference(
 
             // Step 2: 检索 + 规则重排
             val candidates = index.search(embedding, topK = 32)
-            if (candidates.isEmpty()) {
-                resetSession()
-                return createEmptyResult(
-                    FilterRecommendations.original(),
-                    AutoZoomRecommendations.disabled(AutoZoomReason.EMPTY_CANDIDATES)
-                )
-            }
             // Step 3: 从同一张 224x224 bitmap 提取一次统计，供重排和两个推荐器复用。
             val stats = try {
                 colorStatsExtractor.extract(sourceBitmap)
@@ -104,16 +98,9 @@ class V9Inference(
             val now = android.os.SystemClock.elapsedRealtime()
             val analysisBitmap = frame.analysisBitmap ?: sourceBitmap
             val sceneResult = multiScene.analyze(sourceBitmap, sceneContext, semantic, structure?.viewportVersion ?: -1L,
-                frame.displayAspectRatio ?: 1f, now, frame.sampledAtMs.takeIf { it > 0 } ?: started, frame)
+                frame.displayAspectRatio ?: 1f, now, frame.sampledAtMs.takeIf { it > 0 } ?: started, frame, structure)
             val isPortrait = sceneResult.observation.family == com.example.aicamera.guidance.SceneFamily.PORTRAIT
             val reranked = if (isPortrait) structureMatcher.rank(sceneResult.hits, structure, now) else sceneResult.hits.take(8)
-            if (reranked.isEmpty()) {
-                resetSession()
-                return createEmptyResult(
-                    FilterRecommendations.original(),
-                    AutoZoomRecommendations.disabled(AutoZoomReason.EMPTY_CANDIDATES)
-                )
-            }
 
             // Step 4: 推荐滤镜。失败只降级推荐，不影响现有 V9 构图链路。
             val filterRecommendation = try {
@@ -157,14 +144,19 @@ class V9Inference(
             }
 
             // Step 6: 现有模板稳定策略继续只负责构图输出。
-            val selectedHit = templateStabilizer.select(reranked)
-            val meta = selectedHit.metadata ?: index.getMetadata(selectedHit.templateId)
-            return if (meta != null) {
-                val target = if (isPortrait) structureMatcher.target(reranked + semantic.filter { candidate -> reranked.none { it.templateId == candidate.templateId } }, structure, now)
+            val selectedHit = reranked.takeIf { it.isNotEmpty() }?.let(templateStabilizer::select)
+            val meta = selectedHit?.let { it.metadata ?: index.getMetadata(it.templateId) }
+            // A selected reference is optional. Direct scene/subject rules also work when
+            // retrieval supplies no compatible reference or no candidates at all.
+            run {
+                val referenceTarget = if (isPortrait) structureMatcher.target(reranked + semantic.filter { candidate -> reranked.none { it.templateId == candidate.templateId } }, structure, now)
                     else { structureMatcher.reset(); null }
+                val selected = compositionPlanner.select(sceneResult.observation,structure,referenceTarget,sceneResult.target,now)
+                val target = selected.portrait
+                val objectTarget = selected.objectTarget
                 val face = structure?.singleFace(now)
                 val features = QualityHead.features(sourceBitmap, face)
-                val head = qualityHead?.takeIf { meta.sceneCategory in it.scenes || meta.photoType in it.scenes }
+                val head = qualityHead?.takeIf { meta?.sceneCategory in it.scenes || meta?.photoType in it.scenes }
                 val qualityScore = head?.score(embedding, features)
                 // A live crop gets its own spatial features. It is never interpreted as the
                 // result of walking/panning into unseen background or changing perspective.
@@ -202,13 +194,15 @@ class V9Inference(
                     cropEvaluator.evaluate(sourceBitmap, embedding, face, head, qualityScore, now) {
                         runtime.embed(V9EmbeddingRuntime.bitmapToNchw224(it))
                     } else null
-                metaToFakeOutput(meta, selectedHit.cosine, frame.displayAspectRatio,
-                    filterRecommendation, autoZoomRecommendation).let { output ->
+                val baseOutput = if(meta!=null && selectedHit!=null) metaToFakeOutput(meta,selectedHit.cosine,frame.displayAspectRatio,
+                    filterRecommendation,autoZoomRecommendation) else createEmptyResult(filterRecommendation,autoZoomRecommendation)
+                return baseOutput.let { output ->
                     val lines = output.guideLines.filterNot { it.type == "target_zone" }.toMutableList()
+                    if(lines.none { it.type=="horizon_level" }) lines.add(FakeGuideLine("horizon_level",true,emptyMap()))
                     target?.let { lines.add(FakeGuideLine("target_zone", true, mapOf(
                         "center_x" to it.center.x, "center_y" to it.center.y, "radius" to it.tolerance,
                         "anchor_kind" to "face", "coordinate_aspect_ratio" to (frame.displayAspectRatio ?: 1f)))) }
-                    sceneResult.target?.let { objectTarget ->
+                    objectTarget?.let { objectTarget ->
                         lines.add(FakeGuideLine("target_zone",true,mapOf("center_x" to objectTarget.center.x,
                             "center_y" to objectTarget.center.y,"radius" to objectTarget.tolerance,"anchor_kind" to "object",
                             "coordinate_aspect_ratio" to (frame.displayAspectRatio ?: 1f))))
@@ -219,14 +213,21 @@ class V9Inference(
                             "height" to b.height,"real" to true,"anchor_kind" to "object","class_id" to observed.classId,"aligned" to false)))
                     }
                     output.copy(guideLines = lines, compositionTarget = target, structureObservation = structure,
-                        sceneAnalysis = sceneResult.observation, objectTarget = sceneResult.target,
+                        sceneAnalysis = sceneResult.observation.copy(guidanceLimitations=if(target!=null || objectTarget!=null)
+                            selected.reasons else (sceneResult.observation.guidanceLimitations+selected.reasons).distinct()),
+                        objectTarget = objectTarget, recommendationRoute = selected.route,
+                        // This legacy field gates evidence availability, not beauty probability.
+                        confidence = when {
+                            sceneResult.observation.family==com.example.aicamera.guidance.SceneFamily.UNKNOWN -> 0f
+                            face!=null && isPortrait -> 1f
+                            observedObject!=null -> observedObject.confidence
+                            else -> sceneContext.sceneConfidence
+                        },
                         expectsSubject = isPortrait,
                         qualityScore = qualityScore, qualityCrop = crop,
                         executionQuality = execution, framingComparison = framing,
                         qualityAcceptable = features[2] < .98f && features[3] < .98f)
                 }
-            } else {
-                createEmptyResult(filterRecommendation, autoZoomRecommendation)
             }
         } catch (e: Exception) {
             // Model/session/index failures must not terminate the camera analysis pipeline.
@@ -364,6 +365,7 @@ class V9Inference(
     override fun resetSession() {
         templateStabilizer.reset()
         structureMatcher.reset()
+        compositionPlanner.reset()
         multiScene.reset()
         cropEvaluator.reset()
         framingEvaluator.reset()

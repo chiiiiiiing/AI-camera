@@ -245,7 +245,9 @@ class CompositionSessionController {
             lastTrackingId = input.subjectTrackingId
         }
         if ((lastAnchorKind != null && lastAnchorKind != input.observedAnchorKind) ||
-            (input.observedAnchorKind == ObservedAnchorKind.OBJECT && lockedTarget != null && lockedTarget?.targetId != input.targetId)) {
+            (lockedTarget != null && lockedTarget?.targetId != input.targetId &&
+                (input.observedAnchorKind == ObservedAnchorKind.OBJECT || input.targetId?.startsWith("rule:")==true ||
+                    lockedTarget?.targetId?.startsWith("rule:")==true))) {
             val preserveReplan = lastAnchorKind == input.observedAnchorKind && replanned
             resetCounters(resetFrameSequence = false)
             replanned=preserveReplan
@@ -254,7 +256,7 @@ class CompositionSessionController {
         }
         lastAnchorKind=input.observedAnchorKind
         lastTimestamp = input.timestampMs
-        if(input.observedAnchorKind == ObservedAnchorKind.OBJECT && input.targetId == null) lockedTarget = null
+        if(input.targetId == null) lockedTarget = null
         val requiresSubject = input.expectsSubject || input.hasRealSubject
         val requireRoll = input.observedAnchorKind != ObservedAnchorKind.OBJECT || input.rollObservable
         val validImu = input.imuObservationId > 0 && input.timestampMs >= input.imuSampledAtMs &&

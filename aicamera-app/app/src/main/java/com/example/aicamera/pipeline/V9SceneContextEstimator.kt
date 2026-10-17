@@ -8,7 +8,9 @@ data class V9SceneContextConfig(
     val minimumSceneShare: Float = 0.58f,
     val minimumCompositionShare: Float = 0.66f,
     val softLightingStdDev: Float = 0.08f,
-    val hardLightingStdDev: Float = 0.25f
+    val hardLightingStdDev: Float = 0.25f,
+    val minimumCosine: Float = 0.65f,
+    val minimumSupportingCandidates: Int = 2
 )
 
 /**
@@ -20,24 +22,35 @@ class V9SceneContextEstimator(
 ) {
     fun estimate(candidates: List<SearchHit>, stats: FrameColorStats): SceneContext {
         val usable = candidates.take(config.rankWeights.size).withIndex()
-            .filter { it.value.metadata != null && it.value.cosine.isFinite() }
+            .filter { it.value.metadata != null && it.value.cosine.isFinite() &&
+                it.value.cosine in config.minimumCosine..1f &&
+                config.rankWeights[it.index].isFinite() && config.rankWeights[it.index] > 0f }
+            .distinctBy { it.value.templateId }
         if (usable.isEmpty()) return SceneContext(lightingQuality = estimateLighting(stats))
 
         val photoVotes = linkedMapOf<String, Float>()
         val sceneVotes = linkedMapOf<String, Float>()
         val compositionVotes = linkedMapOf<String, Float>()
+        var totalWeight = 0f
         usable.forEach { (index, hit) ->
             val meta = hit.metadata ?: return@forEach
             val weight = (config.rankWeights[index] * hit.cosine.coerceIn(0f, 1f))
                 .takeIf { it.isFinite() && it > 0f } ?: return@forEach
+            totalWeight += weight
             addVote(photoVotes, meta.photoType, weight)
             addVote(sceneVotes, meta.sceneCategory, weight)
             addVote(compositionVotes, meta.compositionType, weight)
         }
 
-        val photo = consensus(photoVotes, config.minimumPhotoTypeShare)
-        val scene = consensus(sceneVotes, config.minimumSceneShare)
-        val composition = consensus(compositionVotes, config.minimumCompositionShare)
+        val photo = consensus(photoVotes, config.minimumPhotoTypeShare, totalWeight)?.takeIf { vote ->
+            usable.count { it.value.metadata?.photoType == vote.value } >= config.minimumSupportingCandidates
+        }
+        val scene = consensus(sceneVotes, config.minimumSceneShare, totalWeight)?.takeIf { vote ->
+            usable.count { it.value.metadata?.sceneCategory == vote.value } >= config.minimumSupportingCandidates
+        }
+        val composition = consensus(compositionVotes, config.minimumCompositionShare, totalWeight)?.takeIf { vote ->
+            usable.count { it.value.metadata?.compositionType == vote.value } >= config.minimumSupportingCandidates
+        }
         val sceneMetaMatchesPhoto = scene?.value?.let { sceneCategory ->
             usable.any { (_, hit) ->
                 val meta = hit.metadata
@@ -63,9 +76,10 @@ class V9SceneContextEstimator(
         }
     }
 
-    private fun consensus(votes: Map<String, Float>, threshold: Float): Consensus? {
+    private fun consensus(votes: Map<String, Float>, threshold: Float, total: Float): Consensus? {
         val positive = votes.filter { (key, value) -> key.isNotBlank() && value.isFinite() && value > 0f }
-        val total = positive.values.sum()
+        // Unknown rows still consume evidence mass; two weak known labels cannot turn a mostly
+        // unknown neighborhood into unanimous scene confidence.
         if (total <= 0f || !total.isFinite()) return null
         val winner = positive.maxByOrNull { it.value } ?: return null
         val share = (winner.value / total).coerceIn(0f, 1f)

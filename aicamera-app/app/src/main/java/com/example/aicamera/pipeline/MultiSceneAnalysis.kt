@@ -211,25 +211,21 @@ internal class MultiSceneAnalyzer(directory: File, metadata: (String) -> Templat
     private var locked: ObjectCompositionTarget?=null
     private var excludedId: String?=null
     private var scene=SceneFamily.UNKNOWN
-    private var pending=SceneFamily.UNKNOWN
-    private var sceneSamples=0
+    private val autoScene = AutoScenePolicy()
     private var viewport=Long.MIN_VALUE
 
     fun analyze(bitmap: Bitmap, context: SceneContext, hits: List<SearchHit>, viewportVersion: Long, aspect: Float, nowMs: Long, sampledAtMs: Long = nowMs,
-        frame: PreprocessedFrame? = null): MultiSceneResult {
+        frame: PreprocessedFrame? = null, structure: StructureObservation? = null): MultiSceneResult {
         if(viewport!=viewportVersion) { reset(); viewport=viewportVersion }
-        val candidate=MultiScenePolicy.family(context)
-        if(candidate==pending) sceneSamples++ else { pending=candidate; sceneSamples=1 }
-        if(candidate!=scene) {
-            previous=null; locked=null
-            scene=if(sceneSamples>=2) candidate else SceneFamily.UNKNOWN
-        }
         val pixels=IntArray(bitmap.width*bitmap.height); bitmap.getPixels(pixels,0,bitmap.width,0,0,bitmap.width,bitmap.height)
         val layout=MultiScenePolicy.layout(pixels,bitmap.width,bitmap.height)
-        val objectScene=scene==SceneFamily.FOOD || scene==SceneFamily.STILL_LIFE
         val nativeAvailable=frame?.analysisBitmap!=null && frame.detectionBitmap!=null && frame.detectionTransform!=null
-        if(objectScene && !nativeAvailable) { previous=null;previousAppearance=null;locked=null }
-        if(objectScene && nativeAvailable && refs!=null && nowMs>=cooldownUntil && (lastDetectionAt==Long.MIN_VALUE || nowMs-lastDetectionAt>=1000)) {
+        val visibleFace = structure?.let { it.valid && it.viewportVersion==viewportVersion && it.faceCount>0 &&
+            it.observationId>0 && nowMs>=it.sampledAtMs && nowMs-it.sampledAtMs<=750 } == true
+        if(!nativeAvailable || visibleFace) { previous=null;previousAppearance=null;locked=null }
+        // Detection discovers subjects independently of retrieval's scene vote. Otherwise a
+        // wrong landscape vote would prevent the object detector from ever correcting it.
+        if(!visibleFace && nativeAvailable && refs!=null && nowMs>=cooldownUntil && (lastDetectionAt==Long.MIN_VALUE || nowMs-lastDetectionAt>=1000)) {
             lastDetectionAt=nowMs
             try {
                 if(!detectorAttempted) { detectorAttempted=true; detector=NanoDetRuntime(refs.modelFile) }
@@ -256,27 +252,31 @@ internal class MultiSceneAnalyzer(directory: File, metadata: (String) -> Templat
                 }
             } catch (_: Exception) { previous=null; locked=null; cooldownUntil=nowMs+5000 }
         }
-        if(!objectScene) { previous=null; locked=null }
-        val live=previous?.takeIf{it.isFresh(nowMs)}
+        val detected=previous?.takeIf{it.isFresh(nowMs)}
+        val automatic=autoScene.resolve(context,structure,detected,sampledAtMs,nowMs,viewportVersion)
+        if(scene!=automatic.family) locked=null
+        scene=automatic.family
+        val objectScene=scene==SceneFamily.FOOD || scene==SceneFamily.STILL_LIFE
+        val live=detected?.takeIf{objectScene}
         if(live==null) locked=null
         val ranked=hits.map { hit ->
             val ref=refs?.records?.get(hit.templateId)
             val layoutGain=if(ref?.layout!=null && abs(ln((ref.aspect/aspect).toDouble()))<=.20 && scene!=SceneFamily.UNKNOWN && scene!=SceneFamily.PORTRAIT)
                 MultiScenePolicy.layoutBonus(layout,ref.layout) else 0f
-            val objectGain=if(live!=null && ref!=null) (if(ref.sceneCategory==context.sceneCategory && MultiScenePolicy.compatible(live,ref)) .10f else -.03f) else 0f
+            val objectGain=if(live!=null && ref!=null) (if(MultiScenePolicy.family(SceneContext(sceneCategory=ref.sceneCategory))==scene && MultiScenePolicy.compatible(live,ref)) .10f else -.03f) else 0f
             hit.copy(rerankScore=hit.rerankScore+layoutGain+objectGain)
         }.sortedWith(compareByDescending<SearchHit>{it.rerankScore}.thenBy{it.templateId})
         if(live!=null) {
             locked?.let { target ->
                 val id=target.id.removePrefix("object:")
-                if(!target.accepts(live) || refs?.records?.get(id)?.sceneCategory!=context.sceneCategory ||
+                if(!target.accepts(live) || refs?.records?.get(id)?.let { MultiScenePolicy.family(SceneContext(sceneCategory=it.sceneCategory)) }!=scene ||
                     ranked.none{it.templateId==id && it.cosine>=.70f}) locked=null
             }
             if(locked==null) {
                 for(hit in ranked) {
                     if(hit.cosine<.75f || "object:${hit.templateId}"==excludedId) continue
                     val ref=refs?.records?.get(hit.templateId) ?: continue
-                    if(ref.sceneCategory!=context.sceneCategory || !MultiScenePolicy.compatible(live,ref)) continue
+                    if(MultiScenePolicy.family(SceneContext(sceneCategory=ref.sceneCategory))!=scene || !MultiScenePolicy.compatible(live,ref)) continue
                     val b=MultiScenePolicy.mappedBox(ref,aspect) ?: continue
                     val keep=abs(live.box.centerX-b.centerX)<=.06f && abs(live.box.centerY-b.centerY)<=.06f
                     val target=ObjectCompositionTarget("object:${hit.templateId}",NormalizedPoint(if(keep) live.box.centerX else b.centerX,
@@ -290,6 +290,6 @@ internal class MultiSceneAnalyzer(directory: File, metadata: (String) -> Templat
             MultiScenePolicy.guidanceLimitations(scene,live,locked!=null,nativeAvailable)),locked,ranked)
     }
     fun replan() { excludedId=locked?.id; locked=null }
-    fun reset() { previous=null; previousAppearance=null; locked=null; excludedId=null; scene=SceneFamily.UNKNOWN; pending=SceneFamily.UNKNOWN; sceneSamples=0; viewport=Long.MIN_VALUE }
+    fun reset() { previous=null; previousAppearance=null; locked=null; excludedId=null; scene=SceneFamily.UNKNOWN; autoScene.reset(); viewport=Long.MIN_VALUE; lastDetectionAt=Long.MIN_VALUE }
     override fun close() { detector?.close(); detector=null; reset() }
 }
