@@ -6,7 +6,7 @@
 
 ### 已上线：固定网址
 
-静态预览已发布到独立公开仓库 [pengjinrui278/genwow-ui-review](https://github.com/pengjinrui278/genwow-ui-review)，固定网址：[https://pengjinrui278.github.io/genwow-ui-review/](https://pengjinrui278.github.io/genwow-ui-review/)。它只包含导出的 23 个页面及图片，不包含 Android 工程、模型或本地账号数据。
+静态预览已发布到独立公开仓库 [pengjinrui278/genwow-ui-review](https://github.com/pengjinrui278/genwow-ui-review)，固定网址：[https://pengjinrui278.github.io/genwow-ui-review/](https://pengjinrui278.github.io/genwow-ui-review/)。它只包含导出的 24 个页面及图片，不包含 Android 工程、模型或本地账号数据。
 
 在原 AI-camera 仓库执行 `./ui-review/publish.ps1`，脚本会验证目标仓库、快进更新、导出静态页面并推送到独立仓库；GitHub Pages 随后更新。原工程的普通 `git push` **不会自动跨仓库同步**。若要每次推送原工程后全自动同步，还需配置最小权限的跨仓库凭据。
 
@@ -16,7 +16,7 @@
 
 在线页面每 10 秒检查已部署版本并在变化时刷新；本机未导出、未推送的修改不会出现在固定网址。Android 源码改变会提示预览可能过期，不会自动转换成 HTML。网页的点赞、评论和验收意见只在各自浏览器中，**不会自动同步给队友**；需使用「导出全部验收意见」交回开发者。
 
-本地验证静态站：运行 `node export.mjs`，产物在忽略提交的 `dist/` 目录。`index.html` 与 23 个独立页面都会被导出，供 CI 发布。
+本地验证静态站：运行 `node export.mjs`，产物在忽略提交的 `dist/` 目录。`index.html` 与 24 个独立页面都会被导出，供 CI 发布。
 
 ## 启动
 
@@ -55,6 +55,7 @@
 | /login.html | 密码/验证码登录 |
 | /register.html | 注册 |
 | /forgot-password.html | 找回密码 |
+| /replay.html | 功能回放：桌面 JVM 跑真模型 + 状态机的录制时间线 |
 
 ## 验收方式
 
@@ -64,6 +65,10 @@
 - 点赞、收藏、关注、评论、发布和个人资料使用共享 localStorage，跨页面和浏览器标签页同步，仅用于验收交互。
 - 每页意见按“页面 + 场景”保存，点击导出可生成 JSON。导出文件提供给开发后，按页面反馈修改。
 - `app.js`、`style.css`、HTML 变动自动刷新。Android Kotlin 文件变动会提示预览需同步，不会自动转换成 HTML。
+
+## 功能回放页
+
+`/replay.html` 是桌面 JVM 生成的功能回放：在 AI-camera 仓库运行 `./gradlew.bat :app:replayEngine`（Linux/macOS 用 `./gradlew`），用真实 `student_model.onnx` + 406 模板索引 + 构图状态机对 `drawable-nodpi/gallery_*.png` 逐帧回放，把检索 Top5、NanoDet 检测、场景布局与状态机时间线写成 `ui-review/replay-data/replay.json`。本地服务直接读取；`publish.ps1` 发布时会随页面一并导出（缺失时导出空占位）。回放是桌面复现，不是真机运行验收。
 
 ## 同步约定与边界
 

@@ -19,6 +19,29 @@ import kotlin.math.hypot
  * PITCH/YAW 仅在调用方提供已验证的目标姿态时启用；观测角度本身不是目标。
  */
 object GuidanceGeometry {
+    /** Mirrored selfie previews reverse only horizontal phone-motion instructions. */
+    fun displayPhoneCue(cue: GuidanceCue, isFrontCamera: Boolean): GuidanceCue = if (!isFrontCamera) cue else when (cue) {
+        GuidanceCue.MOVE_LEFT -> GuidanceCue.MOVE_RIGHT
+        GuidanceCue.MOVE_RIGHT -> GuidanceCue.MOVE_LEFT
+        GuidanceCue.MOVE_UP_LEFT -> GuidanceCue.MOVE_UP_RIGHT
+        GuidanceCue.MOVE_UP_RIGHT -> GuidanceCue.MOVE_UP_LEFT
+        GuidanceCue.MOVE_DOWN_LEFT -> GuidanceCue.MOVE_DOWN_RIGHT
+        GuidanceCue.MOVE_DOWN_RIGHT -> GuidanceCue.MOVE_DOWN_LEFT
+        else -> cue
+    }
+
+    /** Arrow and caption share the same phone-motion cue, never the subject displacement. */
+    fun phoneMovementVector(cue: GuidanceCue?): Pair<Float, Float>? = when (cue) {
+        GuidanceCue.MOVE_LEFT -> -1f to 0f
+        GuidanceCue.MOVE_RIGHT -> 1f to 0f
+        GuidanceCue.MOVE_UP -> 0f to -1f
+        GuidanceCue.MOVE_DOWN -> 0f to 1f
+        GuidanceCue.MOVE_UP_LEFT -> -1f to -1f
+        GuidanceCue.MOVE_UP_RIGHT -> 1f to -1f
+        GuidanceCue.MOVE_DOWN_LEFT -> -1f to 1f
+        GuidanceCue.MOVE_DOWN_RIGHT -> 1f to 1f
+        else -> null
+    }
 
     /** 水平角阈值（度）：对齐 HorizonPolicy.enterLevelToleranceDeg，用于触发 ROLL 指令 */
     const val ROLL_THRESHOLD_DEG = 4.0f
@@ -120,8 +143,18 @@ object GuidanceGeometry {
         if (hypot(dx, dy) <= tolerance) {
             return GuidanceCue.SUBJECT_ALIGNED
         }
-        // A point can be outside the circle while both component errors are below
-        // the radius. Correct the dominant error instead of accepting a square.
+        // Only combine axes when both errors are material. This avoids diagonal
+        // chatter close to an axis and keeps directions in phone-motion space.
+        val minor = minOf(abs(dx), abs(dy))
+        val major = maxOf(abs(dx), abs(dy))
+        if (minor > tolerance * 0.5f && minor >= major * 0.45f) {
+            return when {
+                dx > 0f && dy > 0f -> GuidanceCue.MOVE_DOWN_RIGHT
+                dx > 0f -> GuidanceCue.MOVE_UP_RIGHT
+                dy > 0f -> GuidanceCue.MOVE_DOWN_LEFT
+                else -> GuidanceCue.MOVE_UP_LEFT
+            }
+        }
         return if (abs(dx) >= abs(dy)) {
             if (dx > 0f) GuidanceCue.MOVE_RIGHT else GuidanceCue.MOVE_LEFT
         } else {

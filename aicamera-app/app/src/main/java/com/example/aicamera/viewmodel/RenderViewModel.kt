@@ -6,8 +6,13 @@ import androidx.lifecycle.viewModelScope
 import com.example.aicamera.camera.CameraConfig
 import com.example.aicamera.guidance.CompositionSessionController
 import com.example.aicamera.guidance.GuidanceState
-import com.example.aicamera.guidance.GuidanceStateMachine
 import com.example.aicamera.guidance.GuidanceStepSequencer
+import com.example.aicamera.guidance.GuidanceCue
+import com.example.aicamera.guidance.GuidancePhase
+import com.example.aicamera.guidance.GuidanceAnchors
+import com.example.aicamera.guidance.NormalizedPoint
+import com.example.aicamera.guidance.toGuidanceCue
+import com.example.aicamera.guidance.geometry.HandheldHorizonPolicy
 import com.example.aicamera.overlay.model.GuideLine
 import com.example.aicamera.overlay.model.GuideLineType
 import com.example.aicamera.overlay.model.RenderInput
@@ -41,16 +46,20 @@ class RenderViewModel @Inject constructor() : ViewModel() {
     private val _renderStats = MutableStateFlow(RenderStats())
     val renderStats: StateFlow<RenderStats> = _renderStats.asStateFlow()
 
-    /** ★ 新引导系统状态（与队友 GuidanceCue 对齐） */
-    private val guidanceStateMachine = GuidanceStateMachine()
+    /** UI projection of the session's single composition verdict. */
     private val _guidanceState = MutableStateFlow(GuidanceState())
     val guidanceState: StateFlow<GuidanceState> = _guidanceState.asStateFlow()
 
-    // ── ★ 分步引导序列器（自动变焦 → 水平 → 主体 → 完成） ──
-    private val stepSequencer = GuidanceStepSequencer()
+    // Bounded zoom preparation; subsequent composition belongs to sessionController.
+    // 手持容差：±6° 进入 ±9° 退出、连续 3 帧稳定。仅放宽 App 实时引导，
+    // 核心 HorizonPolicy 默认值保持严格（测试与历史语义不变）。
+    private val stepSequencer = GuidanceStepSequencer(HandheldHorizonPolicy)
 
     // ── ★ 统一构图会话控制器（替代双工作流，唯一状态机） ──
-    val sessionController = CompositionSessionController()
+    val sessionController = CompositionSessionController(HandheldHorizonPolicy)
+    private val subjectContinuity = com.example.aicamera.guidance.SubjectContinuity()
+    private var lastSubjectInput: RenderInput? = null
+    fun needsSubjectSelection(): Boolean = _guidanceState.value.trackingPaused || _guidanceState.value.anchors?.current == null
 
     private val _guidanceStep = MutableStateFlow(GuidanceStepSequencer.GuidanceStep.ZOOM)
     val guidanceStep: StateFlow<GuidanceStepSequencer.GuidanceStep> = _guidanceStep.asStateFlow()
@@ -60,8 +69,13 @@ class RenderViewModel @Inject constructor() : ViewModel() {
     val stepHint: StateFlow<String> = _stepHint.asStateFlow()
 
     /** 自动变焦目标倍率事件（一次性；UI 消费后执行变焦斜坡） */
-    private val _autoZoomTarget = MutableSharedFlow<Float>(replay = 0, extraBufferCapacity = 1)
-    val autoZoomTarget: SharedFlow<Float> = _autoZoomTarget.asSharedFlow()
+    data class AutoZoomRequest(val ratio: Float, val generation: Long)
+    private var zoomGeneration = 0L
+    private var zoomReferenceSeen = false
+    private var zoomPreparationFinished = false
+    private val _autoZoomTarget = MutableSharedFlow<AutoZoomRequest>(replay = 0, extraBufferCapacity = 1)
+    val autoZoomTarget: SharedFlow<AutoZoomRequest> = _autoZoomTarget.asSharedFlow()
+    fun isCurrentAutoZoom(request: AutoZoomRequest): Boolean = request.generation == zoomGeneration
 
     /** 当前变焦状态（由 UI 层推送，序列器决策用） */
     @Volatile private var currentZoomRatio: Float = 1.0f
@@ -91,7 +105,10 @@ class RenderViewModel @Inject constructor() : ViewModel() {
 
         collectJob = viewModelScope.launch {
             pipelineResults.collect { result ->
-                val input = parseResult(result)
+                // Apply handheld tolerance once, to both rendered targets and
+                // controller observations. Displayed and accepted zones must agree.
+                val fakeOutput = (result.modelOutput as? FakeInferenceOutput)?.forHandheldGuidance()
+                val input = parseResult(result.copy(modelOutput = fakeOutput ?: result.modelOutput))
 
                 // ★ 未知输出时保留上一帧有效输入，避免 UI 闪烁
                 if (input.guideLines.isNotEmpty() || input.sceneType != "unknown") {
@@ -112,32 +129,101 @@ class RenderViewModel @Inject constructor() : ViewModel() {
                 }
 
                 // ★ 更新引导状态机（经分步序列器过滤：一屏只出一个指令）
-                val fakeOutput = result.modelOutput as? FakeInferenceOutput
                 if (fakeOutput != null) {
                     maybeResetStepsForSceneChange(fakeOutput, result.isFrontCamera)
-
-                    val seqOut = stepSequencer.onFrame(
-                        input = sequencerInput(fakeOutput),
-                        rawCue = fakeOutput.guidanceCue,
-                        rawProgress = fakeOutput.compositionProgress
-                    )
-                    _guidanceStep.value = seqOut.step
-                    _stepHint.value = seqOut.hint
-                    seqOut.zoomTarget?.let { target ->
-                        _autoZoomTarget.tryEmit(target)
+                    val activeSession = sessionController.state.value.let {
+                        it is CompositionSessionController.State.Adjusting || it is CompositionSessionController.State.Verifying ||
+                            it is CompositionSessionController.State.Ready
+                    }
+                    val zoomInput = sequencerInput(fakeOutput)
+                    if (!zoomReferenceSeen && zoomInput.targetSubjectHeightFraction != null && zoomInput.hasSubject) {
+                        zoomReferenceSeen = true
+                        if (!activeSession && stepSequencer.step != GuidanceStepSequencer.GuidanceStep.ZOOM) {
+                            zoomGeneration++
+                            stepSequencer.reset(android.os.SystemClock.elapsedRealtime())
+                            zoomPreparationFinished = false
+                        }
                     }
 
-                    val newGuidance = guidanceStateMachine.reduceFrame(
-                        current = _guidanceState.value,
-                        cue = seqOut.cue,
-                        progress = seqOut.progress,
-                        subjectOutline = null,
-                        anchors = null,
+                    // The sequencer performs only the bounded zoom preparation.
+                    // The session controller owns every composition action and Ready.
+                    val seqOut = if (!zoomPreparationFinished) stepSequencer.onFrame(
+                        input = zoomInput,
+                        rawCue = fakeOutput.guidanceCue,
+                        rawProgress = fakeOutput.compositionProgress
+                    ) else null
+                    if (stepSequencer.step != GuidanceStepSequencer.GuidanceStep.ZOOM) zoomPreparationFinished = true
+                    seqOut?.zoomTarget?.let { target ->
+                        _autoZoomTarget.tryEmit(AutoZoomRequest(target, zoomGeneration))
+                    }
+                    val zoomPending = !zoomPreparationFinished
+                    val visual = fakeOutput.visualSubjectBox?.takeIf {
+                        android.os.SystemClock.elapsedRealtime() - fakeOutput.visualSampledAtMs in 0..750
+                    }
+                    val measured = buildFrameObservation(fakeOutput, result).copy(zoomInProgress = zoomPending, targetDwellCapture = true)
+                    val tracked = if (visual != null && fakeOutput.visualSampledAtMs > measured.subjectSampledAtMs)
+                        measured.copy(subjectCx = visual.centerX, subjectCy = visual.centerY, hasRealSubject = false,
+                            trackingPaused = true, visualPositionAvailable = true, visualPositionSampledAtMs = fakeOutput.visualSampledAtMs)
+                        else measured
+                    val observation = subjectContinuity.update(tracked,
+                        keepSession = activeSession, visualBox = visual, visualSampledAtMs = fakeOutput.visualSampledAtMs)
+                    if (observation.trackingPaused) {
+                        (lastSubjectInput ?: input).let { last ->
+                            val subjectTypes = setOf(GuideLineType.SUBJECT_BOX, GuideLineType.TARGET_ZONE)
+                            _renderInput.value = input.copy(guideLines = input.guideLines.filterNot { it.type in subjectTypes } +
+                                last.guideLines.filter { it.type in subjectTypes }.map { line ->
+                                    if (line.type == GuideLineType.SUBJECT_BOX && visual != null) line.copy(params = line.params + mapOf(
+                                        "x" to visual.left, "y" to visual.top, "width" to visual.width, "height" to visual.height,
+                                        "real" to false, "visual_tracking" to true)) else line
+                                })
+                            if (visual != null) lastSubjectInput = _renderInput.value
+                        }
+                    } else if (observation.hasRealSubject && observation.targetCx != null) lastSubjectInput = input
+                    if (observation.targetCx != null && observation.targetCy != null) _renderInput.value = _renderInput.value.copy(
+                        guideLines = _renderInput.value.guideLines.map { line ->
+                            if (line.type == GuideLineType.TARGET_ZONE) line.copy(params = line.params + mapOf(
+                                "center_x" to observation.targetCx, "center_y" to observation.targetCy,
+                                "radius" to observation.targetTolerance)) else line
+                        })
+                    sessionController.observe(observation)
+                    val state = sessionController.state.value
+                    val cue = com.example.aicamera.guidance.geometry.GuidanceGeometry.displayPhoneCue(
+                        sessionController.action.value.toGuidanceCue(), result.isFrontCamera)
+                    val ready = state is CompositionSessionController.State.Ready
+                    _guidanceStep.value = when {
+                        ready -> GuidanceStepSequencer.GuidanceStep.DONE
+                        zoomPending -> GuidanceStepSequencer.GuidanceStep.ZOOM
+                        cue in listOf(GuidanceCue.ROLL_CLOCKWISE, GuidanceCue.ROLL_COUNTERCLOCKWISE,
+                            GuidanceCue.DEVICE_UPSIDE_DOWN) -> GuidanceStepSequencer.GuidanceStep.LEVEL
+                        else -> GuidanceStepSequencer.GuidanceStep.SUBJECT
+                    }
+                    _stepHint.value = when {
+                        ready -> "目标圈内已保持 1 秒，正在准备拍摄"
+                        state is CompositionSessionController.State.Verifying -> "已进入目标圈，保持约 1 秒自动拍摄"
+                        observation.trackingPaused && observation.visualPositionAvailable && cue == GuidanceCue.NONE -> "进入目标圈后保持约 1 秒自动拍摄"
+                        observation.trackingPaused && observation.visualPositionAvailable -> "按目标继续移动 · 画面跟踪中"
+                        observation.trackingPaused -> "保留目标取景，可按快门完成拍摄"
+                        zoomPending -> seqOut?.hint.orEmpty()
+                        !fakeOutput.aiInvolved -> "AI 暂未就绪，可按快门直接拍摄"
+                        observation.targetCx == null -> "轻点画面中的主体可直接锁定取景"
+                        !observation.hasRealSubject -> "主体暂时丢失，请让主体回到画面中"
+                        else -> fakeOutput.aiCompositionMethod.orEmpty()
+                    }
+                    _guidanceState.value = GuidanceState(
+                        cue = if (zoomPending) GuidanceCue.NONE else cue,
+                        phase = when {
+                            ready -> GuidancePhase.ALIGNED
+                            state is CompositionSessionController.State.Verifying -> GuidancePhase.NEAR
+                            cue != GuidanceCue.NONE && !zoomPending -> GuidancePhase.ADJUST
+                            else -> GuidancePhase.NEUTRAL
+                        },
+                        progress = if (ready) 1f else (state as? CompositionSessionController.State.Adjusting)?.progress ?: 0f,
+                        anchors = GuidanceAnchors(
+                            observation.subjectCx?.let { x -> observation.subjectCy?.let { NormalizedPoint(x, it) } },
+                            observation.targetCx?.let { x -> observation.targetCy?.let { NormalizedPoint(x, it) } }
+                        ),
+                        trackingPaused = observation.trackingPaused
                     )
-                    _guidanceState.value = newGuidance
-
-                    // ★ 同步驱动统一会话控制器（替代双工作流）
-                    sessionController.observe(buildFrameObservation(fakeOutput, result))
                     if (sessionController.decision.value.replanRequested) onRequestReplan()
                 } else {
                     // A pipeline failure/unknown schema must revoke readiness immediately,
@@ -158,6 +244,28 @@ class RenderViewModel @Inject constructor() : ViewModel() {
         }
     }
 
+    private fun FakeInferenceOutput.forHandheldGuidance(): FakeInferenceOutput {
+        fun radius(value: Float): Float = if (value.isFinite() && value > 0f) maxOf(.12f, value) else value
+        if (manualTarget != null) {
+            val lines = guideLines.filterNot { it.type == "subject_box" || it.type == "target_zone" }.toMutableList()
+            lines += com.example.aicamera.pipeline.FakeGuideLine("target_zone", true, mapOf(
+                "center_x" to manualTarget.x, "center_y" to manualTarget.y, "radius" to .12f, "anchor_kind" to "manual"))
+            visualSubjectBox?.let { box -> lines += com.example.aicamera.pipeline.FakeGuideLine("subject_box", true, mapOf(
+                "x" to box.left, "y" to box.top, "width" to box.width, "height" to box.height,
+                "real" to false, "visual_tracking" to true, "anchor_kind" to "manual")) }
+            return copy(guideLines = lines, aiCompositionMethod = "手动锁定区域 · 画面跟踪与规则取景")
+        }
+        return copy(
+            compositionTarget = compositionTarget?.let { it.copy(tolerance = radius(it.tolerance)) },
+            objectTarget = objectTarget?.let { it.copy(tolerance = radius(it.tolerance)) },
+            guideLines = guideLines.map { line ->
+                val value = (line.params["radius"] as? Number)?.toFloat()
+                if (line.type == "target_zone" && value != null)
+                    line.copy(params = line.params + ("radius" to radius(value))) else line
+            }
+        )
+    }
+
     // ── 分步引导外部接口 ─────────────────────────────────────
 
     /** UI 推送当前变焦倍率（序列器决策/到位判定的依据） */
@@ -172,21 +280,29 @@ class RenderViewModel @Inject constructor() : ViewModel() {
     }
 
     /** UI 把自动变焦打到目标值后回调（开始稳定计时） */
-    fun notifyAutoZoomApplied() {
-        stepSequencer.notifyZoomApplied(System.currentTimeMillis())
+    fun notifyAutoZoomApplied(request: AutoZoomRequest) {
+        if (isCurrentAutoZoom(request)) stepSequencer.notifyZoomApplied(android.os.SystemClock.elapsedRealtime())
     }
 
     /** 用户手动变焦（捏合/滑杆）→ 取消本次自动变焦 */
     fun cancelAutoZoom() {
+        zoomPreparationFinished = true
+        zoomReferenceSeen = true
+        zoomGeneration++
         stepSequencer.cancelAutoZoom()
     }
 
     /** 切摄像头/重新进入相机时重开分步引导 */
     fun resetGuidanceSteps() {
+        zoomPreparationFinished = false
+        subjectContinuity.reset()
+        lastSubjectInput = null
+        zoomReferenceSeen = false
+        zoomGeneration++
         lastSceneKey = null
         pendingSceneKey = null
         pendingSceneFrames = 0
-        stepSequencer.reset(System.currentTimeMillis())
+        stepSequencer.reset(android.os.SystemClock.elapsedRealtime())
         _guidanceStep.value = GuidanceStepSequencer.GuidanceStep.ZOOM
     }
 
@@ -220,7 +336,8 @@ class RenderViewModel @Inject constructor() : ViewModel() {
         when {
             last == null -> {
                 lastSceneKey = sceneKey
-                stepSequencer.reset(System.currentTimeMillis())
+                zoomGeneration++
+                stepSequencer.reset(android.os.SystemClock.elapsedRealtime())
             }
             sceneKey == last -> {
                 pendingSceneKey = null
@@ -229,11 +346,23 @@ class RenderViewModel @Inject constructor() : ViewModel() {
             sceneKey == pendingSceneKey -> {
                 pendingSceneFrames++
                 if (pendingSceneFrames >= SCENE_RESET_FRAMES) {
+                    val midGuidance = sessionController.state.value is
+                        CompositionSessionController.State.Adjusting ||
+                        sessionController.state.value is CompositionSessionController.State.Verifying ||
+                        sessionController.state.value is CompositionSessionController.State.Ready
                     lastSceneKey = sceneKey
                     pendingSceneKey = null
                     pendingSceneFrames = 0
-                    stepSequencer.reset(System.currentTimeMillis())
-                    Log.i(CameraConfig.TAG, "[RenderVM] 场景稳定切换，重开分步引导")
+                    if (midGuidance) {
+                        // 用户正在按当前指令调整时，场景分类抖动不能把步骤打回 ZOOM；
+                        // 下一次按快门会统一 resetGuidanceSteps()。
+                        Log.i(CameraConfig.TAG, "[RenderVM] 场景变化发生在引导中，保持当前步骤")
+                    } else {
+                        zoomGeneration++
+                        zoomPreparationFinished = false
+                        stepSequencer.reset(android.os.SystemClock.elapsedRealtime())
+                        Log.i(CameraConfig.TAG, "[RenderVM] 场景稳定切换，重开分步引导")
+                    }
                 }
             }
             else -> {
@@ -244,7 +373,14 @@ class RenderViewModel @Inject constructor() : ViewModel() {
     }
 
     /** 从管线输出适配序列器输入（水平角/主体占比来自几何阶段注入的辅助线） */
+    private fun usesFaceAnchor(output: FakeInferenceOutput): Boolean = _portraitGuide.value ||
+        output.sceneAnalysis == null ||
+        output.sceneAnalysis.family == com.example.aicamera.guidance.SceneFamily.PORTRAIT ||
+        (output.sceneAnalysis.family == com.example.aicamera.guidance.SceneFamily.UNKNOWN &&
+            output.structureObservation?.singleFace(android.os.SystemClock.elapsedRealtime()) != null)
+
     private fun sequencerInput(output: FakeInferenceOutput): GuidanceStepSequencer.Input {
+        val faceScene = usesFaceAnchor(output)
         var angle: Float? = null
         var isUpright: Boolean? = null
         var subjectFrac: Float? = null
@@ -260,7 +396,8 @@ class RenderViewModel @Inject constructor() : ViewModel() {
                 "subject_box" -> {
                     // ★ 只信真实检测框（real=true）：模板占位框会让
                     //   自动变焦对着假主体算出「无需变焦」的错误结论
-                    val isReal = line.params["real"] == true && line.params["anchor_kind"] == "face"
+                    val anchorKind = if (faceScene) "face" else "object"
+                    val isReal = line.params["real"] == true && line.params["anchor_kind"] == anchorKind
                     val h = (line.params["height"] as? Number)?.toFloat()
                     if (isReal && h != null && h.isFinite() && h > 0f && h <= 1f) {
                         subjectFrac = h
@@ -274,12 +411,14 @@ class RenderViewModel @Inject constructor() : ViewModel() {
             isUpright = isUpright,
             subjectHeightFraction = subjectFrac,
             hasSubject = hasSubject,
-            expectsSubject = output.expectsSubject || _portraitGuide.value,
+            expectsSubject = output.expectsSubject || output.objectTarget != null || _portraitGuide.value,
             currentZoomRatio = currentZoomRatio,
             minZoomRatio = minZoomRatio,
             maxZoomRatio = maxZoomRatio,
-            nowMs = System.currentTimeMillis(),
-            recommendationReady = output.confidence.isFinite() && output.confidence > 0f
+            nowMs = android.os.SystemClock.elapsedRealtime(),
+            targetSubjectHeightFraction = if (faceScene) output.compositionTarget?.referenceFaceHeight
+                else output.objectTarget?.referenceBox?.height,
+            recommendationReady = output.aiInvolved && output.confidence.isFinite() && output.confidence > 0f
         )
     }
 
@@ -317,6 +456,7 @@ class RenderViewModel @Inject constructor() : ViewModel() {
             sceneType = output.sceneType.name.lowercase(),
             compositionStrategy = output.compositionStrategy.name.lowercase(),
             confidence = output.confidence,
+            aiCompositionMethod = output.aiCompositionMethod,
             guideLines = guideLines,
             isFrontCamera = result.isFrontCamera,
             // 帧已在预处理阶段转正 + 镜像，辅助线坐标即显示坐标
@@ -391,9 +531,10 @@ class RenderViewModel @Inject constructor() : ViewModel() {
         }
 
         val scene = output.sceneAnalysis
-        val objectScene = scene?.family == com.example.aicamera.guidance.SceneFamily.FOOD ||
-            scene?.family == com.example.aicamera.guidance.SceneFamily.STILL_LIFE
-        val faceScene = scene == null || scene.family == com.example.aicamera.guidance.SceneFamily.PORTRAIT
+        // Explicit portrait mode outranks the scene label; incidental landscape
+        // faces must not replace the subject selected by scene analysis.
+        val faceScene = usesFaceAnchor(output)
+        val objectScene = !faceScene && scene?.objectObservation != null
         output.structureObservation?.takeIf { faceScene }?.let { structure ->
             val rawFace = structure.singleFace(android.os.SystemClock.elapsedRealtime())
             subjectCx = rawFace?.centerX
@@ -411,7 +552,7 @@ class RenderViewModel @Inject constructor() : ViewModel() {
             targetTol = objectTarget?.tolerance ?: .06f
             coordinateAspectRatio = observedObject?.aspectRatio ?: 1f
         }
-        return CompositionSessionController.FrameObservation(
+        val observation = CompositionSessionController.FrameObservation(
             frameId = nextObservationFrameId(result),
             timestampMs = android.os.SystemClock.elapsedRealtime(),
             rollDegrees = roll,
@@ -428,7 +569,7 @@ class RenderViewModel @Inject constructor() : ViewModel() {
             // 也要给出「把人放进画面 / 移动主体到目标」的引导。
             expectsSubject = output.expectsSubject || objectTarget != null || _portraitGuide.value,
             hasRealSubject = hasRealSubject,
-            modelConfidence = output.confidence,
+            modelConfidence = if (output.aiInvolved) output.confidence else 0f,
             pitchTargetDegrees = pitchTarget,
             yawTargetDegrees = yawTarget,
             coordinateAspectRatio = coordinateAspectRatio,
@@ -456,5 +597,16 @@ class RenderViewModel @Inject constructor() : ViewModel() {
             executionQuality = output.executionQuality,
             executionQualityRequired = output.sceneAnalysis != null
         )
+        val manual = output.manualTarget ?: return observation
+        val visual = output.visualSubjectBox?.takeIf {
+            android.os.SystemClock.elapsedRealtime() - output.visualSampledAtMs in 0..750
+        }
+        return observation.copy(subjectCx = visual?.centerX, subjectCy = visual?.centerY,
+            targetCx = manual.x, targetCy = manual.y, targetTolerance = .12f,
+            targetId = "manual:${output.manualSelectionId}", hasRealSubject = false, expectsSubject = true,
+            observedAnchorKind = com.example.aicamera.guidance.ObservedAnchorKind.OBJECT,
+            subjectObservationId = 0L, subjectSampledAtMs = output.visualSampledAtMs,
+            targetViewportVersion = observation.viewportVersion, trackingPaused = true, visualPositionAvailable = visual != null,
+            visualPositionSampledAtMs = output.visualSampledAtMs)
     }
 }

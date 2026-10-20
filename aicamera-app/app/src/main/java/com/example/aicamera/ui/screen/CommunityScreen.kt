@@ -1,5 +1,6 @@
 package com.example.aicamera.ui.screen
 
+import android.net.Uri
 import android.widget.Toast
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.animateDpAsState
@@ -112,7 +113,8 @@ fun CommunityScreen(
     val postsLoading by viewModel.postsLoading.collectAsState()
     val context = LocalContext.current
     val authRepo = remember { AuthRepository.getInstance(context) }
-    val currentUser = authRepo.displayUsername
+    val activeUser by authRepo.activeUser.collectAsState()
+    val currentUser = activeUser?.username?.takeIf { it.isNotBlank() } ?: authRepo.displayUsername
     val followingUsers by remember(currentUser) {
         viewModel.getFollowing(currentUser)
     }.collectAsState(initial = emptyList())
@@ -167,6 +169,7 @@ fun CommunityScreen(
                             onNavigateToProfile = onNavigateToProfile,
                             viewModel = viewModel,
                             currentUser = currentUser,
+                            currentAvatarUri = activeUser?.avatarUri,
                             onPostClick = { selectedPost = post },
                         )
                     }
@@ -190,6 +193,7 @@ fun CommunityScreen(
                             onNavigateToProfile = onNavigateToProfile,
                             viewModel = viewModel,
                             currentUser = currentUser,
+                            currentAvatarUri = activeUser?.avatarUri,
                             onPostClick = { selectedPost = post },
                         )
                     }
@@ -222,6 +226,7 @@ fun CommunityScreen(
                 post = detailPost,
                 viewModel = viewModel,
                 currentUser = currentUser,
+                currentAvatarUri = activeUser?.avatarUri,
                 onDismiss = { selectedPost = null },
                 onNavigateToProfile = onNavigateToProfile,
                 communityAssetMapper = { key -> communityAssetResource(key ?: "") },
@@ -298,6 +303,7 @@ private fun FeedPostItem(
     onNavigateToProfile: (String) -> Unit,
     viewModel: CommunityViewModel,
     currentUser: String,
+    currentAvatarUri: String?,
     onPostClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -308,14 +314,14 @@ private fun FeedPostItem(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Image(
-                painter = painterResource(authorAvatar(post.author)),
+            AuthorAvatar(
+                author = post.author,
+                currentUser = currentUser,
+                currentAvatarUri = currentAvatarUri,
                 contentDescription = "${post.author} 的头像",
                 modifier = Modifier
                     .size(32.dp)
-                    .clip(CircleShape)
                     .clickable { onNavigateToProfile(post.author) },
-                contentScale = ContentScale.Crop,
             )
             Column(
                 modifier = Modifier
@@ -404,6 +410,7 @@ private fun FeedGridItem(
     onNavigateToProfile: (String) -> Unit,
     viewModel: CommunityViewModel,
     currentUser: String,
+    currentAvatarUri: String?,
     onPostClick: () -> Unit,
 ) {
     val liked by remember(post.id, currentUser) {
@@ -433,14 +440,13 @@ private fun FeedGridItem(
             )
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Image(
-                    painter = painterResource(authorAvatar(post.author)),
-                    contentDescription = null,
+                AuthorAvatar(
+                    author = post.author,
+                    currentUser = currentUser,
+                    currentAvatarUri = currentAvatarUri,
                     modifier = Modifier
                         .size(20.dp)
-                        .clip(CircleShape)
                         .clickable { onNavigateToProfile(post.author) },
-                    contentScale = ContentScale.Crop,
                 )
                 Spacer(Modifier.size(5.dp))
                 Text(
@@ -661,6 +667,41 @@ internal fun authorAvatar(author: String): Int = when (author) {
     "Helena" -> R.drawable.avatar_helena
     "Daniel" -> R.drawable.avatar_daniel
     else -> R.drawable.avatar_helena
+}
+
+/**
+ * 作者头像：当前登录用户优先显示个人资料里的真实头像，其他作者仍用内置头像。
+ * 内置头像始终垫底，URI 失效时不会出现白块。
+ */
+@Composable
+internal fun AuthorAvatar(
+    author: String,
+    currentUser: String,
+    currentAvatarUri: String?,
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null,
+) {
+    val ownAvatar = currentAvatarUri?.takeIf { it.isNotBlank() && author == currentUser }
+    Box(modifier = modifier.clip(CircleShape)) {
+        Image(
+            painter = painterResource(authorAvatar(author)),
+            contentDescription = contentDescription,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+        )
+        if (ownAvatar != null) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(Uri.parse(ownAvatar))
+                    .crossfade(true)
+                    .size(144)
+                    .build(),
+                contentDescription = contentDescription,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+        }
+    }
 }
 
 // ── 评论底部抽屉 ──────────────────────────────────────────────────

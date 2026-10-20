@@ -24,7 +24,8 @@ class PhoneTranslationProjectionTest {
     }
     @Test fun `screen relative phone translation reduces error for both lenses and all rotations`() {
         for(front in listOf(false,true)) for(rotation in 0..3)
-            for(world in listOf(.2 to 0.0,-.2 to 0.0,0.0 to .2,0.0 to -.2)) {
+            for(world in listOf(.2 to 0.0,-.2 to 0.0,0.0 to .2,0.0 to -.2,
+                .2 to .2, .2 to -.2, -.2 to .2, -.2 to -.2)) {
                 val z=if(front) 1.0 else -1.0
                 val before=project(world.first,world.second,z,front,rotation)
                 val cue=GuidanceGeometry.guidanceCue(before.first,before.second,true,.5f,.5f,.06f)
@@ -33,6 +34,10 @@ class PhoneTranslationProjectionTest {
                     GuidanceCue.MOVE_LEFT -> -.04 to 0.0
                     GuidanceCue.MOVE_UP -> 0.0 to .04
                     GuidanceCue.MOVE_DOWN -> 0.0 to -.04
+                    GuidanceCue.MOVE_UP_LEFT -> -.04 to .04
+                    GuidanceCue.MOVE_UP_RIGHT -> .04 to .04
+                    GuidanceCue.MOVE_DOWN_LEFT -> -.04 to -.04
+                    GuidanceCue.MOVE_DOWN_RIGHT -> .04 to -.04
                     else -> error("No translation for displaced subject: $cue")
                 }
                 val after=project(world.first-movement.first,world.second-movement.second,z,front,rotation)

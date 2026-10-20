@@ -4,6 +4,11 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -67,6 +72,7 @@ fun FocusExposureOverlay(
     evRange: Pair<Int, Int>,
     onEVChange: (Int) -> Unit,
     visible: Boolean = true,
+    focusRequestId: Long = 0L,
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
@@ -92,7 +98,7 @@ fun FocusExposureOverlay(
         }
     }
 
-    LaunchedEffect(visible) {
+    LaunchedEffect(visible, focusX, focusY, focusRequestId) {
         if (visible) {
             resetHideTimer()
         } else {
@@ -106,6 +112,12 @@ fun FocusExposureOverlay(
         exit = fadeOut(),
         modifier = modifier
     ) {
+        Box(Modifier.fillMaxSize()) {
+        Canvas(Modifier.fillMaxSize().semantics { contentDescription = "点击对焦框" }) {
+            val side = 56.dp.toPx()
+            drawRoundRect(Color(0xFFFFD166), Offset(focusX - side / 2, focusY - side / 2),
+                Size(side, side), CornerRadius(6.dp.toPx()), style = Stroke(2.dp.toPx()))
+        }
         val config = LocalConfiguration.current
         val screenW = config.screenWidthDp.dp
         val screenH = config.screenHeightDp.dp
@@ -211,4 +223,5 @@ fun FocusExposureOverlay(
             }
         }
     }
+}
 }

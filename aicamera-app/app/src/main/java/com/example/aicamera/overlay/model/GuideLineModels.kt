@@ -17,6 +17,8 @@ data class RenderInput(
     val sceneType: String = "unknown",
     val compositionStrategy: String = "rule_of_thirds",
     val confidence: Float = 0f,
+    /** 真实 AI 参考说明（保存后展示）；null = AI 未参与。 */
+    val aiCompositionMethod: String? = null,
     val guideLines: List<GuideLine> = emptyList(),
     /** 是否为前置摄像头（决定 X 轴是否镜像） */
     val isFrontCamera: Boolean = false,

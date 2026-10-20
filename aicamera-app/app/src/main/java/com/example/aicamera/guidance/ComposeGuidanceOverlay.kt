@@ -208,24 +208,23 @@ private fun DrawScope.drawCorner(origin: Offset, h: Offset, v: Offset, color: Co
 private fun DrawScope.drawTranslationGuide(
     guidance: GuidanceState, color: Color, motionPhase: Float, alpha: Float, wrongDirection: Boolean,
 ) {
-    val targetAnchor = Offset(size.width / 2f, size.height * .44f)
-    val isHorizontal = guidance.cue == GuidanceCue.MOVE_LEFT || guidance.cue == GuidanceCue.MOVE_RIGHT
-    val sign = when (guidance.cue) { GuidanceCue.MOVE_RIGHT, GuidanceCue.MOVE_DOWN -> 1f; else -> -1f }
-    val scale = guideMotionScale(guidance.phase)
-    val swing = 18.dp.toPx() * scale * (motionPhase - .5f) * sign
-    val offset = 48.dp.toPx() * sign
-    val currentAnchor = if (isHorizontal) Offset(targetAnchor.x + swing + offset, targetAnchor.y)
-    else Offset(targetAnchor.x, targetAnchor.y + swing + offset)
-
-    drawTranslationTrack(currentAnchor, targetAnchor, color, alpha)
-    drawTargetSun(targetAnchor, color, alpha)
-    drawCrosshair(currentAnchor, color, alpha)
-
     val direction = when (guidance.cue) {
         GuidanceCue.MOVE_LEFT -> Offset(-1f, 0f); GuidanceCue.MOVE_RIGHT -> Offset(1f, 0f)
         GuidanceCue.MOVE_UP -> Offset(0f, -1f); GuidanceCue.MOVE_DOWN -> Offset(0f, 1f)
+        GuidanceCue.MOVE_UP_LEFT -> Offset(-.7071f, -.7071f)
+        GuidanceCue.MOVE_UP_RIGHT -> Offset(.7071f, -.7071f)
+        GuidanceCue.MOVE_DOWN_LEFT -> Offset(-.7071f, .7071f)
+        GuidanceCue.MOVE_DOWN_RIGHT -> Offset(.7071f, .7071f)
         else -> Offset.Zero
     }
+    val targetAnchor = guidance.anchors?.target?.let { Offset(it.x * size.width, it.y * size.height) }
+        ?: Offset(size.width / 2f, size.height * .44f)
+    val offset = 48.dp.toPx() + 18.dp.toPx() * guideMotionScale(guidance.phase) * (motionPhase - .5f)
+    val currentAnchor = guidance.anchors?.current?.let { Offset(it.x * size.width, it.y * size.height) }
+        ?: (targetAnchor + direction * offset)
+    drawTranslationTrack(currentAnchor, targetAnchor, color, alpha)
+    drawTargetSun(targetAnchor, color, alpha)
+    drawCrosshair(currentAnchor, color, alpha)
     if (direction != Offset.Zero) {
         drawOpenArrow(currentAnchor + direction * 20.dp.toPx(), direction, color.copy(alpha = .94f * alpha), 1.65.dp.toPx())
         if (wrongDirection) {
@@ -456,7 +455,9 @@ private fun List<Offset>.toPath(closed: Boolean): Path = Path().apply {
 
 internal fun GuidanceCue.visualFamily(): GuideVisualFamily = when (this) {
     GuidanceCue.NONE -> GuideVisualFamily.NONE
-    GuidanceCue.MOVE_LEFT, GuidanceCue.MOVE_RIGHT, GuidanceCue.MOVE_UP, GuidanceCue.MOVE_DOWN -> GuideVisualFamily.TRANSLATION
+    GuidanceCue.MOVE_LEFT, GuidanceCue.MOVE_RIGHT, GuidanceCue.MOVE_UP, GuidanceCue.MOVE_DOWN,
+    GuidanceCue.MOVE_UP_LEFT, GuidanceCue.MOVE_UP_RIGHT,
+    GuidanceCue.MOVE_DOWN_LEFT, GuidanceCue.MOVE_DOWN_RIGHT -> GuideVisualFamily.TRANSLATION
     GuidanceCue.PITCH_UP, GuidanceCue.PITCH_DOWN, GuidanceCue.YAW_LEFT, GuidanceCue.YAW_RIGHT -> GuideVisualFamily.AXIS_ROTATION
     GuidanceCue.ROLL_CLOCKWISE, GuidanceCue.ROLL_COUNTERCLOCKWISE -> GuideVisualFamily.PLANAR_ROTATION
     GuidanceCue.SUBJECT_TARGET, GuidanceCue.SUBJECT_ALIGNED -> GuideVisualFamily.SUBJECT
@@ -526,6 +527,10 @@ fun GuidanceMessage(state: GuidanceState, isDemo: Boolean = false, stepHint: Str
         state.cue == GuidanceCue.MOVE_RIGHT -> "→ 向右移动"
         state.cue == GuidanceCue.MOVE_UP -> "↑ 手机稍向上"
         state.cue == GuidanceCue.MOVE_DOWN -> "↓ 手机稍向下"
+        state.cue == GuidanceCue.MOVE_UP_LEFT -> "↖ 手机稍向左上取景"
+        state.cue == GuidanceCue.MOVE_UP_RIGHT -> "↗ 手机稍向右上取景"
+        state.cue == GuidanceCue.MOVE_DOWN_LEFT -> "↙ 手机稍向左下取景"
+        state.cue == GuidanceCue.MOVE_DOWN_RIGHT -> "↘ 手机稍向右下取景"
         state.cue == GuidanceCue.PITCH_UP -> "轻轻上仰"
         state.cue == GuidanceCue.PITCH_DOWN -> "轻轻下俯"
         state.cue == GuidanceCue.YAW_LEFT -> "向左转动手机"

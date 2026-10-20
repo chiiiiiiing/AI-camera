@@ -8,16 +8,45 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class RenderGuidanceEvidenceTest {
+    @Test fun `manual region provides a movement goal without pretending to be a detector observation`() {
+        val output = FakeInferenceOutput(SceneType.NORMAL, CompositionStrategy.ADAPTIVE, .8f, 128f, emptyList(),
+            visualSubjectBox = NormalizedBox(.2f, .2f, .4f, .4f), visualSampledAtMs = 0,
+            manualTarget = NormalizedPoint(.6f, .5f), manualSelectionId = 7)
+        val actual = observation(output)
+        assertTrue(actual.trackingPaused)
+        assertTrue(actual.visualPositionAvailable)
+        assertFalse(actual.hasRealSubject)
+        assertEquals("manual:7", actual.targetId)
+        assertEquals(.6f, actual.targetCx!!, 0f)
+    }
     private fun observation(lines: List<FakeGuideLine>): CompositionSessionController.FrameObservation {
         val output = FakeInferenceOutput(SceneType.NORMAL, CompositionStrategy.RULE_OF_THIRDS,
             0.8f, 128f, lines, expectsSubject = true)
         return observation(output)
     }
-    private fun observation(output: FakeInferenceOutput): CompositionSessionController.FrameObservation {
+    private fun observation(output: FakeInferenceOutput, portrait: Boolean = false): CompositionSessionController.FrameObservation {
         val result = PipelineResult(1, 0, false, output, FrameTiming(1, 0, 0, 0, 0))
         val method = RenderViewModel::class.java.getDeclaredMethod("buildFrameObservation",
             FakeInferenceOutput::class.java, PipelineResult::class.java).apply { isAccessible = true }
-        return method.invoke(RenderViewModel(), output, result) as CompositionSessionController.FrameObservation
+        return method.invoke(RenderViewModel().apply { setPortraitGuide(portrait) }, output, result) as CompositionSessionController.FrameObservation
+    }
+
+    @Test fun `explicit portrait mode retains a real face when retrieval misclassifies the scene`() {
+        val layout = SceneLayout(List(9) { .5f }, List(9) { .1f }, .5f, 0f, 0f)
+        val output = FakeInferenceOutput(SceneType.NORMAL, CompositionStrategy.ADAPTIVE, .9f, 128f,
+            emptyList(), structureObservation = StructureObservation(1, 0, 7, 1,
+                NormalizedBox(.3f, .2f, .5f, .5f)),
+            sceneAnalysis = SceneAnalysisObservation(1, 0, 7, SceneFamily.STILL_LIFE, layout), aiInvolved = true)
+        val actual = observation(output, portrait = true)
+        assertTrue(actual.hasRealSubject)
+        assertTrue(actual.expectsSubject)
+        assertEquals(ObservedAnchorKind.FACE, actual.observedAnchorKind)
+        assertEquals(.9f, actual.modelConfidence, 0f)
+    }
+
+    @Test fun `demo output cannot provide automatic capture confidence`() {
+        val output = FakeInferenceOutput(SceneType.NORMAL, CompositionStrategy.ADAPTIVE, .9f, 128f, emptyList())
+        assertEquals(0f, observation(output).modelConfidence, 0f)
     }
 
     @Test fun `landscape observation never promotes an incidental face to the capture target`() {

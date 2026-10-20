@@ -25,7 +25,9 @@ import kotlin.math.abs
  * - 每一步都有超时/跳过条件，永远不会把用户卡死（快门全程可用）；
  * - 无信号降级：无水平传感器 → 跳过 LEVEL；模板不要主体 → 跳过 SUBJECT。
  */
-class GuidanceStepSequencer {
+class GuidanceStepSequencer(
+    private val horizonPolicy: HorizonPolicy = HorizonPolicy()
+) {
 
     enum class GuidanceStep { ZOOM, LEVEL, SUBJECT, DONE }
 
@@ -81,6 +83,12 @@ class GuidanceStepSequencer {
 
     // ── SUBJECT 步骤状态 ──
     private var subjectAlignedFrames = 0
+    private var subjectBadLevelFrames = 0
+
+    // ── 单条指令锁存：同一方向至少显示 CUE_LATCH_FRAMES 帧才允许换 ──
+    private var displayedCue: GuidanceCue = GuidanceCue.NONE
+    private var candidateCue: GuidanceCue = GuidanceCue.NONE
+    private var candidateCueFrames = 0
 
     // ── DONE 守护状态 ──
     private var doneBadLevelFrames = 0
@@ -98,8 +106,12 @@ class GuidanceStepSequencer {
         levelGoodFrames = 0
         levelNoSignalFrames = 0
         subjectAlignedFrames = 0
+        subjectBadLevelFrames = 0
         doneBadLevelFrames = 0
         doneSubjectLostFrames = 0
+        displayedCue = GuidanceCue.NONE
+        candidateCue = GuidanceCue.NONE
+        candidateCueFrames = 0
     }
 
     /** 用户手动变焦（捏合/滑杆）→ 取消本次自动变焦，直接进入下一步 */
@@ -123,22 +135,80 @@ class GuidanceStepSequencer {
         }
         if (stepStartMs < 0) stepStartMs = input.nowMs
         val safeProgress = rawProgress.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0f
+        val stepBefore = step
         val result = when (step) {
             GuidanceStep.ZOOM -> handleZoom(input)
             GuidanceStep.LEVEL -> handleLevel(input, safeProgress)
             GuidanceStep.SUBJECT -> handleSubject(input, rawCue, safeProgress)
             GuidanceStep.DONE -> handleDone(input, rawCue, safeProgress)
         }
+        val cue = when {
+            step != stepBefore -> {
+                // 步骤切换的当帧直接采用新指令，避免新步骤的前 3 帧没有提示。
+                displayedCue = result.cue
+                candidateCue = GuidanceCue.NONE
+                candidateCueFrames = 0
+                result.cue
+            }
+            step == GuidanceStep.DONE -> {
+                // DONE 之后出现的指令通常是真的需要修正，直接显示；
+                // 水平回退仍有 4 帧守护，不会因为一次手抖打回上一步。
+                displayedCue = result.cue
+                candidateCue = GuidanceCue.NONE
+                candidateCueFrames = 0
+                result.cue
+            }
+            else -> latchCue(result.cue)
+        }
         // Completing LEVEL is not evidence that the whole composition is ready.
         // Filtered-away cues must not turn a partial step into global ALIGNED.
         val progress = minOf(result.progress, safeProgress,
             if (result.step == GuidanceStep.DONE) 1f else 0.7f)
         return result.copy(
+            cue = cue,
             progress = if (input.expectsSubject && !input.hasSubject) 0f else progress,
             hint = if (result.step == GuidanceStep.DONE && progress < 0.95f &&
                 result.cue != GuidanceCue.DEVICE_UPSIDE_DOWN)
                 "可继续调整取景，随时可以拍摄" else result.hint
         )
+    }
+
+    /**
+     * 同一时间只显示一条稳定指令。方向抖动必须连续 [CUE_LATCH_FRAMES] 帧
+     * 才允许换文案/箭头，避免画面引导左右横跳。
+     */
+    private fun latchCue(next: GuidanceCue): GuidanceCue {
+        if (next == GuidanceCue.DEVICE_UPSIDE_DOWN) {
+            displayedCue = next
+            candidateCue = GuidanceCue.NONE
+            candidateCueFrames = 0
+            return next
+        }
+        // 新步骤的第一条有效指令立即出现，避免端平后空等 3 帧；
+        // 只有“已有指令 → 另一条指令”的切换需要连续确认。
+        if (displayedCue == GuidanceCue.NONE && next != GuidanceCue.NONE) {
+            displayedCue = next
+            candidateCue = GuidanceCue.NONE
+            candidateCueFrames = 0
+            return next
+        }
+        if (next == displayedCue) {
+            candidateCue = GuidanceCue.NONE
+            candidateCueFrames = 0
+            return displayedCue
+        }
+        if (next == candidateCue) {
+            candidateCueFrames++
+        } else {
+            candidateCue = next
+            candidateCueFrames = 1
+        }
+        if (candidateCueFrames >= CUE_LATCH_FRAMES) {
+            displayedCue = next
+            candidateCue = GuidanceCue.NONE
+            candidateCueFrames = 0
+        }
+        return displayedCue
     }
 
     // ─────────────────────────────────────────────────────────
@@ -171,7 +241,12 @@ class GuidanceStepSequencer {
 
         // 2. 决策（样本足够，或采样窗口结束——含无主体/非人像场景）
         var zoomTarget: Float? = null
-        if (!zoomDecisionDone && (enoughSamples || sampleWindowOver)) {
+        // Retrieval/structure confirmation may arrive after the first 600 ms.
+        // Wait a bounded window for a real reference instead of irrevocably
+        // deciding "no zoom" before its size is available.
+        val hasReferenceSize = input.targetSubjectHeightFraction?.let { it.isFinite() && it in .02f.. .98f } == true
+        if (!zoomDecisionDone && ((hasReferenceSize && (enoughSamples || sampleWindowOver)) ||
+                elapsed >= REFERENCE_WAIT_MS || zoomUserCancelled)) {
             zoomDecisionDone = true
             val target = decideZoomTarget(input)
             if (target != null && abs(target - input.currentZoomRatio) >= ZOOM_MIN_CHANGE) {
@@ -237,7 +312,6 @@ class GuidanceStepSequencer {
     // ─────────────────────────────────────────────────────────
 
     /** 水平策略（集中配置，替代散落的魔法数字） */
-    private val horizonPolicy = HorizonPolicy()
 
     private fun handleLevel(input: Input, rawProgress: Float): Output {
         val angle = input.horizonAngleDeg?.takeIf { it.isFinite() }
@@ -274,7 +348,8 @@ class GuidanceStepSequencer {
             return Output(step, GuidanceCue.NONE, progress, null, hintFor(input, step))
         }
 
-        levelGoodFrames = 0
+        // 进入 6°–9° 的迟滞带：保留已有稳定帧，不让一次手抖把进度清零。
+        if (absAngle > horizonPolicy.exitLevelToleranceDeg) levelGoodFrames = 0
         val cue = if (angle > 0) GuidanceCue.ROLL_COUNTERCLOCKWISE else GuidanceCue.ROLL_CLOCKWISE
         // ★ 使用 exitLevelToleranceDeg 而非旧 LEVEL_REF_DEG 计算进度
         val progress = (1f - (absAngle - horizonPolicy.enterLevelToleranceDeg) /
@@ -287,13 +362,30 @@ class GuidanceStepSequencer {
     // ─────────────────────────────────────────────────────────
 
     private fun handleSubject(input: Input, rawCue: GuidanceCue, rawProgress: Float): Output {
-        // Re-framing can tilt the phone after LEVEL has completed. Do not hide
-        // the only actionable correction until the subject step can complete.
+        // Re-framing can tilt the phone after LEVEL has completed. A single
+        // shaky frame must not throw the user back to LEVEL; require a short
+        // sustained regression before changing the instruction.
         val angle = input.horizonAngleDeg?.takeIf { it.isFinite() }
-        if (angle != null && (abs(angle) > horizonPolicy.exitLevelToleranceDeg ||
-            (input.isUpright == false && abs(angle) <= horizonPolicy.upsideDownToleranceDeg))) {
+        val upsideDown = angle != null && input.isUpright == false &&
+            abs(angle) <= horizonPolicy.upsideDownToleranceDeg
+        val severeTilt = angle != null && abs(angle) >= SEVERE_TILT_DEG
+        val tilted = angle != null && abs(angle) > horizonPolicy.exitLevelToleranceDeg
+        if (upsideDown || severeTilt) {
+            // 倒置或明显歪斜属于安全问题，立即回到水平步骤；
+            // 9°–14° 的轻微回摆则先保持当前主体指令，避免手抖把步骤打回去。
             advanceTo(GuidanceStep.LEVEL, input.nowMs)
             return handleLevel(input, rawProgress)
+        }
+        if (tilted) {
+            subjectBadLevelFrames++
+            if (subjectBadLevelFrames >= DONE_REGRESS_FRAMES) {
+                advanceTo(GuidanceStep.LEVEL, input.nowMs)
+                return handleLevel(input, rawProgress)
+            }
+            // 迟滞带内保持当前主体指令，但不允许推进到 DONE。
+            return Output(step, rawCue, rawProgress.coerceAtMost(0.7f), null, hintFor(input, step))
+        } else {
+            subjectBadLevelFrames = 0
         }
         // 模板不要主体（风景/静物）：本步无意义，停留最短时长后通过
         if (!input.expectsSubject &&
@@ -303,7 +395,11 @@ class GuidanceStepSequencer {
             return Output(step, rawCue, rawProgress, null, hintFor(input, step))
         }
 
-        if (rawCue == GuidanceCue.SUBJECT_ALIGNED) {
+        // 几何层有时给 NONE 但进度已接近满分；这同样表示主体到位，
+        // 不能因为没有显式 SUBJECT_ALIGNED 就永远停在 SUBJECT 步。
+        val effectivelyAligned = rawCue == GuidanceCue.SUBJECT_ALIGNED ||
+            (rawCue == GuidanceCue.NONE && rawProgress >= 0.90f)
+        if (effectivelyAligned) {
             subjectAlignedFrames++
             if (subjectAlignedFrames >= SUBJECT_ALIGNED_FRAMES &&
                 input.nowMs - stepStartMs >= MIN_STEP_DWELL_MS
@@ -311,14 +407,18 @@ class GuidanceStepSequencer {
                 advanceTo(GuidanceStep.DONE, input.nowMs)
                 return Output(step, rawCue, rawProgress, null, hintFor(input, step))
             }
-        } else {
-            subjectAlignedFrames = 0
+        } else if (subjectAlignedFrames > 0) {
+            // 手持时 AI 偶尔一帧判成未对齐；不要因此把稳定帧全部清零，
+            // 连续两帧偏离才会回到 0，避免“稍微动一下就永远等不到 DONE”。
+            subjectAlignedFrames--
         }
 
         // 只放行主体相关指令（ROLL 在上一步已解决；万一又歪了，DONE 守护会管）
         val cue = when (rawCue) {
             GuidanceCue.MOVE_LEFT, GuidanceCue.MOVE_RIGHT,
             GuidanceCue.MOVE_UP, GuidanceCue.MOVE_DOWN,
+            GuidanceCue.MOVE_UP_LEFT, GuidanceCue.MOVE_UP_RIGHT,
+            GuidanceCue.MOVE_DOWN_LEFT, GuidanceCue.MOVE_DOWN_RIGHT,
             GuidanceCue.PITCH_UP, GuidanceCue.PITCH_DOWN,
             GuidanceCue.YAW_LEFT, GuidanceCue.YAW_RIGHT,
             GuidanceCue.SUBJECT_TARGET, GuidanceCue.SUBJECT_ALIGNED -> rawCue
@@ -368,9 +468,18 @@ class GuidanceStepSequencer {
         step = next
         stepStartMs = nowMs
         when (next) {
-            GuidanceStep.LEVEL -> { levelGoodFrames = 0; levelNoSignalFrames = 0 }
-            GuidanceStep.SUBJECT -> subjectAlignedFrames = 0
-            GuidanceStep.DONE -> { doneBadLevelFrames = 0; doneSubjectLostFrames = 0 }
+            GuidanceStep.LEVEL -> {
+                levelGoodFrames = 0; levelNoSignalFrames = 0
+                displayedCue = GuidanceCue.NONE; candidateCue = GuidanceCue.NONE; candidateCueFrames = 0
+            }
+            GuidanceStep.SUBJECT -> {
+                subjectAlignedFrames = 0; subjectBadLevelFrames = 0
+                displayedCue = GuidanceCue.NONE; candidateCue = GuidanceCue.NONE; candidateCueFrames = 0
+            }
+            GuidanceStep.DONE -> {
+                doneBadLevelFrames = 0; doneSubjectLostFrames = 0
+                displayedCue = GuidanceCue.NONE; candidateCue = GuidanceCue.NONE; candidateCueFrames = 0
+            }
             GuidanceStep.ZOOM -> reset(nowMs)
         }
     }
@@ -392,7 +501,9 @@ class GuidanceStepSequencer {
 
         /** 变焦采样帧数 / 采样窗口 */
         const val ZOOM_SAMPLE_COUNT = 8
-        const val ZOOM_SAMPLE_WINDOW_MS = 900L
+        const val ZOOM_SAMPLE_WINDOW_MS = 600L
+        /** Allow asynchronous reference detection, without a full 2.5 s empty wait. */
+        const val REFERENCE_WAIT_MS = 1_500L
 
         /** 小于该倍率变化不值得动变焦（用户感知不到） */
         const val ZOOM_MIN_CHANGE = 0.12f
@@ -401,7 +512,7 @@ class GuidanceStepSequencer {
         const val ZOOM_SETTLE_MS = 250L
 
         /** ZOOM 步最长停留（兜底前进，绝卡死） */
-        const val ZOOM_STEP_TIMEOUT_MS = 4_500L
+        const val ZOOM_STEP_TIMEOUT_MS = 2_500L
 
         /**
          * 每步最短停留。
@@ -410,13 +521,19 @@ class GuidanceStepSequencer {
          * 最佳情况下单这一项就要 2.1s。压到 200ms —— 仍足够让状态文案被感知，
          * 不会一闪而过，但不再是主导耗时的部分。
          */
-        const val MIN_STEP_DWELL_MS = 200L
+        const val MIN_STEP_DWELL_MS = 450L
+
+        /** 同一方向指令至少连续出现多少帧才切换，防止箭头/文案左右横跳 */
+        const val CUE_LATCH_FRAMES = 3
+
+        /** 主体步骤中超过该角度视为明显歪斜，立即回到水平步骤 */
+        const val SEVERE_TILT_DEG = 14f
 
         /** 无传感器信号跳过帧数 */
         const val LEVEL_NO_SIGNAL_SKIP_FRAMES = 30
 
         /** 主体对齐稳定帧数 */
-        const val SUBJECT_ALIGNED_FRAMES = 4
+        const val SUBJECT_ALIGNED_FRAMES = 3
 
         /** DONE 回退帧数 */
         const val DONE_REGRESS_FRAMES = 4

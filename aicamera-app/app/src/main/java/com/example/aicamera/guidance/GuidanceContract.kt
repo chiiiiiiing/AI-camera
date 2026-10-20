@@ -14,6 +14,10 @@ enum class GuidanceCue {
     MOVE_RIGHT,
     MOVE_UP,
     MOVE_DOWN,
+    MOVE_UP_LEFT,
+    MOVE_UP_RIGHT,
+    MOVE_DOWN_LEFT,
+    MOVE_DOWN_RIGHT,
     PITCH_UP,
     PITCH_DOWN,
     YAW_LEFT,
@@ -76,4 +80,5 @@ data class GuidanceState(
     val anchors: GuidanceAnchors? = null,
     val stableFrameCount: Int = 0,
     val unstableFrameCount: Int = 0,
+    val trackingPaused: Boolean = false,
 )

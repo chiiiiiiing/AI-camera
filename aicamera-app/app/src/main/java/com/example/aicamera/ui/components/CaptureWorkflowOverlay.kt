@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -44,6 +45,7 @@ import androidx.compose.ui.unit.sp
 import com.example.aicamera.guidance.GuidanceCue
 import com.example.aicamera.guidance.GuidancePhase
 import com.example.aicamera.guidance.geometry.HorizonPolicy
+import com.example.aicamera.guidance.geometry.GuidanceGeometry
 import com.example.aicamera.overlay.model.GuideLine
 import com.example.aicamera.overlay.model.GuideLineParser
 import com.example.aicamera.overlay.model.GuideLineType
@@ -83,6 +85,7 @@ fun CaptureWorkflowOverlay(
     cue: GuidanceCue?,
     phase: GuidancePhase,
     feedbackHint: String? = null,
+    analysisHint: String? = null,
     targetNx: Float? = null,
     targetNy: Float? = null,
     horizonAngleDeg: Float? = null,
@@ -104,17 +107,10 @@ fun CaptureWorkflowOverlay(
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         // IDLE 也绘制辅助线：AI/几何检测到的目标区、主体框应当在取景时就能看到，
         // 而不是必须按下快门进入引导后才出现（否则用户会觉得 AI 没有任何作用）。
+        // ANALYZING 只保留辐射动画和一句话，不提前堆叠目标框/三分线。
         if (state != CaptureWorkflowState.CAPTURING && state != CaptureWorkflowState.SAVED) {
             WorkflowGuideLines(state, cue, horizonAngleDeg, guideLines,
                 showGrid, showSubjectBox, showTargetZone, showHorizon, overlayAlpha, poseGuide)
-        }
-        if (state != CaptureWorkflowState.IDLE) {
-            WorkflowProgress(
-                state = state,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 108.dp)
-            )
         }
 
         // ── 阶段 1：分析中 ──
@@ -123,7 +119,7 @@ fun CaptureWorkflowOverlay(
             enter = fadeIn(tween(400)),
             exit = fadeOut(tween(300))
         ) {
-            AnalyzingOverlay()
+            AnalyzingOverlay(analysisHint ?: "正在分析构图")
         }
 
         // ── 阶段 2：手动旋转 ──
@@ -132,7 +128,11 @@ fun CaptureWorkflowOverlay(
             enter = fadeIn(tween(300)),
             exit = fadeOut(tween(200))
         ) {
-            RotatingOverlay(horizonAngleDeg = horizonAngleDeg, cue = cue)
+            RotatingOverlay(
+                horizonAngleDeg = horizonAngleDeg,
+                cue = cue,
+                bottomBarHeight = bottomBarHeight,
+            )
         }
 
         // ── 阶段 2.5：设备倒置 ──
@@ -248,44 +248,20 @@ private fun WorkflowGuideLines(
                         val zone = GuideLineParser.parseTargetZone(line.params)
                         val cx = zone.centerX * size.width
                         val cy = zone.centerY * size.height
-                        val half = zone.radius * size.minDimension
-                        drawRoundRect(
-                            color = BrandPink.copy(alpha = opacity),
-                            topLeft = Offset(cx - half, cy - half),
-                            size = Size(half * 2, half * 2),
-                            cornerRadius = CornerRadius(6.dp.toPx()),
+                        val radius = GuidanceGeometry.effectiveTargetRadius(zone.radius) * size.minDimension
+                        drawCircle(
+                            color = Color(0xFFCAA2FF).copy(alpha = opacity),
+                            radius = radius,
+                            center = Offset(cx, cy),
                             style = Stroke(
                                 width = 2.dp.toPx(),
                                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 5.dp.toPx()))
                             )
                         )
-                        drawCircle(BrandPink.copy(alpha = opacity), 3.dp.toPx(), Offset(cx, cy))
                     }
                     else -> Unit
                 }
             }
-        }
-        // 推荐取景范围：只要进入引导阶段就画出来，不依赖是否存在目标圈。
-        // 风景等无主体场景没有 target_zone，但用户仍需要看到"推荐的画面范围"。
-        if (showTargetZone &&
-            state in listOf(CaptureWorkflowState.GUIDING, CaptureWorkflowState.READY)
-        ) {
-            val left = size.width * 0.10f
-            val top = size.height * 0.12f
-            val right = size.width * 0.90f
-            val bottom = size.height * 0.80f
-            drawRoundRect(
-                color = Color.White.copy(alpha = opacity * 0.45f),
-                topLeft = Offset(left, top),
-                size = Size(right - left, bottom - top),
-                cornerRadius = CornerRadius(18.dp.toPx()),
-                style = Stroke(
-                    width = 1.5.dp.toPx(),
-                    pathEffect = PathEffect.dashPathEffect(
-                        floatArrayOf(10.dp.toPx(), 8.dp.toPx())
-                    )
-                )
-            )
         }
         if (showHorizon && state == CaptureWorkflowState.ROTATING &&
             cue in listOf(GuidanceCue.ROLL_CLOCKWISE, GuidanceCue.ROLL_COUNTERCLOCKWISE) &&
@@ -379,79 +355,12 @@ private fun DrawScope.drawPoseTargetSilhouette(color: Color) {
     )
 }
 
-@Composable
-private fun WorkflowProgress(state: CaptureWorkflowState, modifier: Modifier = Modifier) {
-    val activeStep = when (state) {
-        CaptureWorkflowState.ANALYZING -> 0
-        CaptureWorkflowState.ROTATING,
-        CaptureWorkflowState.GUIDING,
-        CaptureWorkflowState.NO_SUBJECT,
-        CaptureWorkflowState.UPSIDE_DOWN -> 1
-        else -> 2
-    }
-    val finalReady = state == CaptureWorkflowState.READY ||
-        state == CaptureWorkflowState.CAPTURING ||
-        state == CaptureWorkflowState.SAVED
-    val statusText = when (state) {
-        CaptureWorkflowState.ANALYZING -> "正在识别主体与构图"
-        CaptureWorkflowState.ROTATING -> "第 1 步：调整手机姿态"
-        CaptureWorkflowState.GUIDING -> "第 2 步：移动主体到目标"
-        CaptureWorkflowState.NO_SUBJECT -> "请先让人物进入画面"
-        CaptureWorkflowState.UPSIDE_DOWN -> "请先翻转手机"
-        CaptureWorkflowState.READY -> "构图达标，保持稳定"
-        CaptureWorkflowState.CAPTURING -> "正在拍摄"
-        CaptureWorkflowState.SAVED -> "照片已保存"
-        else -> ""
-    }
-    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Canvas(modifier = Modifier.size(220.dp, 22.dp)) {
-            val y = size.height / 2f
-            val xs = listOf(size.width * 0.12f, size.width * 0.50f, size.width * 0.88f)
-            drawLine(
-                Color.White.copy(alpha = 0.24f),
-                Offset(xs.first(), y),
-                Offset(xs.last(), y),
-                3.dp.toPx(),
-                StrokeCap.Round
-            )
-            if (activeStep > 0) {
-                drawLine(
-                    GuideAligned,
-                    Offset(xs.first(), y),
-                    Offset(xs[activeStep], y),
-                    3.dp.toPx(),
-                    StrokeCap.Round
-                )
-            }
-            xs.forEachIndexed { index, x ->
-                val completed = index < activeStep || (finalReady && index <= activeStep)
-                val active = index == activeStep
-                drawCircle(
-                    color = when {
-                        completed -> GuideAligned
-                        active -> BrandPink
-                        else -> Color.White.copy(alpha = 0.32f)
-                    },
-                    radius = if (active) 7.dp.toPx() else 5.dp.toPx(),
-                    center = Offset(x, y)
-                )
-            }
-        }
-        Text(
-            text = statusText,
-            color = if (finalReady) GuideAligned else Color.White.copy(alpha = 0.82f),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium
-        )
-    }
-}
-
 // ═══════════════════════════════════════════════════════════════
 // 分析波纹（同上版，保留）
 // ═══════════════════════════════════════════════════════════════
 
 @Composable
-private fun AnalyzingOverlay() {
+private fun AnalyzingOverlay(hint: String) {
     val infinite = rememberInfiniteTransition(label = "analyze")
     val progress by infinite.animateFloat(
         initialValue = 0f,
@@ -486,18 +395,10 @@ private fun AnalyzingOverlay() {
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = "正在分析构图",
+                text = hint,
                 color = Color.White.copy(alpha = 0.92f),
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = "请保持画面稳定",
-                color = Color.White.copy(alpha = 0.55f),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Normal,
                 textAlign = TextAlign.Center
             )
         }
@@ -517,6 +418,12 @@ private fun CenterPointGuidance(
     aligned: Boolean,
     bottomBarHeight: Dp = 0.dp
 ) {
+    val animatedSubjectX by androidx.compose.animation.core.animateFloatAsState(subjectNx, tween(60, easing = LinearEasing), label = "subject_x")
+    val animatedSubjectY by androidx.compose.animation.core.animateFloatAsState(subjectNy, tween(60, easing = LinearEasing), label = "subject_y")
+    val labelPaint = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = android.graphics.Typeface.DEFAULT_BOLD
+        setShadowLayer(4f, 0f, 1f, android.graphics.Color.BLACK)
+    } }
     val infinite = rememberInfiniteTransition(label = "guide_dot")
     val pulse by infinite.animateFloat(
         initialValue = 0.55f,
@@ -530,14 +437,14 @@ private fun CenterPointGuidance(
 
     Box(contentAlignment = Alignment.Center) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val sx = subjectNx * size.width
-            val sy = subjectNy * size.height
+            val sx = animatedSubjectX * size.width
+            val sy = animatedSubjectY * size.height
             val tx = targetNx * size.width  // 构图目标位置
             val ty = targetNy * size.height
 
-            val lineColor = if (aligned) GuideAligned else BrandPink
-            val dotColor = if (aligned) GuideAligned else BrandPink
-            val targetColor = if (aligned) GuideAligned else BrandPink
+            val lineColor = Color.White.copy(alpha = .7f)
+            val dotColor = Color(0xFF43E1D0)
+            val targetColor = if (aligned) GuideAligned else Color(0xFFCAA2FF)
 
             // ── 虚线/实线箭头：主体中心(或画面中心) → 构图目标 ──
             val dashEffect = PathEffect.dashPathEffect(
@@ -551,6 +458,21 @@ private fun CenterPointGuidance(
                 cap = StrokeCap.Round,
                 pathEffect = if (aligned) null else dashEffect
             )
+            // Connector has no displacement arrow. This arrow follows the exact
+            // phone-motion cue used by the caption, including mirrored selfies.
+            val distance = kotlin.math.hypot(tx - sx, ty - sy)
+            val motion = GuidanceGeometry.phoneMovementVector(cue)
+            if (!aligned && motion != null && distance > 24.dp.toPx()) {
+                val length = kotlin.math.hypot(motion.first, motion.second)
+                val direction = Offset(motion.first / length, motion.second / length)
+                val normal = Offset(-direction.y, direction.x)
+                val middle = Offset((sx + tx) / 2f, (sy + ty) / 2f)
+                val tip = middle + direction * 14.dp.toPx()
+                val base = tip - direction * 9.dp.toPx()
+                drawLine(Color.White, middle - direction * 14.dp.toPx(), tip, 3.dp.toPx(), StrokeCap.Round)
+                drawLine(Color.White, base + normal * 5.dp.toPx(), tip, 3.dp.toPx(), StrokeCap.Round)
+                drawLine(Color.White, base - normal * 5.dp.toPx(), tip, 3.dp.toPx(), StrokeCap.Round)
+            }
 
             // ── 主体当前点（或画面中心）: 青绿色/绿色实心 + 呼吸外环 ──
             val centerR = 6.dp.toPx()
@@ -568,47 +490,75 @@ private fun CenterPointGuidance(
             drawCircle(Color.White.copy(alpha = 0.12f), targetR * 3.5f, Offset(tx, ty))
             drawCircle(targetColor.copy(alpha = pulse), targetR * (1f + 0.3f * pulse), Offset(tx, ty),
                 style = Stroke(width = 2.5.dp.toPx()))
-            drawCircle(targetColor, targetR * 0.6f, Offset(tx, ty))
+            fun label(text: String, x: Float, y: Float, color: Color) {
+                labelPaint.textSize = 12.sp.toPx()
+                labelPaint.color = android.graphics.Color.argb(255, (color.red * 255).toInt(),
+                    (color.green * 255).toInt(), (color.blue * 255).toInt())
+                val textWidth = labelPaint.measureText(text)
+                drawContext.canvas.nativeCanvas.drawText(text,
+                    (x - textWidth / 2).coerceIn(4.dp.toPx(), (size.width - textWidth - 4.dp.toPx()).coerceAtLeast(4.dp.toPx())),
+                    y.coerceIn(16.dp.toPx(), size.height - 8.dp.toPx()), labelPaint)
+            }
+            label("主体中心", sx, sy + 29.dp.toPx(), dotColor)
+            label("目标位置", tx, ty - 21.dp.toPx(), targetColor)
         }
 
         // 底部提示（抬高避开底部工具栏，加半透明深色圆角底提升亮场景可读性）
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = bottomBarHeight + 12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = feedbackHint ?: if (aligned) "位置已对齐，请保持稳定" else phoneMoveHint(cue),
-                color = if (aligned) GuideAligned else BrandPink,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center,
+        val hintText = feedbackHint ?: if (aligned) "构图就绪" else phoneMoveHint(cue)
+        if (hintText.isNotBlank()) {
+            Column(
                 modifier = Modifier
-                    .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            )
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = bottomBarHeight + 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = hintText,
+                    color = if (aligned) GuideAligned else BrandPink,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+                if (GuidanceGeometry.phoneMovementVector(cue) != null) Text(
+                    text = "箭头表示手机取景方向",
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    modifier = Modifier.background(Color.Black.copy(alpha = .45f), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                )
+            }
         }
     }
 }
 
 /** fallback：无 AI 目标位置时用简洁文字 */
 private fun phoneMoveHint(cue: GuidanceCue?): String = when (cue) {
-    GuidanceCue.MOVE_LEFT -> "手机稍向左移，让脸进入参考圆"
-    GuidanceCue.MOVE_RIGHT -> "手机稍向右移，让脸进入参考圆"
-    GuidanceCue.MOVE_UP -> "手机稍向上移，让脸进入参考圆"
-    GuidanceCue.MOVE_DOWN -> "手机稍向下移，让脸进入参考圆"
-    else -> "对照参考位置调整取景，随时可以拍摄"
+    GuidanceCue.MOVE_LEFT -> "手机稍向左移，让主体进入目标"
+    GuidanceCue.MOVE_RIGHT -> "手机稍向右移，让主体进入目标"
+    GuidanceCue.MOVE_UP -> "手机稍向上移，让主体进入目标"
+    GuidanceCue.MOVE_DOWN -> "手机稍向下移，让主体进入目标"
+    GuidanceCue.MOVE_UP_LEFT -> "↖ 手机稍向左上取景，让主体进入目标"
+    GuidanceCue.MOVE_UP_RIGHT -> "↗ 手机稍向右上取景，让主体进入目标"
+    GuidanceCue.MOVE_DOWN_LEFT -> "↙ 手机稍向左下取景，让主体进入目标"
+    GuidanceCue.MOVE_DOWN_RIGHT -> "↘ 手机稍向右下取景，让主体进入目标"
+    GuidanceCue.SUBJECT_TARGET -> "让主体进入目标框"
+    else -> ""
 }
 
 @Composable
 private fun FallbackGuidance(cue: GuidanceCue?, phase: GuidancePhase, feedbackHint: String? = null) {
     val hint = feedbackHint ?: when {
-        cue in listOf(GuidanceCue.MOVE_LEFT, GuidanceCue.MOVE_RIGHT, GuidanceCue.MOVE_UP, GuidanceCue.MOVE_DOWN) -> phoneMoveHint(cue)
-        phase == GuidancePhase.NEAR -> "接近中..."
+        cue in listOf(GuidanceCue.MOVE_LEFT, GuidanceCue.MOVE_RIGHT, GuidanceCue.MOVE_UP, GuidanceCue.MOVE_DOWN,
+            GuidanceCue.MOVE_UP_LEFT, GuidanceCue.MOVE_UP_RIGHT, GuidanceCue.MOVE_DOWN_LEFT, GuidanceCue.MOVE_DOWN_RIGHT) -> phoneMoveHint(cue)
+        phase == GuidancePhase.NEAR -> "接近目标"
         phase == GuidancePhase.WRONG_DIRECTION -> "方向相反，回一点"
-        else -> "可继续调整取景，随时可以拍摄"
+        else -> ""
     }
+    // 没有具体动作时不额外弹通用提示，减少画面文字。
+    if (hint.isBlank()) return
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             text = "●",
@@ -626,15 +576,19 @@ private fun FallbackGuidance(cue: GuidanceCue?, phase: GuidancePhase, feedbackHi
 // 旋转指引（用同学新图标替代旧弧形手绘代码）
 // ═══════════════════════════════════════════════════════════════
 
-/** ROTATING → GUIDING 的旋转容差（度），对齐 HorizonPolicy.enterLevelToleranceDeg */
-const val ROTATION_TOLERANCE_DEG = 4.0f  // 与 HorizonPolicy 入口容差一致，用户更易触发 READY
+/** ROTATING → GUIDING 的旋转容差（度），对齐 App 使用的手持进入容差 */
+const val ROTATION_TOLERANCE_DEG = 6.0f
 
 /** Figma 引导配色：水平/俯仰目标线用橙色，当前角度/移动箭头用品牌粉。 */
 private val GuideRollAccent = GuideWarning
 private val GuideMoveAccent = BrandPink
 
 @Composable
-private fun RotatingOverlay(horizonAngleDeg: Float?, cue: GuidanceCue?) {
+private fun RotatingOverlay(
+    horizonAngleDeg: Float?,
+    cue: GuidanceCue?,
+    bottomBarHeight: Dp = 0.dp,
+) {
     val isPitch = cue == GuidanceCue.PITCH_UP || cue == GuidanceCue.PITCH_DOWN
     val isYaw = cue == GuidanceCue.YAW_LEFT || cue == GuidanceCue.YAW_RIGHT
     val rollAligned = horizonAngleDeg != null &&
@@ -658,7 +612,7 @@ private fun RotatingOverlay(horizonAngleDeg: Float?, cue: GuidanceCue?) {
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 188.dp)
+                .padding(bottom = bottomBarHeight + 12.dp)
                 .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
                 .padding(horizontal = 14.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -891,7 +845,7 @@ private fun ReadyOverlay(targetNx: Float? = null, targetNy: Float? = null) {
             )
             Spacer(modifier = Modifier.height(10.dp))
             Text(
-                text = "保持不动 · 即将拍摄",
+                text = "构图就绪 · 即将拍摄",
                 color = GuideAligned.copy(alpha = pulse),
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium
@@ -947,12 +901,6 @@ private fun CaptureStatusOverlay(saved: Boolean) {
                 color = if (saved) GuideAligned else Color.White,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold
-            )
-            Spacer(modifier = Modifier.height(5.dp))
-            Text(
-                text = if (saved) "正在生成构图结果" else "请保持手机稳定，正在处理照片",
-                color = Color.White.copy(alpha = 0.68f),
-                fontSize = 13.sp
             )
         }
     }

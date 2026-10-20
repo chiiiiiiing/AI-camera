@@ -2,6 +2,7 @@ package com.example.aicamera.ui.screen
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -148,9 +149,8 @@ fun LoginScreen(
         ) {
             Text(
                 text = "登录",
+                style = com.example.aicamera.ui.theme.GenWowTokens.Typography.Heading,
                 color = BrandOnSurface,
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Bold,
             )
 
             Spacer(modifier = Modifier.height(38.dp))
@@ -261,22 +261,42 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(34.dp))
 
-            Text(
-                text = "第三方账号登录",
-                color = BrandOnSurfaceMuted,
-                fontSize = 12.sp,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .height(1.dp)
+                        .background(BrandOnSurfaceMuted.copy(alpha = .25f))
+                )
+                Text(
+                    text = "第三方账号登录",
+                    color = BrandOnSurfaceMuted,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                )
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .height(1.dp)
+                        .background(BrandOnSurfaceMuted.copy(alpha = .25f))
+                )
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) {
-                WeChatIcon(
-                    modifier = Modifier.size(36.dp),
-                    tint = BrandPurple,
+                Image(
+                    painter = painterResource(R.drawable.ic_wechat),
+                    contentDescription = "微信登录",
+                    modifier = Modifier.size(34.dp),
                 )
-                QQIcon(
-                    modifier = Modifier.size(36.dp),
-                    tint = BrandPurple,
+                Image(
+                    painter = painterResource(R.drawable.ic_qq),
+                    contentDescription = "QQ 登录",
+                    modifier = Modifier.size(34.dp),
                 )
             }
 
@@ -290,66 +310,6 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
         }
-    }
-}
-
-// ── 第三方登录占位图标（无实际 SDK 接入） ────────────────────────
-
-@Composable
-private fun WeChatIcon(modifier: Modifier = Modifier, tint: Color) {
-    Canvas(modifier) {
-        val stroke = Stroke(1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-        // 两个对话气泡
-        drawCircle(tint, 8.5.dp.toPx(), Offset(size.width * 0.35f, size.height * 0.42f), style = stroke)
-        drawCircle(tint, 7.dp.toPx(), Offset(size.width * 0.68f, size.height * 0.58f), style = stroke)
-        // 小尾巴
-        val tail1 = Path().apply {
-            moveTo(size.width * 0.28f, size.height * 0.48f)
-            lineTo(size.width * 0.20f, size.height * 0.58f)
-            lineTo(size.width * 0.34f, size.height * 0.54f)
-        }
-        val tail2 = Path().apply {
-            moveTo(size.width * 0.74f, size.height * 0.64f)
-            lineTo(size.width * 0.82f, size.height * 0.72f)
-            lineTo(size.width * 0.70f, size.height * 0.70f)
-        }
-        drawPath(tail1, tint, style = stroke)
-        drawPath(tail2, tint, style = stroke)
-    }
-}
-
-@Composable
-private fun QQIcon(modifier: Modifier = Modifier, tint: Color) {
-    Canvas(modifier) {
-        val stroke = Stroke(1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-        // 企鹅简笔：头部圆 + 身椭圆 + 两翼
-        drawCircle(tint, 7.dp.toPx(), Offset(size.width * 0.5f, size.height * 0.36f), style = stroke)
-        drawRoundRect(
-            tint,
-            topLeft = Offset(size.width * 0.32f, size.height * 0.46f),
-            size = Size(size.width * 0.36f, size.height * 0.42f),
-            cornerRadius = CornerRadius(8.dp.toPx()),
-            style = stroke,
-        )
-        // 翅膀
-        drawArc(
-            tint,
-            startAngle = 140f,
-            sweepAngle = 80f,
-            useCenter = false,
-            topLeft = Offset(size.width * 0.12f, size.height * 0.48f),
-            size = Size(size.width * 0.18f, size.height * 0.28f),
-            style = stroke,
-        )
-        drawArc(
-            tint,
-            startAngle = 320f,
-            sweepAngle = 80f,
-            useCenter = false,
-            topLeft = Offset(size.width * 0.70f, size.height * 0.48f),
-            size = Size(size.width * 0.18f, size.height * 0.28f),
-            style = stroke,
-        )
     }
 }
 

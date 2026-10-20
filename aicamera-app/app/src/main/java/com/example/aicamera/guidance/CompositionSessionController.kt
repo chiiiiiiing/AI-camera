@@ -28,7 +28,9 @@ import kotlin.math.abs
  * - 控制器：接收 FrameObservation → 判断状态 → 输出 GuidanceAction
  * - UI：渲染 state + action，不包含业务 while 循环或状态过渡逻辑
  */
-class CompositionSessionController {
+class CompositionSessionController(
+    private val horizonPolicy: HorizonPolicy = HorizonPolicy()
+) {
 
     /** 统一会话状态 */
     sealed interface State {
@@ -74,6 +76,10 @@ class CompositionSessionController {
         data object MoveRight : GuidanceAction
         data object MoveUp : GuidanceAction
         data object MoveDown : GuidanceAction
+        data object MoveUpLeft : GuidanceAction
+        data object MoveUpRight : GuidanceAction
+        data object MoveDownLeft : GuidanceAction
+        data object MoveDownRight : GuidanceAction
         data object DeviceUpsideDown : GuidanceAction
         data object Ready : GuidanceAction
     }
@@ -128,7 +134,15 @@ class CompositionSessionController {
         val rollObservable: Boolean = true,
         val executionQuality: ExecutionQualityEvidence? = null,
         /** Enabled by the real model path; legacy/fake geometry fixtures cannot invent image evidence. */
-        val executionQualityRequired: Boolean = false
+        val executionQualityRequired: Boolean = false,
+        /** A bounded camera operation, not a second composition-readiness verdict. */
+        val zoomInProgress: Boolean = false,
+        /** Preserve visual direction briefly, but revoke every automatic capture lease. */
+        val trackingPaused: Boolean = false,
+        val visualPositionAvailable: Boolean = false,
+        val visualPositionSampledAtMs: Long = -1L,
+        /** Production position guidance uses the visible target's one-second dwell policy. */
+        val targetDwellCapture: Boolean = false
     )
 
     private val _state = MutableStateFlow<State>(State.Idle)
@@ -137,7 +151,6 @@ class CompositionSessionController {
     private val _action = MutableStateFlow<GuidanceAction>(GuidanceAction.HoldStill)
     val action: StateFlow<GuidanceAction> = _action.asStateFlow()
 
-    private val horizonPolicy = HorizonPolicy()
     private val _decision = MutableStateFlow(GuidanceDecision(GuidanceAction.HoldStill, null, null,
         GuidanceFeedback.INSUFFICIENT_EVIDENCE, 0))
     val decision: StateFlow<GuidanceDecision> = _decision.asStateFlow()
@@ -154,6 +167,7 @@ class CompositionSessionController {
     private var replanned = false
     private var pausedTarget: String? = null
     private var pausedAtMs: Long = 0L
+    private var readyGraceFrames = 0
     private var lastTimestamp = -1L
     private var lastTrackingId: Int? = null
     private var lastAcceptedAt = -1L
@@ -161,6 +175,7 @@ class CompositionSessionController {
     private val executionGuard = ExecutionQualityGuard()
     private var lastExecutionId = -1L
     private var lastCaptureEvidence: FrameObservation? = null
+    private val targetDwell = TargetDwellGate()
 
 
     // ── 滞回状态 ──
@@ -198,6 +213,13 @@ class CompositionSessionController {
     /** Called again after asynchronous AF/AE. Ready is a lease on live evidence, not a latch. */
     fun confirmReadyForCapture(nowMs:Long):Boolean {
         val obs=lastCaptureEvidence
+        if (obs?.targetDwellCapture == true) {
+            val valid = _state.value is State.Ready && dwellEvidenceValid(obs, nowMs) &&
+                GuidanceGeometry.isSubjectAligned(obs.subjectCx, obs.subjectCy, obs.targetCx, obs.targetCy,
+                    obs.targetTolerance, obs.coordinateAspectRatio)
+            if (!valid) { targetDwell.reset(); hold(obs.copy(timestampMs = nowMs), GuidanceFeedback.INSUFFICIENT_EVIDENCE) }
+            return valid
+        }
         val subjectAge=if(obs?.observedAnchorKind==ObservedAnchorKind.OBJECT)1500L else 750L
         fun fresh(time:Long,maxAge:Long)=nowMs>=time && nowMs-time<=maxAge
         val valid=_state.value is State.Ready && obs!=null && fresh(obs.timestampMs,750) && fresh(obs.imuSampledAtMs,1500) &&
@@ -205,6 +227,78 @@ class CompositionSessionController {
             (!obs.executionQualityRequired || obs.executionQuality?.isFresh(nowMs)==true)
         if(!valid && _state.value is State.Ready && obs!=null)hold(obs.copy(timestampMs=nowMs),GuidanceFeedback.INSUFFICIENT_EVIDENCE)
         return valid
+    }
+
+    private fun dwellEvidenceValid(obs: FrameObservation, now: Long): Boolean {
+        val sampledAt = if (obs.visualPositionAvailable) obs.visualPositionSampledAtMs else obs.subjectSampledAtMs
+        val positionValid = (obs.visualPositionAvailable || (obs.hasRealSubject && obs.subjectObservationId > 0 &&
+            (obs.observedAnchorKind != ObservedAnchorKind.FACE || obs.faceCount == 1))) &&
+            now >= sampledAt && now - sampledAt <= 750 && obs.targetViewportVersion == obs.viewportVersion
+        val requireRoll = obs.observedAnchorKind != ObservedAnchorKind.OBJECT || obs.rollObservable
+        val roll = obs.rawRollDegrees ?: obs.rollDegrees
+        val levelValid = !requireRoll || (obs.isUpright == true && roll?.isFinite() == true &&
+            abs(roll) <= horizonPolicy.enterLevelToleranceDeg)
+        val poseValid = listOf(GuidanceGeometry.angleDelta(obs.pitchDegrees, obs.pitchTargetDegrees) to GuidanceGeometry.PITCH_THRESHOLD_DEG,
+            GuidanceGeometry.angleDelta(obs.yawDegrees, obs.yawTargetDegrees) to GuidanceGeometry.YAW_THRESHOLD_DEG)
+            .all { (delta, tolerance) -> delta == null || abs(delta) <= tolerance }
+        return positionValid && !obs.zoomInProgress && levelValid && poseValid && obs.imuObservationId > 0 &&
+            now >= obs.imuSampledAtMs && now - obs.imuSampledAtMs <= 1500 &&
+            now >= obs.timestampMs && now - obs.timestampMs <= 750
+    }
+
+    /** Shared by detector and image-tracker positions; cached positions never accumulate time. */
+    private fun observeTargetDwell(obs: FrameObservation): Boolean {
+        if (!GuidanceGeometry.isValidTarget(obs.targetCx, obs.targetCy, obs.targetTolerance) ||
+            (!obs.hasRealSubject && !obs.visualPositionAvailable)) {
+            targetDwell.reset()
+            lastCaptureEvidence = null
+            return false
+        }
+        val valid = dwellEvidenceValid(obs, obs.timestampMs)
+        val inside = valid && GuidanceGeometry.isSubjectAligned(obs.subjectCx, obs.subjectCy,
+            obs.targetCx, obs.targetCy, obs.targetTolerance, obs.coordinateAspectRatio)
+        val sampledAt = if (obs.visualPositionAvailable) obs.visualPositionSampledAtMs else obs.subjectSampledAtMs
+        val ready = targetDwell.update("${obs.viewportVersion}:${obs.targetId}:${obs.targetCx}:${obs.targetCy}:${obs.targetTolerance}",
+            sampledAt, obs.timestampMs, inside)
+        val roll = obs.rawRollDegrees ?: obs.rollDegrees
+        val requireRoll = obs.observedAnchorKind != ObservedAnchorKind.OBJECT || obs.rollObservable
+        val cue = GuidanceGeometry.guidanceCue(obs.subjectCx, obs.subjectCy, true,
+            obs.targetCx!!, obs.targetCy!!, obs.targetTolerance,
+            horizonAngleDeg = roll?.takeIf { requireRoll && abs(it) > horizonPolicy.enterLevelToleranceDeg },
+            pitchAngleDeg = obs.pitchDegrees, pitchTargetDeg = obs.pitchTargetDegrees,
+            yawAngleDeg = obs.yawDegrees, yawTargetDeg = obs.yawTargetDegrees,
+            coordinateAspectRatio = obs.coordinateAspectRatio)
+        val action = when {
+            ready -> GuidanceAction.Ready
+            obs.zoomInProgress -> GuidanceAction.HoldStill
+            else -> when (cue) {
+                GuidanceCue.MOVE_LEFT -> GuidanceAction.MoveLeft
+                GuidanceCue.MOVE_RIGHT -> GuidanceAction.MoveRight
+                GuidanceCue.MOVE_UP -> GuidanceAction.MoveUp
+                GuidanceCue.MOVE_DOWN -> GuidanceAction.MoveDown
+                GuidanceCue.MOVE_UP_LEFT -> GuidanceAction.MoveUpLeft
+                GuidanceCue.MOVE_UP_RIGHT -> GuidanceAction.MoveUpRight
+                GuidanceCue.MOVE_DOWN_LEFT -> GuidanceAction.MoveDownLeft
+                GuidanceCue.MOVE_DOWN_RIGHT -> GuidanceAction.MoveDownRight
+                GuidanceCue.ROLL_CLOCKWISE -> GuidanceAction.RotateClockwise
+                GuidanceCue.ROLL_COUNTERCLOCKWISE -> GuidanceAction.RotateCounterClockwise
+                GuidanceCue.PITCH_UP -> GuidanceAction.PitchUp
+                GuidanceCue.PITCH_DOWN -> GuidanceAction.PitchDown
+                GuidanceCue.YAW_LEFT -> GuidanceAction.YawLeft
+                GuidanceCue.YAW_RIGHT -> GuidanceAction.YawRight
+                else -> GuidanceAction.HoldStill
+            }
+        }
+        _state.value = when { ready -> State.Ready; inside -> State.Verifying; else -> State.Adjusting(action, computeProgress(obs)) }
+        _action.value = action
+        _decision.value = GuidanceDecision(action, obs.targetId, measuredError(obs), when {
+            ready -> GuidanceFeedback.READY
+            inside -> GuidanceFeedback.VERIFYING
+            valid -> GuidanceFeedback.ADJUSTING
+            else -> GuidanceFeedback.INSUFFICIENT_EVIDENCE
+        }, sampledAt)
+        lastCaptureEvidence = obs.takeIf { ready }
+        return true
     }
 
     /** 拍照完成 */
@@ -235,6 +329,48 @@ class CompositionSessionController {
         if (_state.value !is State.Adjusting && _state.value !is State.Verifying && _state.value !is State.Ready) return
         if (input.timestampMs < lastTimestamp) { hold(input, GuidanceFeedback.INSUFFICIENT_EVIDENCE); return }
         lastTimestamp = input.timestampMs
+        if (input.targetDwellCapture && observeTargetDwell(input)) return
+        if (input.trackingPaused) {
+            readySamples = 0; firstReadyAt = 0; lastCaptureEvidence = null
+            val retained = if (input.visualPositionAvailable) {
+                val cue = GuidanceGeometry.guidanceCue(input.subjectCx, input.subjectCy, true,
+                    input.targetCx ?: .5f, input.targetCy ?: .5f, input.targetTolerance,
+                    coordinateAspectRatio = input.coordinateAspectRatio)
+                when (cue) {
+                    GuidanceCue.MOVE_LEFT -> GuidanceAction.MoveLeft
+                    GuidanceCue.MOVE_RIGHT -> GuidanceAction.MoveRight
+                    GuidanceCue.MOVE_UP -> GuidanceAction.MoveUp
+                    GuidanceCue.MOVE_DOWN -> GuidanceAction.MoveDown
+                    GuidanceCue.MOVE_UP_LEFT -> GuidanceAction.MoveUpLeft
+                    GuidanceCue.MOVE_UP_RIGHT -> GuidanceAction.MoveUpRight
+                    GuidanceCue.MOVE_DOWN_LEFT -> GuidanceAction.MoveDownLeft
+                    GuidanceCue.MOVE_DOWN_RIGHT -> GuidanceAction.MoveDownRight
+                    else -> GuidanceAction.HoldStill
+                }
+            } else _action.value.takeUnless { it is GuidanceAction.Ready } ?: GuidanceAction.HoldStill
+            _state.value = State.Adjusting(retained, 0f)
+            _action.value = retained
+            _decision.value = GuidanceDecision(retained, input.targetId, null,
+                GuidanceFeedback.INSUFFICIENT_EVIDENCE, input.subjectObservationId)
+            return
+        }
+        if (input.zoomInProgress) {
+            hold(input, GuidanceFeedback.ADJUSTING)
+            return
+        }
+        // Ready 后的柔性容差只能覆盖“同一主体、同一目标、同一视口”的轻微手抖。
+        // 目标替换、跟踪 ID 重建、换场景或切视口必须立即重新积累证据。
+        // 人脸跟踪 ID 在轻微移动时会频繁重分配，不应该撤销 Ready；
+        // 物体检测的跟踪 ID 变化则可能意味着目标换了，必须重新积累证据。
+        val trackingChanged = input.observedAnchorKind == ObservedAnchorKind.OBJECT &&
+            lastTrackingId != input.subjectTrackingId
+        if (trackingChanged && lastTrackingId != null) {
+            resetCounters(resetFrameSequence = false)
+        }
+        val anchorChanged = lastAnchorKind != null && lastAnchorKind != input.observedAnchorKind
+        val targetChanged = (input.observedAnchorKind == ObservedAnchorKind.OBJECT || input.targetId?.startsWith("live-face:") == true) &&
+            lockedTarget != null && lockedTarget?.targetId != input.targetId
+        val viewportChanged = viewportVersion != null && viewportVersion != input.viewportVersion
         if (viewportVersion != input.viewportVersion) {
             resetCounters(resetFrameSequence = false)
             viewportVersion = input.viewportVersion
@@ -248,7 +384,7 @@ class CompositionSessionController {
             lastTrackingId = input.subjectTrackingId
         }
         if ((lastAnchorKind != null && lastAnchorKind != input.observedAnchorKind) ||
-            (input.observedAnchorKind == ObservedAnchorKind.OBJECT && lockedTarget != null && lockedTarget?.targetId != input.targetId)) {
+            targetChanged) {
             val preserveReplan = lastAnchorKind == input.observedAnchorKind && replanned
             resetCounters(resetFrameSequence = false)
             replanned=preserveReplan
@@ -259,6 +395,11 @@ class CompositionSessionController {
         lastTimestamp = input.timestampMs
         if(input.observedAnchorKind == ObservedAnchorKind.OBJECT && input.targetId == null) lockedTarget = null
         val requiresSubject = input.expectsSubject || input.hasRealSubject
+        if (requiresSubject && !hasPositionEvidence(input)) {
+            lockedTarget = null
+            hold(input, GuidanceFeedback.INSUFFICIENT_EVIDENCE)
+            return
+        }
         val requireRoll = input.observedAnchorKind != ObservedAnchorKind.OBJECT || input.rollObservable
         val validImu = input.imuObservationId > 0 && input.timestampMs >= input.imuSampledAtMs &&
             input.timestampMs-input.imuSampledAtMs <= 1500 && (!requireRoll || input.rollDegrees?.isFinite() == true)
@@ -409,6 +550,28 @@ class CompositionSessionController {
         if (previous != null && error != null && (error > previous+.015f || qualityWorse)) worseningCount++ else worseningCount = 0
         previousError = error
         previousQuality = obs.qualityScore?.takeIf { it.isFinite() }
+        // Ready 后的轻微手抖不立刻打回调整态：允许最多 2 帧的“柔性越界”，
+        // 只有持续偏离或主体离开安全区才撤销 Ready。
+        val wasReadyLike = _state.value is State.Ready
+        val sameEvidenceContext = !trackingChanged && !anchorChanged && !targetChanged && !viewportChanged
+        if (wasReadyLike && sameEvidenceContext && (hasPositionEvidence(obs) || obs.pitchTargetDegrees != null ||
+                obs.yawTargetDegrees != null) && nextAction !is GuidanceAction.Ready) {
+            if (withinReadyGrace(obs) && readyGraceFrames < READY_GRACE_FRAMES) {
+                readyGraceFrames++
+                _state.value = State.Ready
+                _action.value = GuidanceAction.Ready
+                _decision.value = GuidanceDecision(
+                    GuidanceAction.Ready, incomingId, error,
+                    GuidanceFeedback.VERIFYING, obs.subjectObservationId,
+                    reasons = executionGuard.lastReasons
+                )
+                lastCaptureEvidence = obs
+                return
+            }
+            readyGraceFrames = 0
+        } else {
+            readyGraceFrames = 0
+        }
         val timedOut = nextAction !is GuidanceAction.Ready && nextAction !is GuidanceAction.HoldStill &&
             obs.timestampMs-lastImprovedAt >= 5000
         if (worseningCount >= 2 || timedOut) {
@@ -455,6 +618,26 @@ class CompositionSessionController {
         _action.value = GuidanceAction.HoldStill
         _decision.value = GuidanceDecision(GuidanceAction.HoldStill, obs.targetId, measuredError(obs), feedback, obs.subjectObservationId,
             reasons=executionGuard.lastReasons)
+    }
+
+    /**
+     * Ready 验收的柔性区：主体仍在画面安全区、水平没有明显歪掉时，
+     * 允许一两帧轻微抖动，不把用户立刻打回“保持稳定”。
+     */
+    private fun withinReadyGrace(obs: FrameObservation): Boolean {
+        // 必须使用原始 IMU 角度：平滑角可能掩盖真实倾斜（见 raw tilt 回归测试）。
+        val roll = obs.rawRollDegrees ?: obs.rollDegrees
+        val rollOk = roll == null || (roll.isFinite() && abs(roll) <= READY_GRACE_ROLL_DEG)
+        val uprightOk = obs.isUpright != false
+        val subjectOk = !(obs.expectsSubject || obs.hasRealSubject) ||
+            (obs.subjectCx?.let { it in 0.08f..0.92f } == true &&
+                obs.subjectCy?.let { it in 0.10f..0.84f } == true)
+        val targetOk = if (hasPositionEvidence(obs)) {
+            val dx = obs.subjectCx!! - obs.targetCx!!
+            val dy = obs.subjectCy!! - obs.targetCy!!
+            kotlin.math.hypot(dx, dy) <= maxOf(obs.targetTolerance * 2.2f, 0.22f)
+        } else true
+        return rollOk && uprightOk && subjectOk && targetOk
     }
 
     private fun measuredError(obs: FrameObservation): Float? {
@@ -505,16 +688,9 @@ class CompositionSessionController {
             else GuidanceAction.RotateClockwise
         }
 
-        // 3. 俯仰检查（水平已稳）
-        // ★ 没有"验证过的参考姿态"时，用「手机竖直」(pitch = 0°) 作为兜底目标。
-        //   旧逻辑要求 pitchTarget 非空，而没有模板提供 pose_target 时它永远是 null，
-        //   于是第三步"调整俯仰"从来不会出现。兜底目标用更宽的 12° 容差，
-        //   避免手持自然姿势被反复要求微调。
-        val hasVerifiedPitchTarget = obs.pitchTargetDegrees != null
-        val effectivePitchTarget = obs.pitchTargetDegrees ?: 0f
-        val pitchDelta = GuidanceGeometry.angleDelta(obs.pitchDegrees, effectivePitchTarget)
-        val pitchTolerance = if (hasVerifiedPitchTarget) GuidanceGeometry.PITCH_THRESHOLD_DEG else 12f
-        if (levelStable && pitchDelta != null && abs(pitchDelta) > pitchTolerance) {
+        // Respect deliberate overhead/low-angle framing unless a verified target exists.
+        val pitchDelta = GuidanceGeometry.angleDelta(obs.pitchDegrees, obs.pitchTargetDegrees)
+        if (levelStable && pitchDelta != null && abs(pitchDelta) > GuidanceGeometry.PITCH_THRESHOLD_DEG) {
             positionGoodFrames = 0
             return if (pitchDelta > 0) GuidanceAction.PitchDown
             else GuidanceAction.PitchUp
@@ -547,11 +723,9 @@ class CompositionSessionController {
                 obs.subjectCx, obs.subjectCy, true, obs.targetCx!!, obs.targetCy!!, obs.targetTolerance,
                 coordinateAspectRatio = obs.coordinateAspectRatio
             )
-            // ★ 只要主体进入"推荐取景框"就视为构图达标即可拍摄，
-            //   不要求主体中心与目标点精确重合。产品口径：辅助不该逼用户做像素级对齐。
-            val insideRecommendedFrame = obs.subjectCx!! in 0.12f..0.88f &&
-                obs.subjectCy!! in 0.14f..0.78f
-            val positionOk = positionCue == GuidanceCue.SUBJECT_ALIGNED || insideRecommendedFrame
+            // A generous circle around the actual recommendation replaces the old
+            // entire-screen rectangle, which approved almost every subject position.
+            val positionOk = positionCue == GuidanceCue.SUBJECT_ALIGNED
 
             if (positionOk && levelStable) {
                 positionGoodFrames++
@@ -571,6 +745,10 @@ class CompositionSessionController {
                     GuidanceCue.MOVE_RIGHT -> return GuidanceAction.MoveRight
                     GuidanceCue.MOVE_UP -> return GuidanceAction.MoveUp
                     GuidanceCue.MOVE_DOWN -> return GuidanceAction.MoveDown
+                    GuidanceCue.MOVE_UP_LEFT -> return GuidanceAction.MoveUpLeft
+                    GuidanceCue.MOVE_UP_RIGHT -> return GuidanceAction.MoveUpRight
+                    GuidanceCue.MOVE_DOWN_LEFT -> return GuidanceAction.MoveDownLeft
+                    GuidanceCue.MOVE_DOWN_RIGHT -> return GuidanceAction.MoveDownRight
                     else -> {}
                 }
             }
@@ -580,7 +758,8 @@ class CompositionSessionController {
         // 旧逻辑额外要求"存在验证过的俯仰/偏航目标"，导致风景、静物等无主体场景
         // 永远拿不到 Ready：用户按提示端平后一直停在"正在确认可用的构图依据"，
         // 只能自己按快门，自动拍摄失效。
-        if (levelStable && !obs.expectsSubject && !hasPositionEvidence(obs)) {
+        if (levelStable && !obs.expectsSubject && !hasPositionEvidence(obs) &&
+            (obs.pitchTargetDegrees != null || obs.yawTargetDegrees != null)) {
             return GuidanceAction.Ready
         }
 
@@ -631,11 +810,18 @@ class CompositionSessionController {
         const val READY_SAMPLE_COUNT = 2
         const val READY_HOLD_MS = 300L
 
+        /** Ready 后允许的轻微抖动帧数 */
+        const val READY_GRACE_FRAMES = 2
+
+        /** Ready 后允许的手持水平偏差（度） */
+        const val READY_GRACE_ROLL_DEG = 8.0f
+
         /** "先保持/无改善"状态的最长停留：超过后强制恢复引导，避免永久卡死 */
         const val PAUSE_TIMEOUT_MS = 2_500L
     }
 
     private fun resetCounters(resetFrameSequence: Boolean = true) {
+        targetDwell.reset()
         levelGoodFrames = 0
         levelBadFrames = 0
         positionGoodFrames = 0
@@ -643,6 +829,7 @@ class CompositionSessionController {
         lastSubjectId = -1; lastImuId = -1; readySamples = 0; firstReadyAt = 0
         lockedTarget = null; previousError = null; previousQuality = null; worseningCount = 0
         lastImprovedAt = -1; pausedTarget = null; replanned = false; lastTimestamp = -1
+        readyGraceFrames = 0
         lastAcceptedAt = -1; lastTrackingId = null
         executionGuard.reset(); lastExecutionId=-1L
         lastCaptureEvidence=null
@@ -663,6 +850,10 @@ fun CompositionSessionController.GuidanceAction.toGuidanceCue(): GuidanceCue = w
     CompositionSessionController.GuidanceAction.MoveRight -> GuidanceCue.MOVE_RIGHT
     CompositionSessionController.GuidanceAction.MoveUp -> GuidanceCue.MOVE_UP
     CompositionSessionController.GuidanceAction.MoveDown -> GuidanceCue.MOVE_DOWN
+    CompositionSessionController.GuidanceAction.MoveUpLeft -> GuidanceCue.MOVE_UP_LEFT
+    CompositionSessionController.GuidanceAction.MoveUpRight -> GuidanceCue.MOVE_UP_RIGHT
+    CompositionSessionController.GuidanceAction.MoveDownLeft -> GuidanceCue.MOVE_DOWN_LEFT
+    CompositionSessionController.GuidanceAction.MoveDownRight -> GuidanceCue.MOVE_DOWN_RIGHT
     CompositionSessionController.GuidanceAction.DeviceUpsideDown -> GuidanceCue.DEVICE_UPSIDE_DOWN
     CompositionSessionController.GuidanceAction.Ready -> GuidanceCue.SUBJECT_ALIGNED
 }

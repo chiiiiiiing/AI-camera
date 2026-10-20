@@ -41,7 +41,7 @@ import javax.inject.Singleton
 class FaceSubjectDetector @Inject constructor() : Closeable {
 
     // 检测策略参数（常量集中此处，Hilt 注入要求无参构造）
-    private val minIntervalMs: Long = 250L
+    private val minIntervalMs: Long = 120L
     private val detectTimeoutMs: Long = 350L
     private val maxImageSide: Int = 480
 

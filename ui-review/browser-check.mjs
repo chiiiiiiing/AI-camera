@@ -13,7 +13,7 @@ try{
  await tab.goto(base);
  await tab.waitForSelector('#catalog a');
  const routes=await tab.locator('#catalog a').evaluateAll(a=>a.map(e=>e.pathname));
- assert.equal(routes.length,23);
+ assert.equal(routes.length,24);
  for(const route of routes){
   await tab.goto(base+route);await tab.waitForSelector('#app > *');
   assert.ok(await tab.locator('#app').innerText(),route);
@@ -114,5 +114,5 @@ try{
  await tab.waitForSelector('.take-now');
  await tab.waitForSelector('.take-now',{state:'detached',timeout:6000});
  assert.deepEqual(errors,[]);
- console.log('PASS: 23 pages, source/image links, community interactions, camera states, zoom, timeout and screenshots.');
+ console.log('PASS: 24 pages, source/image links, community interactions, camera states, zoom, timeout and screenshots.');
 }finally{await browser.close()}

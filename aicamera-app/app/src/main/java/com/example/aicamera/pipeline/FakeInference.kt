@@ -183,7 +183,16 @@ data class FakeInferenceOutput(
     val objectTarget: com.example.aicamera.guidance.ObjectCompositionTarget? = null,
     val rollObservable: Boolean? = null,
     val executionQuality: com.example.aicamera.guidance.ExecutionQualityEvidence? = null,
-    val framingComparison: FramingComparisonResult? = null
+    val framingComparison: FramingComparisonResult? = null,
+    /** 保存后展示的真实 AI 参考说明；null = 本帧没有真实 AI 参与。 */
+    val aiCompositionMethod: String? = null,
+    /** 仅真实 V9 检索成功时为 true；Fake/熔断回退为 false。 */
+    val aiInvolved: Boolean = false,
+    /** Independent pixel match during semantic detector misses; not safe for auto capture. */
+    val visualSubjectBox: com.example.aicamera.guidance.geometry.NormalizedBox? = null,
+    val visualSampledAtMs: Long = 0L,
+    val manualTarget: com.example.aicamera.guidance.NormalizedPoint? = null,
+    val manualSelectionId: Long = 0L
 )
 
 data class FakeGuideLine(

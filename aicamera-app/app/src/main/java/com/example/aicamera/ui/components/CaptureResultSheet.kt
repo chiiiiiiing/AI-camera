@@ -63,13 +63,16 @@ fun CaptureResultSheet(
     imageUri: Uri?,
     strategy: String,
     sceneType: String,
+    /** 拍摄时真实 AI 给出的参考说明；null = AI 未参与。 */
+    aiMethod: String? = null,
     onDone: () -> Unit,
     onRetake: () -> Unit,
     onShareToCommunity: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val caption = compositionLabelText(strategy, sceneType)
+    // 如实展示：有 AI 参考就写清楚场景和目标；没有就明确写本地几何引导。
+    val caption = aiMethod ?: "本地几何引导（AI 未参与）"
 
     Column(
         modifier = modifier

@@ -200,6 +200,22 @@ data class HorizonPolicy(
 )
 
 /**
+ * 手持拍摄策略：只用于 App 的实时引导。
+ *
+ * 手持时手抖无法稳定在 ±4°；放宽到 ±6° 进入、±9° 退出，连续 3 帧稳定即可。
+ * 核心 [HorizonPolicy] 默认值保持严格，测试和历史语义不受影响。
+ */
+val HandheldHorizonPolicy = HorizonPolicy(
+    enterLevelToleranceDeg = 6.0f,
+    exitLevelToleranceDeg = 9.0f,
+    stableDurationMs = 200L,
+    stableFrameCount = 3,
+    minGoodFrames = 3,
+    exitFrames = 2,
+    upsideDownToleranceDeg = 15f
+)
+
+/**
  * 水平判定器 — 带滞回和连续确认的确定性状态机。
  *
  * 禁止模式：

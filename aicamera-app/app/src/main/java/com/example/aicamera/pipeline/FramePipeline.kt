@@ -59,7 +59,15 @@ class FramePipeline(
     private val replanGeneration = AtomicLong(0)
     private var appliedReplan = 0L
     fun requestReplan() { replanGeneration.incrementAndGet() }
+    private val regionSelection = java.util.concurrent.atomic.AtomicReference<com.example.aicamera.guidance.NormalizedPoint?>(null)
+    fun selectRegion(x: Float, y: Float) {
+        if (x.isFinite() && y.isFinite() && x in 0f..1f && y in 0f..1f)
+            regionSelection.set(com.example.aicamera.guidance.NormalizedPoint(x, y))
+    }
     private val modelSampler = ModelOutputSampler()
+    @Volatile private var continuousTrackingEnabled = false
+    private var visualTrackNextAtMs = 0L
+    fun setContinuousTrackingEnabled(enabled: Boolean) { continuousTrackingEnabled = enabled }
 
     // ── 公开 API ──────────────────────────────────────────────
 
@@ -96,6 +104,7 @@ class FramePipeline(
                     lastIsFrontCamera = isFrontCamera
                     lastRotation = rotation
                     lastAnalysisCrop = crop
+                    visualTrackNextAtMs = 0L
                 }
 
                 val replan = replanGeneration.get()
@@ -105,6 +114,10 @@ class FramePipeline(
                     appliedReplan = replan
                 }
                 val structureStart = SystemClock.elapsedRealtime()
+                regionSelection.getAndSet(null)?.let { point ->
+                    frameInference.selectRegion(point)
+                    modelSampler.reset()
+                }
                 frameInference.updateStructure(geometryStage?.observe(proxy, isFrontCamera))
                 val structureMs = SystemClock.elapsedRealtime()-structureStart
                 var preprocessMs = 0L
@@ -124,6 +137,21 @@ class FramePipeline(
                         }
                     } finally {
                         preprocessed.recycleBitmaps()
+                    }
+                }
+
+                // Between expensive model samples, update only local image tracking during guidance.
+                if (!modelSampled && continuousTrackingEnabled && frameInference.canTrackVisual &&
+                    SystemClock.elapsedRealtime() >= visualTrackNextAtMs) {
+                    val trackingStarted = SystemClock.elapsedRealtime()
+                    val trackingFrame = preprocessor.process(proxy, rotation, isFrontCamera).copy(sampledAtMs = frameSampledAtMs)
+                    try {
+                        modelOutput = frameInference.trackVisual(modelOutput, trackingFrame)
+                    } finally {
+                        trackingFrame.recycleBitmaps()
+                        val cost = SystemClock.elapsedRealtime() - trackingStarted
+                        visualTrackNextAtMs = SystemClock.elapsedRealtime() + if (cost > 30) 250L else 100L
+                        inferenceMs += cost
                     }
                 }
 
@@ -212,6 +240,8 @@ class FramePipeline(
  * 推理器抽象接口。
  */
 interface IInference {
+    val canTrackVisual: Boolean get() = false
+    fun trackVisual(output: Any?, frame: PreprocessedFrame): Any? = output
     /** 推理器标识名（调试/状态面板用） */
     val typeName: String
 
@@ -230,6 +260,7 @@ interface IInference {
     /** 切换镜头、暂停或开始新会话时清空跨帧状态。无状态推理器无需覆写。 */
     fun resetSession() = Unit
     fun requestReplan() = resetSession()
+    fun selectRegion(point: com.example.aicamera.guidance.NormalizedPoint) = Unit
     fun updateStructure(observation: com.example.aicamera.guidance.StructureObservation?) = Unit
 }
 

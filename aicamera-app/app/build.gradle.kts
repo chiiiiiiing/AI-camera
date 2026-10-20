@@ -136,4 +136,34 @@ dependencies {
     testImplementation("org.json:json:20240303")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+
+    // ── 桌面功能回放台（JVM）：真实 ONNX 模型在电脑上跑 ──
+    // 与 App 的 onnxruntime-android 同版本同 API（ai.onnxruntime 包），仅加在测试 classpath。
+    // App 打包（implementation）仍用 onnxruntime-android，不受影响。
+    testImplementation("com.microsoft.onnxruntime:onnxruntime:1.19.2")
+}
+
+// 桌面回放台：测试 classpath 用桌面版 onnxruntime（含主机 natives），
+// 排除 App 的 Android AAR（classes.jar 同包冲突）。androidTest 不受影响。
+configurations.matching { it.name.contains("Test") && it.name.contains("Classpath") }.configureEach {
+    exclude(group = "com.microsoft.onnxruntime", module = "onnxruntime-android")
+}
+
+// ── 功能回放台入口 ──
+// 用法：./gradlew.bat :app:replayEngine
+// 在电脑 JVM 上跑真实 student_model.onnx + 406 模板索引 + 构图状态机，输出功能回放 JSON。
+tasks.register<JavaExec>("replayEngine") {
+    group = "verification"
+    description = "桌面功能回放台：真实 ONNX + 模板索引 + 构图状态机 → 回放 JSON"
+    // AGP 8 不再暴露 Java 插件的 sourceSets。复用 testDebugUnitTest 任务的 classpath
+    // （含 AGP 转换过的 mockable android.jar，让 android.util.Log 等返回默认值），
+    // 再补上 Kotlin 测试类的输出目录。
+    val unitTestTask = tasks.named<Test>("testDebugUnitTest")
+    dependsOn("compileDebugUnitTestKotlin")
+    classpath = files(Callable { unitTestTask.get().classpath }) +
+        files("$buildDir/tmp/kotlin-classes/debugUnitTest")
+    mainClass.set("com.example.aicamera.replay.ReplayMainKt")
+    // 默认相对路径（app/src/main/...、../ui-review/...）以 aicamera-app 工程根为基准
+    workingDir = rootProject.projectDir
+    jvmArgs("-Dfile.encoding=UTF-8")
 }

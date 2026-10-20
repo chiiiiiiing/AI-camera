@@ -147,9 +147,8 @@ fun RegisterScreen(
         ) {
             Text(
                 text = "注册",
+                style = com.example.aicamera.ui.theme.GenWowTokens.Typography.Heading,
                 color = BrandOnSurface,
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Bold,
             )
 
             Spacer(modifier = Modifier.height(38.dp))

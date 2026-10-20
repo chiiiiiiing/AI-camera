@@ -41,6 +41,7 @@ class CameraGestureDispatcher(
 
     /** ★ 标记当前是否在双指缩放中（防止缩放时触发单击对焦） */
     private var isScaling = false
+    private var hadMultiplePointers = false
 
     /**
      * 绑定到 PreviewView。
@@ -54,8 +55,10 @@ class CameraGestureDispatcher(
         // 手势识别器：单击 → 对焦，长按 → 锁定
         val handler = Handler(Looper.getMainLooper())
         gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                if (!isScaling) {
+            override fun onDown(e: MotionEvent): Boolean = true
+
+            override fun onSingleTapUp(e: MotionEvent): Boolean {
+                if (!isScaling && !hadMultiplePointers) {
                     performTapToFocus(previewView, camera, e.x, e.y)
                 }
                 return true
@@ -96,6 +99,8 @@ class CameraGestureDispatcher(
         })
 
         previewView.setOnTouchListener { _, event ->
+            if (event.actionMasked == MotionEvent.ACTION_DOWN) hadMultiplePointers = false
+            if (event.pointerCount > 1) hadMultiplePointers = true
             // ★ 先让两个 detector 消费事件，再用 isScaling 标记做互斥
             val scaleHandled = scaleDetector?.onTouchEvent(event) ?: false
             val gestureHandled = gestureDetector?.onTouchEvent(event) ?: false
@@ -118,6 +123,7 @@ class CameraGestureDispatcher(
         gestureDetector = null
         scaleDetector = null
         isScaling = false
+        hadMultiplePointers = false
     }
 
     // ── 点击对焦 ─────────────────────────────────────────────
@@ -130,6 +136,7 @@ class CameraGestureDispatcher(
     ) {
         val executor = ContextCompat.getMainExecutor(previewView.context)
 
+        onFocusCircle(x, y)
         try {
             val point = previewView.meteringPointFactory.createPoint(x, y)
 
@@ -140,7 +147,6 @@ class CameraGestureDispatcher(
                 setAutoCancelDuration(focusLockTimeoutMs, TimeUnit.MILLISECONDS)
             }.build()
 
-            onFocusCircle(x, y)
             camera.cameraControl.startFocusAndMetering(action)
         } catch (e: Exception) {
             android.util.Log.w(CameraConfig.TAG, "[Gesture] 对焦失败: ${e.message}")

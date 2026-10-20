@@ -45,9 +45,10 @@ svg{fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-l
 .rot-chip span{color:#fff;font-size:14px}
 /* ── 分步引导 第 2 步：中心点连线（镜像 CenterPointGuidance） ── */
 .cp{position:absolute;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:5}
-.cp-subject{width:12px;height:12px;background:var(--pink);box-shadow:0 0 0 9px rgba(255,255,255,.18)}
-.cp-target{width:14px;height:14px;border:2.5px solid var(--pink);background:radial-gradient(circle,var(--pink) 0 4px,transparent 4px);box-shadow:0 0 0 11px rgba(255,255,255,.1)}
+.cp-subject{width:12px;height:12px;background:#43e1d0;color:#43e1d0;box-shadow:0 0 0 9px rgba(255,255,255,.18)}
+.cp-target{width:14px;height:14px;border:2.5px solid #caa2ff;color:#caa2ff;background:transparent;box-shadow:0 0 0 11px rgba(255,255,255,.1)}
 .cp-arrow{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4}
+.release-banner{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:12px 16px;margin-bottom:18px;border-radius:12px;background:#4b3a6212;font-size:13px}.release-banner a{color:#4b3a62;font-weight:700}.release-banner span{font-size:12px;color:#76657f}.auto-scene{font-size:12px;border-radius:18px;background:#0006;padding:7px 12px}.camtools{padding:6px 12px}.camtools .capture-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0;flex-wrap:nowrap}.camtools .thumb{width:36px;height:36px;min-width:36px;border-radius:8px}.camtools .shutter{width:62px;height:62px;min-width:62px}.camtools .icon{width:36px;height:36px;min-width:36px;padding:7px}.camtools .probutton{min-width:36px;width:40px;padding:4px;font-size:9px}.inline-zoom{display:flex;align-items:center;gap:5px;font-size:10px}.inline-zoom input{width:60px;min-width:0}.cp small{position:absolute;white-space:nowrap;font-size:12px;text-shadow:0 1px 4px #000;left:50%;transform:translateX(-50%)}.cp-subject small{top:20px}.cp-target small{bottom:20px}.dwell-demo{position:absolute;inset:0;pointer-events:none}.dwell-target-circle{position:absolute;transform:translate(-50%,-50%);width:24%;aspect-ratio:1;border:2px dashed #caa2ff;border-radius:50%}.phone-direction{position:absolute;left:20%;top:53%;color:#fff;text-shadow:0 1px 4px #000}.dwell-demo .cp-hint{bottom:205px;max-width:94%;white-space:normal;text-align:center}.subject-marker{color:#43e1d0;border-radius:50%;border-color:#43e1d0}.target-marker{color:#caa2ff;border-radius:50%;border-color:#caa2ff}.preview-target{border-radius:50%;border-color:#caa2ff}.focusbox{border-color:#ffd36a}
 .cp-hint{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);background:rgba(0,0,0,.45);color:var(--pink);border-radius:12px;padding:8px 16px;font-size:15px;font-weight:500;z-index:6;pointer-events:none;white-space:nowrap}
 /* ── 分步引导 第 3 步：就绪（镜像 ReadyOverlay） ── */
 .ready-ring{position:absolute;width:36%;aspect-ratio:1;transform:translate(-50%,-50%);border:2px solid rgba(140,224,195,.6);border-radius:50%;pointer-events:none;z-index:4}
@@ -189,11 +190,11 @@ svg{fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-l
 .auth .field label{color:#828282;font-size:12px}
 
 /* ── Figma 原图背景（不再用代码渐变近似）── */
-#app[data-page="community"] .screen,#app[data-page="following-feed"] .screen,#app[data-page="messages"] .screen,#app[data-page="post"] .screen,#app[data-page="comments"] .screen,#app[data-page="filter-resource"] .screen,#app[data-page="settings"] .screen{background:url('/assets/bg_hub.png') center/cover no-repeat}
-#app[data-page="profile"] .screen,#app[data-page="user-profile"] .screen,#app[data-page="followers"] .screen,#app[data-page="following"] .screen,#app[data-page="edit-profile"] .screen,#app[data-page="splash"] .screen{background:url('/assets/bg_pure.png') center/cover no-repeat}
-#app[data-page="login"] .screen{background:url('/assets/bg_login.png') center/cover no-repeat}
-#app[data-page="register"] .screen{background:url('/assets/bg_hub.png') center/cover no-repeat}
-#app[data-page="forgot-password"] .screen{background:url('/assets/bg_login.png') center/cover no-repeat}
+#app[data-page="community"] .screen,#app[data-page="following-feed"] .screen,#app[data-page="messages"] .screen,#app[data-page="post"] .screen,#app[data-page="comments"] .screen,#app[data-page="filter-resource"] .screen,#app[data-page="settings"] .screen{background:url('./assets/bg_hub.png') center/cover no-repeat}
+#app[data-page="profile"] .screen,#app[data-page="user-profile"] .screen,#app[data-page="followers"] .screen,#app[data-page="following"] .screen,#app[data-page="edit-profile"] .screen,#app[data-page="splash"] .screen{background:url('./assets/bg_pure.png') center/cover no-repeat}
+#app[data-page="login"] .screen{background:url('./assets/bg_login.png') center/cover no-repeat}
+#app[data-page="register"] .screen{background:url('./assets/bg_hub.png') center/cover no-repeat}
+#app[data-page="forgot-password"] .screen{background:url('./assets/bg_login.png') center/cover no-repeat}
 /* 社区顶栏无粉色条 */
 .tabs{background:transparent!important}
 /* 功能卡片透明填充/透明边框，背景图透出 */
@@ -204,7 +205,7 @@ svg{fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-l
 .bottomnav .figma-icon{width:24px;height:24px}
 .bottomnav .selected .figma-icon{filter:brightness(0) invert(1) sepia(1) saturate(4) hue-rotate(300deg)}
 /* 修正：帖子详情页仍要显示背景原图；透明只用于卡片，不用于整页 */
-#app[data-page="post"] .screen{background:url('/assets/bg_hub.png') center/cover no-repeat!important}
+#app[data-page="post"] .screen{background:url('./assets/bg_hub.png') center/cover no-repeat!important}
 /* 底栏选中态保持原图标颜色，避免浅粉叠浅粉看不见 */
 .bottomnav .selected .figma-icon{filter:none}
 .post-author{display:flex;flex-direction:column;line-height:1.2}
@@ -216,11 +217,14 @@ svg{fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-l
 .post .photo{width:73%;aspect-ratio:1;height:auto;margin:12px auto;display:block;border-radius:10px}
 /* Figma 登录/注册输入框左侧图标 */
 #auth-form .field input{background-color:transparent;border:0;border-bottom:1px solid #4B3A62;border-radius:0;height:38px;padding:0 4px 0 34px;background-repeat:no-repeat;background-position:0 center;background-size:24px}
-#auth-form .field:nth-of-type(1) input{background-image:url('/assets/ic_login_person.png')}
-#auth-form .field:nth-of-type(2) input{background-image:url('/assets/ic_login_lock.png')}
-#auth-form .field:nth-of-type(3) input{background-image:url('/assets/ic_auth_phone.png')}
-#auth-form .field:nth-of-type(4) input{background-image:url('/assets/ic_auth_shield.png')}
+#auth-form .field:nth-of-type(1) input{background-image:url('./assets/ic_login_person.png')}
+#auth-form .field:nth-of-type(2) input{background-image:url('./assets/ic_login_lock.png')}
+#auth-form .field:nth-of-type(3) input{background-image:url('./assets/ic_auth_phone.png')}
+#auth-form .field:nth-of-type(4) input{background-image:url('./assets/ic_auth_shield.png')}
 .pd-actions .figma-icon,.pd-comment-count .figma-icon{width:22px;height:22px}
 /* 队友最新：主体框/预览框使用虚线（保留） */
 .preview-subject{border-style:dashed}
 .gl-subjectbox{border-style:dashed}
+.replay{overflow:auto}.replay .card h4{margin:4px 0 12px}.replay-meta{font-size:10px;color:var(--muted);margin:2px 4px 10px}#replay-canvas{width:100%;max-width:340px;border-radius:14px;background:#050505;display:block;margin:0 auto 10px}.replay-state{text-align:center;font-size:13px;min-height:20px;margin-bottom:6px}.replay-timeline{gap:8px}.replay-timeline input{flex:1;min-width:0}.replay-timeline output{font-size:11px;white-space:nowrap}.replay-outcome{font-size:12px;border-top:1px solid #ddd4df70;margin-top:10px;padding-top:10px}.hit{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid #ddd4df70}.hit .rank{flex:none;width:20px;height:20px;border-radius:50%;background:#f6e7ee;color:#704855;font-size:11px;display:grid;place-items:center;font-weight:700}.hit-main{flex:1;min-width:0}.hit b{font-size:12px}.hit-cos{font-size:11px;color:#427451}.bar{height:6px;border-radius:4px;background:#eee7ef;margin:5px 0;overflow:hidden}.bar i{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,var(--pink),#c9708d)}.replay-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}.chip{background:#f6e7ee;color:#704855;border-radius:20px;font-size:10px;padding:5px 10px}.replay-layout{display:grid;grid-template-columns:repeat(3,34px);gap:3px;flex:none}.replay-layout i{width:34px;height:34px;border-radius:6px;border:1px solid #ddd4df70;display:block}.replay-layout small{display:block;margin-top:6px;max-width:110px}.replay-dets{flex:1;min-width:0}.det{font-size:11px;padding:4px 0}
+.replay-flow{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:8px;font-size:11px}.phase-tag{border:1px solid;border-radius:20px;padding:2px 9px;background:#ffffff66}
+.replay-preview{position:relative;width:100%;max-width:340px;height:300px;margin:0 auto 10px;border-radius:14px;overflow:hidden;background:#050505}.replay-preview #replay-canvas{width:100%;height:100%;display:block;border-radius:0;margin:0}.replay-preview .preview-grid{position:absolute;inset:0;z-index:2;opacity:.5}.replay-preview .preview-subject{position:absolute;z-index:3;pointer-events:none;border:2px solid var(--pink);border-radius:8px;transition:left .1s linear,top .1s linear}.replay-preview .preview-subject.aligned{border-color:var(--green)}.replay-preview .preview-target{position:absolute;z-index:3;pointer-events:none;border:2px dashed white;border-radius:8px}.replay-preview .guide{position:absolute;inset:0;z-index:4;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;color:var(--pink);pointer-events:none}.replay-preview .guide .axis-card{width:min(280px,88%);height:132px;padding:10px 14px}.replay-preview .guide .axis-card small{bottom:8px;font-size:9px}.replay-preview .guide h3{font-size:15px}.replay-preview .guide p{font-size:11px}.replay-preview .progress{position:absolute;top:8px;left:15%;right:15%;font-size:10px;text-align:center;z-index:4;color:#fff;text-shadow:0 1px 2px #000}.replay-preview .progress .dots{letter-spacing:14px;color:var(--pink);margin-bottom:5px;display:block}.replay-badge{position:absolute;top:8px;left:50%;transform:translateX(-50%);background:#000a;color:var(--green);font-size:11px;border-radius:20px;padding:5px 12px;z-index:5;display:none}.replay-flash{position:absolute;inset:0;background:#fff;opacity:0;z-index:6;pointer-events:none;transition:opacity .15s}

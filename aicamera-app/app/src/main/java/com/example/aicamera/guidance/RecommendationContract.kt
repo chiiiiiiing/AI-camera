@@ -69,10 +69,13 @@ data class ObjectObservation(
     val box: NormalizedBox,
     val confidence: Float,
     val stableSamples: Int,
-    val aspectRatio: Float
+    val aspectRatio: Float,
+    /** Live tracking can use .4 with repeated samples; reviewed-reference defaults stay .5. */
+    val minimumConfidence: Float = .5f
 ) {
     fun isFresh(nowMs: Long): Boolean = observationId > 0 && nowMs >= sampledAtMs &&
-        nowMs-sampledAtMs <= 1500 && stableSamples >= 2 && confidence.isFinite() && confidence >= .5f &&
+        nowMs-sampledAtMs <= 1500 && stableSamples >= 2 && confidence.isFinite() &&
+        minimumConfidence in .4f.. .5f && confidence >= minimumConfidence &&
         box.left >= .02f && box.top >= .02f && box.right <= .98f && box.bottom <= .98f &&
         box.width > 0 && box.height > 0 && aspectRatio.isFinite() && aspectRatio > 0
 }

@@ -350,7 +350,7 @@ class GeometryGuidanceStage @Inject constructor(
         private const val HORIZON_EMA_ALPHA = 0.3f
         private const val PITCH_EMA_ALPHA = 0.3f
         private const val YAW_EMA_ALPHA = 0.25f
-        private const val SUBJECT_EMA_ALPHA = 0.35f
+        private const val SUBJECT_EMA_ALPHA = 0.55f
 
         /** 判断构图是否「达标」（供震动反馈等使用）：主体对齐且端平 */
         fun isCompositionGood(cue: GuidanceCue, horizonAngleDeg: Float?): Boolean {

@@ -25,6 +25,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -49,6 +50,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix as ComposeColorMatrix
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -57,6 +59,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -88,7 +91,6 @@ import com.example.aicamera.guidance.AlignmentFlashOverlay
 import com.example.aicamera.guidance.CompositionSessionController
 import com.example.aicamera.guidance.GuidanceCue
 import com.example.aicamera.guidance.GuidancePhase
-import com.example.aicamera.guidance.toGuidanceCue
 import com.example.aicamera.ui.components.CaptureWorkflowOverlay
 import com.example.aicamera.ui.components.CaptureWorkflowState
 import com.example.aicamera.ui.components.CaptureResultSheet
@@ -109,6 +111,7 @@ import com.example.aicamera.viewmodel.CameraViewModel
 import com.example.aicamera.viewmodel.CommunityViewModel
 import com.example.aicamera.viewmodel.PipelineViewModel
 import com.example.aicamera.viewmodel.RenderViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -136,7 +139,7 @@ import kotlinx.coroutines.launch
  * 旧值固定 800ms 空等，是拍摄提速的主要瓶颈之一。
  * 压到 150ms —— 仍留一帧的余量让状态文案可感知，但不再成为阻碍。
  */
-private const val ANALYZE_SETTLE_MS = 150L
+private const val ANALYZE_SETTLE_MS = 100L
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -159,37 +162,62 @@ fun CameraScreen(
     val customActive by cameraViewModel.customFilterActive.collectAsStateWithLifecycle()
     val configuration = LocalConfiguration.current
     val guidanceState by renderViewModel.guidanceState.collectAsStateWithLifecycle()
+    val guidanceStep by renderViewModel.guidanceStep.collectAsStateWithLifecycle()
+    val stepHint by renderViewModel.stepHint.collectAsStateWithLifecycle()
     val renderInput by renderViewModel.renderInput.collectAsStateWithLifecycle()
     val pipelineState by pipelineViewModel.pipelineState.collectAsStateWithLifecycle()
     // ★ 统一构图会话控制器状态（替代旧双工作流）
     val sessionState by renderViewModel.sessionController.state.collectAsStateWithLifecycle()
     val sessionDecision by renderViewModel.sessionController.decision.collectAsStateWithLifecycle()
-    // 将控制器状态映射到 UI overlay 所需的状态枚举
-    val hasRealSubject = renderInput.guideLines.any {
-        it.visible && it.type.name == "SUBJECT_BOX" && it.params["real"] == true &&
-            it.params["anchor_kind"] == "face"
+    // 一旦进入自动拍摄流程就锁存，后续帧的抖动不能把界面打回引导。
+    var captureCommitted by remember { mutableStateOf(false) }
+    // Every visible composition instruction and capture verdict comes from the session.
+    // Capturing / Saved 是终态，任何引导状态都不能覆盖正在拍摄的页面。
+    val activeCue = guidanceState.cue
+    val workflowState = when {
+        captureCommitted ||
+            sessionState is CompositionSessionController.State.Capturing -> CaptureWorkflowState.CAPTURING
+        sessionState is CompositionSessionController.State.Saved -> CaptureWorkflowState.SAVED
+        sessionState is CompositionSessionController.State.Idle -> CaptureWorkflowState.IDLE
+        sessionState is CompositionSessionController.State.Analyzing -> CaptureWorkflowState.ANALYZING
+        guidanceStep == com.example.aicamera.guidance.GuidanceStepSequencer.GuidanceStep.ZOOM ->
+            CaptureWorkflowState.ANALYZING
+        else -> when (activeCue) {
+            GuidanceCue.DEVICE_UPSIDE_DOWN -> CaptureWorkflowState.UPSIDE_DOWN
+            GuidanceCue.PITCH_UP, GuidanceCue.PITCH_DOWN,
+            GuidanceCue.YAW_LEFT, GuidanceCue.YAW_RIGHT,
+            GuidanceCue.ROLL_CLOCKWISE, GuidanceCue.ROLL_COUNTERCLOCKWISE ->
+                CaptureWorkflowState.ROTATING
+            GuidanceCue.MOVE_LEFT, GuidanceCue.MOVE_RIGHT,
+            GuidanceCue.MOVE_UP, GuidanceCue.MOVE_DOWN,
+            GuidanceCue.MOVE_UP_LEFT, GuidanceCue.MOVE_UP_RIGHT,
+            GuidanceCue.MOVE_DOWN_LEFT, GuidanceCue.MOVE_DOWN_RIGHT,
+            GuidanceCue.SUBJECT_TARGET -> CaptureWorkflowState.GUIDING
+            else -> if (sessionState is CompositionSessionController.State.Ready)
+                CaptureWorkflowState.READY else CaptureWorkflowState.GUIDING
+        }
     }
-    val expectsSubject = renderInput.guideLines.any {
-        it.visible && it.type.name == "TARGET_ZONE" && it.params["anchor_kind"] == "face"
+    val workflowCue = when {
+        sessionState is CompositionSessionController.State.Capturing ||
+            sessionState is CompositionSessionController.State.Saved ||
+            sessionState is CompositionSessionController.State.Analyzing ||
+            guidanceStep == com.example.aicamera.guidance.GuidanceStepSequencer.GuidanceStep.ZOOM ->
+            GuidanceCue.NONE
+        sessionState is CompositionSessionController.State.Ready ->
+            GuidanceCue.SUBJECT_ALIGNED
+        else -> activeCue
     }
-    val workflowState = mapSessionState(sessionState, hasRealSubject, expectsSubject)
-    // The action shown during capture must come from the controller deciding Ready.
-    val workflowCue = when (val current = sessionState) {
-        is CompositionSessionController.State.Adjusting -> current.action.toGuidanceCue()
-        CompositionSessionController.State.Verifying,
-        CompositionSessionController.State.Ready -> GuidanceCue.SUBJECT_ALIGNED
-        else -> GuidanceCue.NONE
-    }
-    val workflowPhase = when (sessionState) {
-        CompositionSessionController.State.Ready -> GuidancePhase.ALIGNED
-        CompositionSessionController.State.Verifying -> GuidancePhase.NEAR
-        is CompositionSessionController.State.Adjusting -> GuidancePhase.ADJUST
+    val workflowPhase = when {
+        sessionState is CompositionSessionController.State.Ready -> GuidancePhase.ALIGNED
+        sessionState is CompositionSessionController.State.Verifying -> GuidancePhase.NEAR
+        sessionState is CompositionSessionController.State.Analyzing -> GuidancePhase.NEUTRAL
+        activeCue != GuidanceCue.NONE -> GuidancePhase.ADJUST
         else -> GuidancePhase.NEUTRAL
     }
-    // 拍照后构图说明标签（null = 不显示）
-    var compositionLabel by remember { mutableStateOf<String?>(null) }
     // 拍后结果确认页（不生成伪审美分数）
     var showCaptureResult by remember { mutableStateOf(false) }
+    // 拍摄瞬间的真实 AI 参考说明，用于保存后的结果页。
+    var capturedAiMethod by remember { mutableStateOf<String?>(null) }
     var workflowStartedAt by remember { mutableLongStateOf(0L) }
     var showTakeNow by remember { mutableStateOf(false) }
     var captureError by remember { mutableStateOf<String?>(null) }
@@ -202,18 +230,18 @@ fun CameraScreen(
     val measuredBottomBarHeight = if (bottomBarHeightPx > 0) {
         with(density) { bottomBarHeightPx.toDp() }
     } else {
-        152.dp
+        196.dp
     }
     val floatingControlsBottom = measuredBottomBarHeight + 14.dp
     // 点击对焦位置与曝光条显隐
     var focusCenter by remember { mutableStateOf(Offset.Zero) }
     var showExposureSlider by remember { mutableStateOf(false) }
+    var focusRequestId by remember { mutableLongStateOf(0L) }
 
     // 返回键关闭手写覆盖层（拍后结果页 / 拍摄失败弹层），而不是退出相机
     BackHandler(enabled = showCaptureResult || captureError != null) {
         if (showCaptureResult) {
             showCaptureResult = false
-            compositionLabel = null
             renderViewModel.sessionController.resetToIdle()
         } else {
             captureError = null
@@ -224,7 +252,8 @@ fun CameraScreen(
     val scope = rememberCoroutineScope()
     val communityViewModel: CommunityViewModel = hiltViewModel()
     val authRepo = remember { AuthRepository.getInstance(context) }
-    val currentUser = authRepo.displayUsername
+    val activeUser by authRepo.activeUser.collectAsState()
+    val currentUser = activeUser?.username?.takeIf { it.isNotBlank() } ?: authRepo.displayUsername
 
     LaunchedEffect(Unit) {
         cameraViewModel.refreshImportedFilter()
@@ -269,30 +298,31 @@ fun CameraScreen(
         delay(100)
         previewView?.display?.rotation?.let(cameraViewModel::updateTargetRotation)
     }
+    var zoomInteractionTick by remember { mutableIntStateOf(0) }
     val gestureDispatcher = remember {
         CameraGestureDispatcher(
-            onFocusCircle = { cx, cy -> cameraViewModel.onFocusTapped(cx, cy) },
+            onFocusCircle = { cx, cy ->
+                cameraViewModel.onFocusTapped(cx, cy)
+                if (renderViewModel.needsSubjectSelection()) previewView?.takeIf { it.width > 0 && it.height > 0 }?.let { view ->
+                    cameraViewModel.cancelAutoZoom()
+                    renderViewModel.cancelAutoZoom()
+                    pipelineViewModel.selectRegion(cx / view.width, cy / view.height)
+                }
+            },
             onZoomChanged = { ratio ->
                 // 用户捏合变焦 = 手动介入：同步 UI 倍率显示，并取消自动变焦
                 // （序列器与斜坡同时让权）。此前只取消自动变焦、不回写倍率，
                 // 导致捏合放大时底部倍率条不动。
                 cameraViewModel.onPinchZoom(ratio)
                 renderViewModel.cancelAutoZoom()
+                zoomInteractionTick++
             },
             onFocusLocked = { locked -> cameraViewModel.setFocusLocked(locked) }
         )
     }
 
-    // 构图模式（队友设计：静物/风景/人像）
-    var guideMode by remember { mutableStateOf(CameraGuideMode.COFFEE) }
-
-    // 人像模式与前摄自拍都需要「主体 + 姿势」引导。
-    // 此前 guideMode 只改顶部图标颜色，不影响任何引导逻辑；
-    // 这里把它真正接进引导输入，并让人像/自拍显示人形轮廓目标。
-    val portraitGuide = guideMode == CameraGuideMode.PORTRAIT || uiState.cameraFace == CameraFace.FRONT
-    LaunchedEffect(portraitGuide) {
-        renderViewModel.setPortraitGuide(portraitGuide)
-    }
+    // Subject selection is automatic, including the front camera.
+    LaunchedEffect(Unit) { renderViewModel.setPortraitGuide(false) }
 
     // 定时拍照（关 / 3s / 10s）
     var timerMode by remember { mutableStateOf(TimerMode.OFF) }
@@ -304,23 +334,22 @@ fun CameraScreen(
         onDispose { shutterSound.release() }
     }
 
-    // ── 构图达标反馈：进入 ALIGNED 相位瞬间 → 震动 + 绿边闪烁 ──
+    // ── 构图达标反馈：会话真正 Ready 的瞬间 → 震动 + 绿边闪烁 ──
     val haptic = LocalHapticFeedback.current
     var showAlignFlash by remember { mutableStateOf(false) }
-    var prevGuidancePhase by remember { mutableStateOf(GuidancePhase.NEUTRAL) }
-    LaunchedEffect(guidanceState.phase) {
-        val entered = guidanceState.phase == GuidancePhase.ALIGNED &&
-                prevGuidancePhase != GuidancePhase.ALIGNED
-        if (entered) {
+    val sessionReady = sessionState is CompositionSessionController.State.Ready
+    val captureReady = sessionReady
+    LaunchedEffect(captureReady) {
+        if (captureReady) {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             showAlignFlash = true
         }
-        prevGuidancePhase = guidanceState.phase
     }
 
     // 订阅 focusCircle → Compose 对焦框及曝光条（旧 View 叠加层已卸载）
     LaunchedEffect(Unit) {
         cameraViewModel.focusCircle.collect { focusData ->
+            focusRequestId++
             focusCenter = Offset(focusData.centerX, focusData.centerY)
             showExposureSlider = true
         }
@@ -335,6 +364,7 @@ fun CameraScreen(
     LaunchedEffect(Unit) {
         cameraViewModel.captureResult.collect { result ->
             captureInFlight = false
+            captureCommitted = false
             when (result) {
                 is com.example.aicamera.camera.CameraCapture.CaptureResult.Success -> {
                     if (settings.soundEnabled) {
@@ -352,14 +382,6 @@ fun CameraScreen(
                     renderViewModel.sessionController.error(result.message)
                 }
             }
-        }
-    }
-
-    // 拍照后构图说明标签 2.5s 自动消失
-    LaunchedEffect(compositionLabel) {
-        if (!compositionLabel.isNullOrBlank()) {
-            delay(2500)
-            compositionLabel = null
         }
     }
 
@@ -399,11 +421,12 @@ fun CameraScreen(
     }
     // 序列器发出变焦目标 → 执行平滑变焦 → 到位回调
     LaunchedEffect(Unit) {
-        renderViewModel.autoZoomTarget.collect { target ->
-            cameraViewModel.rampZoomTo(target)
+        renderViewModel.autoZoomTarget.collect { request ->
+            if (!renderViewModel.isCurrentAutoZoom(request)) return@collect
+            cameraViewModel.rampZoomTo(request.ratio)
             // 斜坡 700ms + 余量后认为到位（用户打断时 cancelAutoZoom 已另走取消路径）
             delay(900)
-            renderViewModel.notifyAutoZoomApplied()
+            renderViewModel.notifyAutoZoomApplied(request)
         }
     }
     // 切前后摄 → 重新开始分步引导
@@ -433,13 +456,15 @@ fun CameraScreen(
         ) return
 
         captureInFlight = true
+        cameraViewModel.cancelAutoZoom()
+        renderViewModel.cancelAutoZoom()
         showTakeNow = false
         showFilterPanel = false
         renderViewModel.sessionController.startCapture()
+        val aiMethodAtCapture = renderInput.aiCompositionMethod
         scope.launch {
-            compositionLabel = "正在对焦与测光"
             cameraViewModel.prepareForCapture(timeoutMs = 900L)
-            compositionLabel = "按当前构图拍摄"
+            capturedAiMethod = aiMethodAtCapture
             cameraViewModel.takePhoto(saveToGallery = settings.saveOriginal)
         }
     }
@@ -464,8 +489,11 @@ fun CameraScreen(
         ) renderViewModel.sessionController.resetToIdle()
 
         workflowStartedAt = System.currentTimeMillis()
+        cameraViewModel.cancelAutoZoom()
+        captureCommitted = false
         showTakeNow = false
         showCaptureResult = false
+        capturedAiMethod = null
         showFilterPanel = false
         if (settings.proModeEnabled) onSettingsChange(settings.copy(proModeEnabled = false))
         captureError = null
@@ -474,50 +502,21 @@ fun CameraScreen(
             scope.launch {
                 countdown = timerMode.seconds
                 while (countdown > 0) { delay(1000); countdown-- }
+                renderViewModel.resetGuidanceSteps()
                 renderViewModel.sessionController.startAnalysis()
             }
         } else if (countdown > 0) {
             countdown = 0
         } else {
+            renderViewModel.resetGuidanceSteps()
             renderViewModel.sessionController.startAnalysis()
         }
     }
 
-    /** ★ 从当前帧 AI 输出实时提取构图目标中心点（来自 target_zone，不是 subject_box） */
-    fun liveTargetCenter(): Pair<Float, Float>? {
-        // ★ 修复：target 来自 target_zone（AI/模板指定的构图目标位置）
-        val targetZone = renderInput.guideLines.find {
-            it.visible && it.type.name == "TARGET_ZONE" && it.params["anchor_kind"] == "face"
-        }
-        val tcx = (targetZone?.params?.get("center_x") as? Number)?.toFloat()
-        val tcy = (targetZone?.params?.get("center_y") as? Number)?.toFloat()
-        if (tcx != null && tcy != null && tcx.isFinite() && tcy.isFinite() &&
-            tcx in 0f..1f && tcy in 0f..1f) return tcx to tcy
-        return null
-    }
-
-    /** ★ 获取当前真实主体中心点（来自真实检测，非模板占位框） */
-    fun liveSubjectCenter(): Pair<Float, Float>? {
-        val subjectBox = renderInput.guideLines.find {
-            it.visible && it.type.name == "SUBJECT_BOX" && it.params["anchor_kind"] == "face"
-        }
-        // 只取真实检测框（real=true），忽略模板占位
-        val isReal = subjectBox?.params?.get("real") == true
-        if (!isReal) return null
-        val sx = (subjectBox?.params?.get("x") as? Number)?.toFloat()
-        val sy = (subjectBox?.params?.get("y") as? Number)?.toFloat()
-        val sw = (subjectBox?.params?.get("width") as? Number)?.toFloat()
-        val sh = (subjectBox?.params?.get("height") as? Number)?.toFloat()
-        val scx = if (sx != null && sw != null) sx + sw / 2f else null
-        val scy = if (sy != null && sh != null) sy + sh / 2f else null
-        if (scx != null && scy != null && scx.isFinite() && scy.isFinite() &&
-            scx in 0f..1f && scy in 0f..1f) return scx to scy
-        return null
-    }
-
-    /** 从 AI 输出提取中文构图说明（与拍后确认页共用同一映射） */
-    fun compositionDescription(): String =
-        compositionLabelText(renderInput.compositionStrategy, renderInput.sceneType)
+    // Face and object coordinates use the same observation as the controller;
+    // never fall back to a stale face target when the object detector loses data.
+    fun liveTargetCenter(): Pair<Float, Float>? = guidanceState.anchors?.target?.let { it.x to it.y }
+    fun liveSubjectCenter(): Pair<Float, Float>? = guidanceState.anchors?.current?.let { it.x to it.y }
 
     // ★ 统一会话控制器驱动：ANALYZING → 延迟后通知完成
     LaunchedEffect(sessionState) {
@@ -527,25 +526,6 @@ fun CameraScreen(
                 // 分析阶段：快速让位给引导，不再固定空等 800ms
                 delay(ANALYZE_SETTLE_MS)
                 renderViewModel.sessionController.onAnalysisComplete()
-            }
-            is CompositionSessionController.State.Ready -> {
-                // Preserve verified framing; do not guess a new focal length after Ready.
-                // 与手动快门共用同步守卫，避免 Ready 自动拍摄与手动拍摄重复提交。
-                if (!captureInFlight && !uiState.isCapturing) {
-                    captureInFlight = true
-                    compositionLabel = "正在对焦与测光"
-                    cameraViewModel.prepareForCapture()
-                    // AF/AE 完成后再次确认构图仍然有效，避免坏帧或过期观测触发拍摄。
-                    if (!renderViewModel.sessionController.confirmReadyForCapture(
-                            android.os.SystemClock.elapsedRealtime())) {
-                        captureInFlight = false
-                        return@LaunchedEffect
-                    }
-                    compositionLabel = compositionDescription()
-                    renderViewModel.sessionController.startCapture()
-                    cameraViewModel.takePhoto(saveToGallery = settings.saveOriginal)
-                }
-                // 结果确认页在真实保存成功事件后显示，避免 UI 提前宣称保存完成。
             }
             is CompositionSessionController.State.Error -> {
                 // 异常处理
@@ -559,11 +539,45 @@ fun CameraScreen(
         }
     }
 
-    // 构图引导最多等待 8 秒，之后允许用户直接拍摄，不把“辅助”变成阻碍。
+    // The session's Ready is the only composition gate.
+    LaunchedEffect(captureReady) {
+        if (captureReady) {
+            captureCommitted = true
+            showTakeNow = false
+        }
+    }
+    // 锁存后不再跟随 captureReady 变化而取消，确保“正在拍摄”页面不回退。
+    LaunchedEffect(captureCommitted) {
+        if (!captureCommitted || captureInFlight || uiState.isCapturing) return@LaunchedEffect
+        captureInFlight = true
+        var started = false
+        try {
+            cameraViewModel.prepareForCapture(timeoutMs = 900L)
+            // AF/AE is asynchronous: a detector miss during this wait must pause
+            // auto capture, even though the old Ready event already started it.
+            if (!renderViewModel.sessionController.confirmReadyForCapture(android.os.SystemClock.elapsedRealtime())) {
+                return@LaunchedEffect
+            }
+            // 一旦进入自动拍摄流程就不再回退到确认/引导态；
+            // AF/AE 完成直接拍摄，避免“正在确认构图”额外拖时间。
+            capturedAiMethod = renderInput.aiCompositionMethod
+            renderViewModel.sessionController.startCapture()
+            cameraViewModel.takePhoto(saveToGallery = settings.saveOriginal)
+            started = true
+        } finally {
+            if (!started) {
+                captureInFlight = false
+                captureCommitted = false
+            }
+        }
+        // 结果确认页在真实保存成功事件后显示，避免 UI 提前宣称保存完成。
+    }
+
+    // 构图引导最多等待 6 秒，之后允许用户直接拍摄，不把“辅助”变成阻碍。
     LaunchedEffect(workflowStartedAt) {
         if (workflowStartedAt == 0L) return@LaunchedEffect
         val elapsed = System.currentTimeMillis() - workflowStartedAt
-        delay((8_000L - elapsed).coerceAtLeast(0L))
+        delay((6_000L - elapsed).coerceAtLeast(0L))
         val latest = renderViewModel.sessionController.state.value
         showTakeNow = latest is CompositionSessionController.State.Adjusting ||
             latest is CompositionSessionController.State.Verifying
@@ -578,15 +592,19 @@ fun CameraScreen(
         val waiting = sessionState is CompositionSessionController.State.Analyzing ||
             sessionState is CompositionSessionController.State.Adjusting ||
             sessionState is CompositionSessionController.State.Verifying
+        pipelineViewModel.setContinuousTrackingEnabled(waiting || sessionState is CompositionSessionController.State.Ready)
         if (!waiting) showTakeNow = false
     }
 
     // 切换摄像头 → 取消当前工作流
     LaunchedEffect(uiState.cameraFace) {
         val currentState = renderViewModel.sessionController.state.value
+        cameraViewModel.cancelAutoZoom()
         if (currentState !is CompositionSessionController.State.Idle) {
             renderViewModel.sessionController.cancel()
         }
+        captureCommitted = false
+        renderViewModel.resetGuidanceSteps()
     }
 
     Box(
@@ -677,28 +695,19 @@ fun CameraScreen(
         if (uiState.isInitialized && !showCaptureResult) {
             CameraTopBar(
                 modifier = Modifier.align(Alignment.TopCenter),
-                selectedMode = guideMode,
-                onModeSelected = { guideMode = it },
+                aiStatus = aiState.status,
+                inferenceType = pipelineState.inferenceType,
+                degraded = v9DegradedReason != null,
                 onSettingsClick = onNavigateToSettings,
             )
         }
 
-        // ── AI 引擎状态指示（单行小胶囊，替代旧多行调试 HUD） ──
+        // ── AI 构图建议（状态胶囊已收进顶栏，避免多个浮层堆叠） ──
         if (uiState.isInitialized &&
             (sessionState is CompositionSessionController.State.Idle ||
                 sessionState is CompositionSessionController.State.Saved) &&
             !showCaptureResult
         ) {
-            AiStatusChip(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(top = 64.dp, start = 12.dp),
-                status = aiState.status,
-                inferenceType = pipelineState.inferenceType,
-                degraded = v9DegradedReason != null
-            )
-            // AI 构图建议：把模型当前识别到的场景/构图策略显示出来，
-            // 否则"AI 已就绪"之后用户在画面上看不到任何 AI 的产出。
             if (aiState.status == com.example.aicamera.pipeline.AiEngineManager.Status.READY &&
                 renderInput.sceneType != "unknown"
             ) {
@@ -709,13 +718,16 @@ fun CameraScreen(
                     ),
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .padding(top = 100.dp, start = 12.dp)
+                        .padding(top = 88.dp, start = 14.dp)
                 )
             }
         }
 
-        // ── 滤镜小组件：默认收起，点击后才展开 ──
-        if (uiState.isInitialized && !showCaptureResult) {
+        // ── 滤镜小组件：默认收起，点击后才展开；分析/拍摄时让位给画面 ──
+        if (uiState.isInitialized && !showCaptureResult &&
+            workflowState != CaptureWorkflowState.ANALYZING &&
+            workflowState != CaptureWorkflowState.CAPTURING
+        ) {
             FilterDock(
                 selected = selectedFilter,
                 selectedCustom = selectedCustom,
@@ -754,20 +766,34 @@ fun CameraScreen(
                 onTakePhoto = { triggerCapture() },
                 onToggleCamera = { cameraViewModel.toggleCamera() },
                 onOpenGallery = onNavigateToGallery,
-                zoomRatio = uiState.zoomRatio,
-                onZoomChange = {
-                    renderViewModel.cancelAutoZoom()
-                    cameraViewModel.setZoom(it)
-                },
                 isCapturing = uiState.isCapturing,
-                aligned = guidanceState.phase == GuidancePhase.ALIGNED,
+                aligned = captureReady,
                 proEnabled = settings.proModeEnabled,
                 onTogglePro = {
                     showFilterPanel = false
                     onSettingsChange(settings.copy(proModeEnabled = !settings.proModeEnabled))
                 },
-                zoomRange = cameraViewModel.zoomRange()
             )
+
+            // ── 右侧变焦罗盘（浮在底栏上方，替代横向滑杆） ──
+            // Pro 面板和滤镜面板自带变焦/参数控件，此时隐藏罗盘避免两套控件重叠。
+            if (!settings.proModeEnabled && !showFilterPanel && !captureCommitted &&
+                sessionState !is CompositionSessionController.State.Capturing
+            ) {
+                ZoomDial(
+                    zoomRatio = uiState.zoomRatio,
+                    zoomRange = cameraViewModel.zoomRange(),
+                    onZoomChange = {
+                        renderViewModel.cancelAutoZoom()
+                        cameraViewModel.setZoom(it)
+                    },
+                    interactionTick = zoomInteractionTick,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .zIndex(6f)
+                        .padding(end = 4.dp, bottom = floatingControlsBottom),
+                )
+            }
         }
 
         // ── Pro 模式面板（AI 构图叠加层不受影响，独立开关） ──
@@ -812,23 +838,25 @@ fun CameraScreen(
             val horizonAngle = (horizonLine?.params?.get("angle_degrees") as? Number)?.toFloat()
             val targetCenter = liveTargetCenter()
             val subjectCenter = liveSubjectCenter()
+            // 有明确动作指令时不再让质量反馈抢占文案；只有当前没有方向可给时才提示状态。
+            val hasActionCue = workflowCue != GuidanceCue.NONE &&
+                workflowCue != GuidanceCue.SUBJECT_ALIGNED
+            // 只保留真正需要用户回退的质量提示；确认中/请稍候等过渡文案全部去掉。
+            val feedbackHint = if (hasActionCue) null else when (sessionDecision.feedback) {
+                com.example.aicamera.guidance.GuidanceFeedback.WORSENING -> when {
+                    "observed_subject_margin_regressed" in sessionDecision.reasons -> "主体太靠近画面边缘，先回一点"
+                    "subject_sharpness_regressed" in sessionDecision.reasons -> "主体清晰度下降，先回一点"
+                    "subject_highlights_regressed" in sessionDecision.reasons -> "主体亮部细节减少，先回一点"
+                    else -> "刚才的调整没有改善，先回一点"
+                }
+                else -> if (!hasActionCue) stepHint.takeIf { it.isNotBlank() } else null
+            }
             CaptureWorkflowOverlay(
                 state = workflowState,
                 cue = workflowCue,
                 phase = workflowPhase,
-                feedbackHint = when (sessionDecision.feedback) {
-                    com.example.aicamera.guidance.GuidanceFeedback.WORSENING -> when {
-                        "observed_subject_margin_regressed" in sessionDecision.reasons -> "先保持，主体太靠近画面边缘"
-                        "subject_sharpness_regressed" in sessionDecision.reasons -> "先保持，主体清晰度下降"
-                        "subject_highlights_regressed" in sessionDecision.reasons -> "先保持，主体亮部细节减少"
-                        else -> "先保持，刚才的调整没有改善构图"
-                    }
-                    com.example.aicamera.guidance.GuidanceFeedback.NO_PROGRESS -> "先保持，暂未找到更有效的调整"
-                    com.example.aicamera.guidance.GuidanceFeedback.SCENE_CHANGED -> "画面发生变化，先保持重新确认"
-                    com.example.aicamera.guidance.GuidanceFeedback.VERIFYING -> "位置合适，请保持稳定"
-                    com.example.aicamera.guidance.GuidanceFeedback.INSUFFICIENT_EVIDENCE -> "先保持，正在确认可用的构图依据"
-                    else -> null
-                },
+                analysisHint = stepHint.takeIf { it.isNotBlank() },
+                feedbackHint = feedbackHint,
                 targetNx = targetCenter?.first,
                 targetNy = targetCenter?.second,
                 horizonAngleDeg = horizonAngle,
@@ -840,15 +868,15 @@ fun CameraScreen(
                 showHorizon = settings.showHorizon,
                 overlayAlpha = settings.overlayAlpha,
                 guideLines = renderInput.guideLines,
-                // 人像 / 自拍：显示人形轮廓姿势引导
-                poseGuide = portraitGuide,
+                // The detector supplies a face box, not a verified full-body pose.
+                poseGuide = false,
                 bottomBarHeight = measuredBottomBarHeight,
                 modifier = Modifier.fillMaxSize()
             )
         }
 
         // ── 对焦框 + 曝光条 ──
-        if (showExposureSlider && uiState.isInitialized) {
+        if (showExposureSlider && uiState.isInitialized && !showCaptureResult && !captureCommitted && !uiState.isCapturing) {
             val evIndex by cameraViewModel.evIndex.collectAsStateWithLifecycle()
             FocusExposureOverlay(
                 focusX = focusCenter.x,
@@ -856,32 +884,10 @@ fun CameraScreen(
                 evIndex = evIndex,
                 evRange = cameraViewModel.evRange(),
                 onEVChange = { cameraViewModel.setExposureCompensation(it) },
-                visible = showExposureSlider
+                visible = showExposureSlider,
+                focusRequestId = focusRequestId,
+                modifier = Modifier.fillMaxSize().zIndex(8f)
             )
-        }
-
-        // ── 构图说明标签（拍照后显示在上 1/3 处，2.5s 自动消失） ──
-        AnimatedVisibility(
-            visible = compositionLabel != null,
-            enter = fadeIn(tween(300)),
-            exit = fadeOut(tween(500))
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = 80.dp),
-                contentAlignment = Alignment.TopCenter
-            ) {
-                Text(
-                    text = compositionLabel ?: "",
-                    color = Color.White.copy(alpha = 0.85f),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Normal,
-                    modifier = Modifier
-                        .background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-            }
         }
 
         // ── 拍后结果确认（不做分数评价） ──
@@ -895,7 +901,6 @@ fun CameraScreen(
                         indication = null
                     ) {
                         showCaptureResult = false
-                        compositionLabel = null
                         renderViewModel.sessionController.resetToIdle()
                     }
                     .zIndex(11f)
@@ -904,19 +909,17 @@ fun CameraScreen(
                 imageUri = uiState.latestPhotoUri,
                 strategy = renderInput.compositionStrategy,
                 sceneType = renderInput.sceneType,
+                aiMethod = capturedAiMethod,
                 onDone = {
                     showCaptureResult = false
-                    compositionLabel = null
                     renderViewModel.sessionController.resetToIdle()
                 },
                 onRetake = {
                     showCaptureResult = false
-                    compositionLabel = null
                     renderViewModel.sessionController.resetToIdle()
                 },
                 onShareToCommunity = {
                     showCaptureResult = false
-                    compositionLabel = null
                     showPublishSheet = true
                 },
                 modifier = Modifier
@@ -931,27 +934,27 @@ fun CameraScreen(
             )
         }
 
-        if (showTakeNow && !uiState.isCapturing && !showCaptureResult) {
+        if (showTakeNow && !captureCommitted && !uiState.isCapturing && !showCaptureResult) {
             Button(
                 onClick = { captureNow() },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .zIndex(10f)
-                    .padding(top = 68.dp, end = 12.dp)
-                    .widthIn(max = 240.dp)
-                    .heightIn(min = 48.dp),
+                    .padding(top = 96.dp, end = 12.dp)
+                    .widthIn(max = 180.dp)
+                    .heightIn(min = 44.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = BrandPink,
                     contentColor = Color.White
                 ),
-                shape = RoundedCornerShape(18.dp)
+                shape = RoundedCornerShape(16.dp)
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("按当前画面立即拍摄", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text("先拍一张", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     Text(
-                        "4 秒后自动收起 · 再按快门也可以",
+                        "不用等引导完成",
                         color = Color.White.copy(alpha = 0.78f),
-                        fontSize = 10.sp
+                        fontSize = 9.sp
                     )
                 }
             }
@@ -1094,43 +1097,6 @@ enum class TimerMode(val seconds: Int) {
     OFF(0), THREE(3), TEN(10)
 }
 
-/** 将统一会话控制器状态映射到 UI Overlay 所需的状态枚举 */
-private fun mapSessionState(
-    state: CompositionSessionController.State,
-    hasRealSubject: Boolean = false,
-    expectsSubject: Boolean = false
-): CaptureWorkflowState = when (state) {
-    is CompositionSessionController.State.Idle -> CaptureWorkflowState.IDLE
-    is CompositionSessionController.State.Analyzing -> CaptureWorkflowState.ANALYZING
-    is CompositionSessionController.State.Adjusting -> {
-        when (state.action) {
-            is CompositionSessionController.GuidanceAction.RotateClockwise,
-            is CompositionSessionController.GuidanceAction.RotateCounterClockwise,
-            is CompositionSessionController.GuidanceAction.PitchUp,
-            is CompositionSessionController.GuidanceAction.PitchDown,
-            is CompositionSessionController.GuidanceAction.YawLeft,
-            is CompositionSessionController.GuidanceAction.YawRight ->
-                CaptureWorkflowState.ROTATING
-            is CompositionSessionController.GuidanceAction.DeviceUpsideDown ->
-                CaptureWorkflowState.UPSIDE_DOWN
-            is CompositionSessionController.GuidanceAction.HoldStill -> {
-                // 期望主体但没有真实主体 → 提示用户放入主体
-                if (expectsSubject && !hasRealSubject) {
-                    CaptureWorkflowState.NO_SUBJECT
-                } else {
-                    CaptureWorkflowState.GUIDING
-                }
-            }
-            else -> CaptureWorkflowState.GUIDING
-        }
-    }
-    is CompositionSessionController.State.Verifying -> CaptureWorkflowState.GUIDING
-    is CompositionSessionController.State.Ready -> CaptureWorkflowState.READY
-    is CompositionSessionController.State.Capturing -> CaptureWorkflowState.CAPTURING
-    is CompositionSessionController.State.Saved -> CaptureWorkflowState.SAVED
-    is CompositionSessionController.State.Error -> CaptureWorkflowState.IDLE
-}
-
 /**
  * AI 引擎状态胶囊 — 让用户一眼确认 AI 是否工作。
  *
@@ -1207,46 +1173,32 @@ private fun AiStatusChip(
 // 三种模式：静物 / 风景 / 人像 + 右侧设置入口
 // ────────────────────────────────────────────────────────────────
 
-/** 顶部构图模式（队友 CameraGuideMode） */
-private enum class CameraGuideMode(val description: String) {
-    COFFEE("静物构图模式"),
-    LANDSCAPE("风景构图模式"),
-    PORTRAIT("人像构图模式"),
-}
-
 /** 顶部 Icon glyph 标识 */
 private enum class TopGlyph { COFFEE, LANDSCAPE, PERSON, SETTINGS }
 
 @Composable
 private fun CameraTopBar(
     modifier: Modifier = Modifier,
-    selectedMode: CameraGuideMode,
-    onModeSelected: (CameraGuideMode) -> Unit,
+    aiStatus: com.example.aicamera.pipeline.AiEngineManager.Status,
+    inferenceType: String,
+    degraded: Boolean,
     onSettingsClick: () -> Unit,
 ) {
+    // 顶部黑带对齐参考机：状态栏 + 56dp 控制行，功能键靠左、设置靠右。
     Row(
         modifier = modifier
             .fillMaxWidth()
             .background(CameraChrome)
             .statusBarsPadding()
-            .height(40.dp)
+            .height(56.dp)
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            CameraGuideMode.entries.forEach { mode ->
-                TopModeControl(
-                    description = mode.description,
-                    selected = selectedMode == mode,
-                    glyph = when (mode) {
-                        CameraGuideMode.COFFEE -> TopGlyph.COFFEE
-                        CameraGuideMode.LANDSCAPE -> TopGlyph.LANDSCAPE
-                        CameraGuideMode.PORTRAIT -> TopGlyph.PERSON
-                    },
-                    onClick = { onModeSelected(mode) },
-                )
-            }
-        }
+        AiStatusChip(
+            status = aiStatus,
+            inferenceType = inferenceType,
+            degraded = degraded,
+        )
         Spacer(Modifier.weight(1f))
         TopModeControl(
             description = "相机设置",
@@ -1315,62 +1267,83 @@ private fun CameraBottomBar(
     onTakePhoto: () -> Unit,
     onToggleCamera: () -> Unit,
     onOpenGallery: () -> Unit,
-    zoomRatio: Float,
-    onZoomChange: (Float) -> Unit,
     isCapturing: Boolean,
     aligned: Boolean,
     proEnabled: Boolean,
     onTogglePro: () -> Unit,
-    zoomRange: Pair<Float, Float>
 ) {
     val context = LocalContext.current
     val compact = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val modeRowHeight = if (compact) 36.dp else 48.dp
+    val shutterRowHeight = if (compact) 84.dp else 112.dp
 
+    // 参考机式的黑色底栏：上方模式条 + 下方大快门行，倍率移到右侧罗盘。
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(CameraChrome.copy(alpha = 0.6f))
-            .padding(bottom = if (compact) 2.dp else 8.dp)
+            .background(CameraChrome)
+            .navigationBarsPadding()
     ) {
-        // ── 上层：缩略图 / 快门 / 翻转 ──
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(
-                    horizontal = if (compact) 22.dp else 36.dp,
-                    vertical = if (compact) 4.dp else 10.dp
-                ),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .height(modeRowHeight)
+                .padding(horizontal = if (compact) 12.dp else 18.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            // ① 最新照片缩略图 → App 内 Gallery
+            Text("AI 自动识别", color = CameraOnChrome, fontSize = 13.sp, modifier = Modifier.weight(3f))
+            ModeStripItem(
+                label = "PRO",
+                selected = proEnabled,
+                onClick = onTogglePro,
+                modifier = Modifier.weight(1f),
+            )
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(shutterRowHeight)
+                .padding(horizontal = if (compact) 18.dp else 28.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            // 相册缩略图
             Box(
                 modifier = Modifier
-                    .size(if (compact) 42.dp else 48.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .size(if (compact) 44.dp else 52.dp)
+                    .clip(CircleShape)
+                    .border(1.5.dp, Color.White.copy(alpha = 0.85f), CircleShape)
+                    .background(Color.Black)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
                         onClick = onOpenGallery
                     )
-                    .background(Color.White.copy(alpha = 0.08f)),
-                contentAlignment = Alignment.Center
+                    .semantics { contentDescription = "打开相册" },
+                contentAlignment = Alignment.Center,
             ) {
                 if (latestPhotoUri != null) {
                     AsyncImage(
                         model = ImageRequest.Builder(context)
                             .data(latestPhotoUri)
                             .crossfade(true)
-                            .size(96)
+                            .size(160)
                             .build(),
                         contentDescription = "最新照片",
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
-                } else Box(Modifier.fillMaxSize().background(Color.Black))
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.PhotoLibrary,
+                        contentDescription = null,
+                        tint = CameraOnChrome.copy(alpha = 0.8f),
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
             }
 
-            // ② 快门（GenWow 规范：白外环 + 粉内圆，对齐时外环变绿）
             CaptureButton(
                 aligned = aligned,
                 enabled = !isCapturing,
@@ -1378,10 +1351,12 @@ private fun CameraBottomBar(
                 onClick = onTakePhoto
             )
 
-            // ③ 翻转摄像头（队友 GenWow Canvas glyph）
+            // 翻转摄像头
             Box(
                 modifier = Modifier
-                    .size(if (compact) 42.dp else 48.dp)
+                    .size(if (compact) 44.dp else 52.dp)
+                    .clip(CircleShape)
+                    .border(1.5.dp, Color.White.copy(alpha = 0.85f), CircleShape)
                     .clickable(onClick = onToggleCamera)
                     .semantics { contentDescription = "切换前后摄像头" },
                 contentAlignment = Alignment.Center,
@@ -1389,58 +1364,57 @@ private fun CameraBottomBar(
                 Image(
                     painter = painterResource(R.drawable.ic_camera_flip),
                     contentDescription = null,
-                    modifier = Modifier.size(28.dp),
-                    colorFilter = ColorFilter.tint(CameraControlMuted),
+                    modifier = Modifier.size(if (compact) 22.dp else 24.dp),
+                    colorFilter = ColorFilter.tint(CameraOnChrome),
                 )
             }
         }
+        Spacer(Modifier.height(if (compact) 2.dp else 8.dp))
+    }
+}
 
-        // ── 下层：变焦档位（GenWow ZoomStrip）+ PRO 开关 ──
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(
-                    horizontal = if (compact) 18.dp else 30.dp,
-                    vertical = if (compact) 1.dp else 4.dp
-                ),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            ZoomStrip(
-                zoomRatio = zoomRatio,
-                zoomRange = zoomRange,
-                onZoomChange = onZoomChange,
-                modifier = Modifier.offset(x = (-6).dp)
+@Composable
+private fun ModeStripItem(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
             )
-
-            Spacer(modifier = Modifier.width(4.dp))
-
-            // PRO 模式开关（不影响 AI 构图：只控制手动参数面板显隐）
-            Box(
-                modifier = Modifier
-                    .widthIn(min = 56.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(if (proEnabled) BrandPink else Color.White.copy(alpha = 0.06f))
-                    .clickable(onClick = onTogglePro)
-                    .padding(horizontal = 12.dp, vertical = 7.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "PRO",
-                    color = if (proEnabled) CameraChrome else CameraOnChrome.copy(alpha = 0.8f),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1
-                )
-            }
-        }
+            .semantics {
+                contentDescription = label
+                this.selected = selected
+                role = Role.Button
+            },
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = label,
+            color = if (selected) Color.White else CameraControlMuted,
+            fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            maxLines = 1,
+        )
+        Spacer(Modifier.height(4.dp))
+        Box(
+            Modifier
+                .size(4.dp)
+                .background(if (selected) BrandPink else Color.Transparent, CircleShape)
+        )
     }
 }
 
 /**
- * GenWow 快门按钮（队友 CameraControls.kt CaptureButton 规范）：
- * 78dp 触控区 / 72dp 画布；2.8dp 外环（对齐时绿色）+ 白色 16% 中环 +
- * BrandPink 27dp 内圆 + 白色 22% 核心；按下缩放 0.92。
+ * 大号快门：参考机 84dp 触控区 / 76dp 画布；白外环 + 粉色内圆。
+ * 对齐时外环变绿；按下缩放 0.92。
  */
 @Composable
 private fun CaptureButton(
@@ -1458,7 +1432,7 @@ private fun CaptureButton(
     )
     Box(
         modifier = Modifier
-            .size(if (compact) 64.dp else 78.dp)
+            .size(if (compact) 72.dp else 84.dp)
             .scale(scale)
             .clickable(
                 enabled = enabled,
@@ -1477,94 +1451,312 @@ private fun CaptureButton(
             },
         contentAlignment = Alignment.Center
     ) {
-        Canvas(modifier = Modifier.size(if (compact) 58.dp else 72.dp)) {
+        Canvas(modifier = Modifier.size(if (compact) 64.dp else 76.dp)) {
             val ringColor = if (aligned) GuideAligned else Color.White
-            // 外环
             drawCircle(
                 color = ringColor,
-                radius = size.minDimension / 2f - 1.4.dp.toPx(),
-                style = Stroke(width = 2.8.dp.toPx())
+                radius = size.minDimension / 2f - 1.6.dp.toPx(),
+                style = Stroke(width = 3.2.dp.toPx())
             )
-            // 白色 16% 中环
             drawCircle(
                 color = Color.White.copy(alpha = 0.16f),
-                radius = size.minDimension / 2f - 7.dp.toPx()
+                radius = size.minDimension / 2f - 9.dp.toPx()
             )
-            // 粉色内圆 + 白色 22% 核心
-            val innerRadius = if (compact) 22.dp.toPx() else 27.dp.toPx()
+            val innerRadius = if (compact) 22.dp.toPx() else 26.dp.toPx()
             drawCircle(color = BrandPink, radius = innerRadius)
             drawCircle(color = Color.White.copy(alpha = 0.22f), radius = innerRadius)
         }
     }
 }
 
-/** 1.0×–3.0× 连续滑动变焦，按 0.1× 吸附。 */
+/**
+ * 侧边球冠变焦罗盘。
+ *
+ * - 球半径很大，只在屏幕右侧露出一段球冠弧线（宽度适中）；
+ * - 只在用户捏合 / 拖动 / 点预设时出现，1.8 秒无操作自动淡出；
+ * - 未显示罗盘时右侧只保留 1× / 2× / 3× 预设；
+ * - 罗盘出现时预设整体隐藏，罗盘内部显示当前倍率，二者不重叠。
+ */
 @Composable
-private fun ZoomStrip(
+private fun ZoomDial(
     zoomRatio: Float,
     zoomRange: Pair<Float, Float>,
     onZoomChange: (Float) -> Unit,
-    modifier: Modifier = Modifier
+    interactionTick: Int,
+    modifier: Modifier = Modifier,
 ) {
-    // 不再写死上下限：完整使用硬件可用范围（超广角 0.5×～长焦最高倍率都能用）
     val minZoom = zoomRange.first.coerceAtLeast(0.1f)
     val maxZoom = zoomRange.second.coerceAtLeast(minZoom)
-    val snappedZoom = zoomRatio.coerceIn(minZoom, maxZoom)
-    // 快捷档位：0.8 / 1 / 2 / 3 倍，仅保留当前硬件确实支持的
+    val shownZoom = zoomRatio.coerceIn(minZoom, maxZoom)
     val presets = remember(minZoom, maxZoom) {
-        listOf(0.8f, 1f, 2f, 3f).filter { it >= minZoom - 0.001f && it <= maxZoom + 0.001f }
+        listOf(1f, 2f, 3f).filter { it >= minZoom - 0.001f && it <= maxZoom + 0.001f }
     }
-    Column(
+    var dialVisible by remember { mutableStateOf(false) }
+    var hideToken by remember { mutableIntStateOf(0) }
+    var animationJob by remember { mutableStateOf<Job?>(null) }
+    var selectedPreset by remember { mutableStateOf<Float?>(null) }
+    val scope = rememberCoroutineScope()
+    val dragState = rememberUpdatedState(shownZoom)
+    val minState = rememberUpdatedState(minZoom)
+    val maxState = rememberUpdatedState(maxZoom)
+    val haptic = LocalHapticFeedback.current
+    val compact = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    fun revealDial() {
+        dialVisible = true
+        hideToken++
+    }
+
+    fun animateToPreset(target: Float) {
+        animationJob?.cancel()
+        selectedPreset = target
+        revealDial()
+        val start = shownZoom
+        val clamped = target.coerceIn(minZoom, maxZoom)
+        animationJob = scope.launch {
+            val steps = 12
+            repeat(steps) { step ->
+                val p = (step + 1f) / steps
+                onZoomChange(start + (clamped - start) * p)
+                delay(16L)
+            }
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        }
+    }
+
+    LaunchedEffect(interactionTick) {
+        if (interactionTick > 0) {
+            selectedPreset = null
+            revealDial()
+        }
+    }
+    LaunchedEffect(dialVisible, hideToken) {
+        if (dialVisible) {
+            delay(1_800L)
+            dialVisible = false
+        }
+    }
+
+    Box(
         modifier = modifier
-            .width(236.dp)
-            .clip(RoundedCornerShape(999.dp))
-            .background(Color.White.copy(alpha = 0.06f))
-            .padding(horizontal = 10.dp, vertical = 4.dp)
+            .width(if (compact) 78.dp else 96.dp)
+            .height(if (compact) 188.dp else 224.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        // 空闲态：只有预设按键，贴右侧排列。与罗盘互斥，绝不重叠。
+        if (!dialVisible) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
                 presets.forEach { preset ->
-                    val selected = kotlin.math.abs(snappedZoom - preset) < 0.05f
-                    Text(
-                        text = formatZoomLabel(preset),
-                        color = if (selected) Color.Black else CameraOnChrome.copy(alpha = 0.8f),
-                        fontSize = 10.sp,
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .background(if (selected) BrandPink else Color.White.copy(alpha = 0.07f))
-                            .clickable { onZoomChange(preset) }
-                            .padding(horizontal = 7.dp, vertical = 3.dp)
+                    val selected = kotlin.math.abs(shownZoom - preset) < 0.05f
+                    ZoomPresetChip(
+                        label = formatZoomLabel(preset),
+                        selected = selected,
+                        onClick = { animateToPreset(preset) },
                     )
                 }
             }
-            Text(
-                text = formatZoomLabel(snappedZoom),
-                color = BrandPink,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold
-            )
         }
-        Slider(
-            value = snappedZoom,
-            onValueChange = {
-                val snapped = (kotlin.math.round(it * 10f) / 10f).coerceIn(minZoom, maxZoom)
-                onZoomChange(snapped)
-            },
-            valueRange = minZoom..maxZoom,
-            // 不再传 steps：长焦机范围可达 10×，固定档位会变成上百格、拖动卡顿
-            modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
-            colors = SliderDefaults.colors(
-                thumbColor = BrandPink,
-                activeTrackColor = BrandPink,
-                inactiveTrackColor = Color.White.copy(alpha = 0.18f),
-                activeTickColor = Color.Transparent,
-                inactiveTickColor = Color.Transparent
+
+        // 变焦态：球冠刻度盘；下方只保留当前选中的预设，另外两个隐藏。
+        if (dialVisible) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.SpaceBetween,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(if (compact) 148.dp else 180.dp)
+                    .pointerInput(Unit) {
+                        var dragStart = 0f
+                        detectVerticalDragGestures(
+                            onDragStart = {
+                                animationJob?.cancel()
+                                selectedPreset = null
+                                dragStart = dragState.value
+                                revealDial()
+                            },
+                            onDragEnd = {
+                                val nearest = presets.minByOrNull { kotlin.math.abs(it - dragState.value) }
+                                if (nearest != null && kotlin.math.abs(nearest - dragState.value) <= 0.08f) {
+                                    onZoomChange(nearest)
+                                    selectedPreset = nearest
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                }
+                            },
+                        ) { change, dragAmount ->
+                            change.consume()
+                            revealDial()
+                            val span = maxState.value - minState.value
+                            val next = (dragStart - dragAmount / 320f * span)
+                                .coerceIn(minState.value, maxState.value)
+                            dragStart = next
+                            onZoomChange(kotlin.math.round(next * 10f) / 10f)
+                        }
+                    }
+                    .semantics { contentDescription = "球冠变焦罗盘，上下拖动调整倍率" },
+            ) {
+                Canvas(Modifier.fillMaxSize()) {
+                    val w = size.width
+                    val h = size.height
+                    // 大半径球冠：右侧一条轻微向左凸的弧线。
+                    fun point(t: Float): Offset {
+                        val y = h * (0.92f - 0.84f * t)
+                        val u = (y / h).coerceIn(0f, 1f)
+                        val x = (1 - u) * (1 - u) * w * 0.94f +
+                            2f * (1 - u) * u * w * 0.18f +
+                            u * u * w * 0.94f
+                        return Offset(x, y)
+                    }
+
+                    val track = Path()
+                    for (i in 0..64) {
+                        val p = point(i / 64f)
+                        if (i == 0) track.moveTo(p.x, p.y) else track.lineTo(p.x, p.y)
+                    }
+                    drawPath(
+                        track,
+                        color = Color.White.copy(alpha = 0.26f),
+                        style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round),
+                    )
+
+                    val fraction = if (maxZoom > minZoom) {
+                        ((shownZoom - minZoom) / (maxZoom - minZoom)).coerceIn(0f, 1f)
+                    } else 0f
+                    if (fraction > 0f) {
+                        val active = Path()
+                        val steps = 48
+                        for (i in 0..steps) {
+                            val p = point(fraction * i / steps)
+                            if (i == 0) active.moveTo(p.x, p.y) else active.lineTo(p.x, p.y)
+                        }
+                        drawPath(
+                            active,
+                            color = Color.White.copy(alpha = 0.95f),
+                            style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round),
+                        )
+                    }
+
+                    // 刻度：沿弧线法线方向绘制，长刻度对应 1×/2×/3×。
+                    val majorTicks = presets.map {
+                        if (maxZoom > minZoom) ((it - minZoom) / (maxZoom - minZoom)).coerceIn(0f, 1f)
+                        else 0f
+                    }.toSet()
+                    repeat(37) { i ->
+                        val t = i / 36f
+                        val p = point(t)
+                        val p2 = point((t + 0.008f).coerceAtMost(1f))
+                        val dx = p2.x - p.x
+                        val dy = p2.y - p.y
+                        val len = kotlin.math.hypot(dx, dy).coerceAtLeast(0.001f)
+                        val nx = -dy / len
+                        val ny = dx / len
+                        val major = majorTicks.any { kotlin.math.abs(it - t) < 0.02f } || i % 6 == 0
+                        val tickLen = if (major) 10.dp.toPx() else 5.dp.toPx()
+                        drawLine(
+                            color = Color.White.copy(alpha = if (major) 0.78f else 0.30f),
+                            start = p,
+                            end = Offset(p.x + nx * tickLen, p.y + ny * tickLen),
+                            strokeWidth = if (major) 1.8.dp.toPx() else 1.dp.toPx(),
+                            cap = StrokeCap.Round,
+                        )
+                    }
+
+                    // 当前倍率黄色指针。
+                    val knob = point(fraction)
+                    drawCircle(Color.Black.copy(alpha = 0.38f), 10.dp.toPx(), knob)
+                    drawCircle(Color(0xFFFFD54F), 4.5.dp.toPx(), knob)
+
+                    // 弧线上的 1×/2×/3× 刻度文字。
+                    val labelPaint = android.graphics.Paint().apply {
+                        isAntiAlias = true
+                        color = 0xCCFFFFFF.toInt()
+                        textSize = 9.sp.toPx()
+                    }
+                    presets.forEach { preset ->
+                        val t = if (maxZoom > minZoom) {
+                            ((preset - minZoom) / (maxZoom - minZoom)).coerceIn(0f, 1f)
+                        } else 0f
+                        val p = point(t)
+                        drawContext.canvas.nativeCanvas.drawText(
+                            formatZoomLabel(preset),
+                            p.x - 26.dp.toPx(),
+                            p.y + 3.dp.toPx(),
+                            labelPaint,
+                        )
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .padding(start = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = formatZoomLabel(shownZoom),
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = "变焦",
+                        color = CameraOnChrome.copy(alpha = 0.62f),
+                        fontSize = 9.sp,
+                    )
+                }
+            }
+                // 只显示当前选中的预设，另外两个在罗盘出现时隐去。
+                val shownPreset = selectedPreset ?: presets.minByOrNull {
+                    kotlin.math.abs(it - shownZoom)
+                }
+                if (shownPreset != null) {
+                    ZoomPresetChip(
+                        label = formatZoomLabel(shownPreset),
+                        selected = true,
+                        onClick = { animateToPreset(shownPreset) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ZoomPresetChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .width(48.dp)
+            .height(36.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color.Black.copy(alpha = 0.38f))
+            .border(
+                1.dp,
+                if (selected) BrandPink.copy(alpha = 0.85f) else Color.White.copy(alpha = 0.20f),
+                RoundedCornerShape(18.dp),
             )
+            .clickable(onClick = onClick)
+            .semantics {
+                contentDescription = "变焦 $label"
+                this.selected = selected
+                role = Role.Button
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = if (selected) BrandPink else Color.White.copy(alpha = 0.90f),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
         )
     }
 }

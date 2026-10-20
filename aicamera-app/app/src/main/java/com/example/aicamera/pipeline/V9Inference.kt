@@ -51,10 +51,28 @@ class V9Inference(
 
     override val typeName: String = "V9-ONNX"
 
-    override val minInferenceIntervalMs: Long get() = if (android.os.SystemClock.elapsedRealtime() < slowUntilMs) 1000L else 500L
+    override val minInferenceIntervalMs: Long get() = if (android.os.SystemClock.elapsedRealtime() < slowUntilMs) 500L else 200L
 
     private val templateStabilizer = V9TemplateStabilizer()
     private val structureMatcher = V9StructureMatcher()
+    private val subjectPlanner = com.example.aicamera.guidance.AdaptiveSubjectPlanner()
+    private val visualTracker = VisualSubjectTracker()
+    override val canTrackVisual: Boolean get() = visualTracker.hasTemplate
+    override fun trackVisual(output: Any?, frame: PreprocessedFrame): Any? {
+        val previous = output as? FakeInferenceOutput ?: return output
+        val bitmap = frame.analysisBitmap ?: return output
+        val viewport = previous.sceneAnalysis?.viewportVersion ?: return output
+        val pixels = IntArray(bitmap.width * bitmap.height)
+        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+        val box = visualTracker.update(pixels, bitmap.width, bitmap.height, frame.sampledAtMs, viewport)
+        return previous.copy(visualSubjectBox = box, visualSampledAtMs = frame.sampledAtMs)
+    }
+    private var visualDetectorKey: String? = null
+    private var visualAnchorKind: String? = null
+    private var pendingRegion: com.example.aicamera.guidance.NormalizedPoint? = null
+    private var manualTarget: com.example.aicamera.guidance.NormalizedPoint? = null
+    private var manualSelectionId = 0L
+    override fun selectRegion(point: com.example.aicamera.guidance.NormalizedPoint) { pendingRegion = point }
     private val multiScene = MultiSceneAnalyzer(index.assetDirectory(), index::getMetadata)
     private val qualityHead = index.qualityHead()
     private val cropEvaluator = QualityCropEvaluator()
@@ -65,7 +83,7 @@ class V9Inference(
     private var structure: com.example.aicamera.guidance.StructureObservation? = null
     private var slowUntilMs = 0L
     override fun updateStructure(observation: com.example.aicamera.guidance.StructureObservation?) { structure = observation }
-    override fun requestReplan() { structureMatcher.replan(); multiScene.replan(); templateStabilizer.reset(); cropEvaluator.reset(); framingEvaluator.reset(); executionAnalyzer.reset() }
+    override fun requestReplan() { subjectPlanner.reset(); structureMatcher.replan(); multiScene.replan(); templateStabilizer.reset(); cropEvaluator.reset(); framingEvaluator.reset(); executionAnalyzer.reset() }
 
 
     // ── IInference 实现 ───────────────────────────────────────
@@ -103,8 +121,11 @@ class V9Inference(
             val semantic = index.rerank(candidates, sceneContext, limit = 32)
             val now = android.os.SystemClock.elapsedRealtime()
             val analysisBitmap = frame.analysisBitmap ?: sourceBitmap
+            val detectedFace = structure?.singleFace(now)
+            val prominentFace = detectedFace != null &&
+                (detectedFace.width * detectedFace.height >= .008f || sceneContext.photoType == "portrait")
             val sceneResult = multiScene.analyze(sourceBitmap, sceneContext, semantic, structure?.viewportVersion ?: -1L,
-                frame.displayAspectRatio ?: 1f, now, frame.sampledAtMs.takeIf { it > 0 } ?: started, frame)
+                frame.displayAspectRatio ?: 1f, now, frame.sampledAtMs.takeIf { it > 0 } ?: started, frame, preferFace = prominentFace)
             val isPortrait = sceneResult.observation.family == com.example.aicamera.guidance.SceneFamily.PORTRAIT
             val reranked = if (isPortrait) structureMatcher.rank(sceneResult.hits, structure, now) else sceneResult.hits.take(8)
             if (reranked.isEmpty()) {
@@ -161,7 +182,10 @@ class V9Inference(
             val meta = selectedHit.metadata ?: index.getMetadata(selectedHit.templateId)
             return if (meta != null) {
                 val target = if (isPortrait) structureMatcher.target(reranked + semantic.filter { candidate -> reranked.none { it.templateId == candidate.templateId } }, structure, now)
+                    ?: subjectPlanner.face(structure, now)
                     else { structureMatcher.reset(); null }
+                val objectTarget = if (!isPortrait) sceneResult.target
+                    ?: subjectPlanner.objectTarget(sceneResult.observation.objectObservation, now) else null
                 val face = structure?.singleFace(now)
                 val features = QualityHead.features(sourceBitmap, face)
                 val head = qualityHead?.takeIf { meta.sceneCategory in it.scenes || meta.photoType in it.scenes }
@@ -175,6 +199,28 @@ class V9Inference(
                 val measuredTracking=if(isPortrait) structure?.trackingId else observedObject?.trackingId
                 val pixels=IntArray(analysisBitmap.width*analysisBitmap.height)
                 analysisBitmap.getPixels(pixels,0,analysisBitmap.width,0,0,analysisBitmap.width,analysisBitmap.height)
+                val selection = pendingRegion
+                val anchorKind = if (isPortrait) "face" else "object"
+                val detectorKey = "$anchorKind:${if (isPortrait) structure?.observationId else observedObject?.observationId}"
+                val newMeasurement = measuredSubject != null && detectorKey != visualDetectorKey &&
+                    (visualAnchorKind == null || visualAnchorKind == anchorKind)
+                if (newMeasurement) { visualDetectorKey = detectorKey; visualAnchorKind = anchorKind }
+                val visualBox = if (selection != null) {
+                    pendingRegion = null
+                    manualSelectionId++
+                    val halfW = .12f
+                    val halfH = (.12f * analysisBitmap.width / analysisBitmap.height).coerceIn(.06f, .2f)
+                    val cx = selection.x.coerceIn(halfW, 1f - halfW)
+                    val cy = selection.y.coerceIn(halfH, 1f - halfH)
+                    val region = com.example.aicamera.guidance.geometry.NormalizedBox(cx - halfW, cy - halfH, cx + halfW, cy + halfH)
+                    manualTarget = com.example.aicamera.guidance.NormalizedPoint(if (cx < .5f) 1f / 3f else 2f / 3f, .5f)
+                    visualTracker.reset()
+                    visualAnchorKind = "manual"
+                    visualTracker.update(pixels, analysisBitmap.width, analysisBitmap.height, frame.sampledAtMs,
+                        sceneResult.observation.viewportVersion, region)
+                    region
+                } else visualTracker.update(pixels, analysisBitmap.width, analysisBitmap.height,
+                    frame.sampledAtMs, sceneResult.observation.viewportVersion, measuredSubject.takeIf { manualTarget == null && newMeasurement })
                 val preference=framingModel?.takeIf { frame.analysisBitmap!=null && now>=preferenceNextAt && now>=slowUntilMs &&
                     FramingPreferenceModel.scene(sceneResult.observation.family) in it.scenes }
                 var preferenceEmbedding:FloatArray?=null
@@ -208,7 +254,7 @@ class V9Inference(
                     target?.let { lines.add(FakeGuideLine("target_zone", true, mapOf(
                         "center_x" to it.center.x, "center_y" to it.center.y, "radius" to it.tolerance,
                         "anchor_kind" to "face", "coordinate_aspect_ratio" to (frame.displayAspectRatio ?: 1f)))) }
-                    sceneResult.target?.let { objectTarget ->
+                    objectTarget?.let { objectTarget ->
                         lines.add(FakeGuideLine("target_zone",true,mapOf("center_x" to objectTarget.center.x,
                             "center_y" to objectTarget.center.y,"radius" to objectTarget.tolerance,"anchor_kind" to "object",
                             "coordinate_aspect_ratio" to (frame.displayAspectRatio ?: 1f))))
@@ -219,11 +265,18 @@ class V9Inference(
                             "height" to b.height,"real" to true,"anchor_kind" to "object","class_id" to observed.classId,"aligned" to false)))
                     }
                     output.copy(guideLines = lines, compositionTarget = target, structureObservation = structure,
-                        sceneAnalysis = sceneResult.observation, objectTarget = sceneResult.target,
+                        sceneAnalysis = sceneResult.observation, objectTarget = objectTarget,
                         expectsSubject = isPortrait,
                         qualityScore = qualityScore, qualityCrop = crop,
                         executionQuality = execution, framingComparison = framing,
-                        qualityAcceptable = features[2] < .98f && features[3] < .98f)
+                        qualityAcceptable = features[2] < .98f && features[3] < .98f,
+                        aiCompositionMethod = when {
+                            target?.source == "live_face_rule" -> "AI 人脸识别 · 三分取景与主体占比建议（规则）"
+                            objectTarget?.source == "live_object_rule" -> "AI 物体识别 · 主体位置与占比建议（规则）"
+                            else -> aiMethodLabel(meta, target != null, objectTarget != null)
+                        },
+                        aiInvolved = true, visualSubjectBox = visualBox, visualSampledAtMs = frame.sampledAtMs,
+                        manualTarget = manualTarget, manualSelectionId = manualSelectionId)
                 }
             } else {
                 createEmptyResult(filterRecommendation, autoZoomRecommendation)
@@ -238,7 +291,7 @@ class V9Inference(
             )
         } finally {
             val finished = android.os.SystemClock.elapsedRealtime()
-            if (finished-started > 150) slowUntilMs = finished+10_000
+            if (finished-started > 350) slowUntilMs = finished+2_000
             reconstructed?.recycle()
         }
     }
@@ -255,6 +308,32 @@ class V9Inference(
      * - horizon_position → 水平参考线（reference_y）
      * - negative_space=high → 留白提示
      */
+    /**
+     * 保存后展示的、可核对的 AI 贡献说明。
+     *
+     * 当前 406 条模板没有可靠的「三分法/对称」等构图规则标签（composition.type 均为 unknown），
+     * 所以这里只陈述真实发生的事：场景识别 + 是否生成了人脸/物体目标；
+     * 没有目标时明确写「仅水平/取景辅助」，不冒充构图方法。
+     */
+    private fun aiMethodLabel(
+        meta: TemplateMeta,
+        hasFaceTarget: Boolean,
+        hasObjectTarget: Boolean
+    ): String {
+        val scene = when {
+            meta.sceneCategory.contains("portrait") -> "人像"
+            meta.sceneCategory.contains("food") -> "美食"
+            meta.sceneCategory.contains("still_life") -> "静物"
+            meta.sceneCategory.contains("landscape") -> "风景"
+            else -> "场景"
+        }
+        return when {
+            hasFaceTarget -> "AI 参考构图 · $scene（人脸目标）"
+            hasObjectTarget -> "AI 参考构图 · $scene（物体目标）"
+            else -> "AI 场景识别 · $scene（未生成构图目标，仅水平/取景辅助）"
+        }
+    }
+
     private fun metaToFakeOutput(
         meta: TemplateMeta,
         score: Float,
@@ -362,6 +441,10 @@ class V9Inference(
 
     @Synchronized
     override fun resetSession() {
+        visualTracker.reset()
+        visualDetectorKey = null; visualAnchorKind = null
+        pendingRegion = null; manualTarget = null
+        subjectPlanner.reset()
         templateStabilizer.reset()
         structureMatcher.reset()
         multiScene.reset()

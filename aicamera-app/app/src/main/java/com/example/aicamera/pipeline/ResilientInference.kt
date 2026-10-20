@@ -41,6 +41,9 @@ class ResilientInference(
         get() = if (degraded) fallback.minInferenceIntervalMs else primary.minInferenceIntervalMs
 
     val isDegraded: Boolean get() = degraded
+    override val canTrackVisual: Boolean get() = !degraded && primary.canTrackVisual
+    override fun trackVisual(output: Any?, frame: PreprocessedFrame): Any? =
+        if (degraded) output else primary.trackVisual(output, frame)
 
     @Synchronized
     override fun predict(buffer: ByteBuffer, frame: PreprocessedFrame): Any? {
@@ -75,6 +78,7 @@ class ResilientInference(
         if (!degraded) primary.updateStructure(observation)
     }
     override fun requestReplan() { if (!degraded) primary.requestReplan() }
+    override fun selectRegion(point: com.example.aicamera.guidance.NormalizedPoint) { if (!degraded) primary.selectRegion(point) }
 
     @Synchronized
     override fun resetSession() {
@@ -96,7 +100,9 @@ class ResilientInference(
             guidanceCue = com.example.aicamera.guidance.GuidanceCue.NONE,
             expectsSubject = false,
             filterRecommendation = null,
-            autoZoomRecommendation = null
+            autoZoomRecommendation = null,
+            aiCompositionMethod = null,
+            aiInvolved = false
         ) else output
     }
 

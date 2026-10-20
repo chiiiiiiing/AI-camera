@@ -43,6 +43,8 @@ class PipelineViewModel @Inject constructor(
 ) : ViewModel() {
 
     fun requestReplan() = pipeline.requestReplan()
+    fun selectRegion(x: Float, y: Float) = pipeline.selectRegion(x, y)
+    fun setContinuousTrackingEnabled(enabled: Boolean) = pipeline.setContinuousTrackingEnabled(enabled)
 
     /** AI 引擎装配状态（HUD/调试面板展示用） */
     val aiState: StateFlow<AiEngineManager.State> = aiEngine.state

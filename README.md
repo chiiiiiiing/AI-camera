@@ -1,5 +1,18 @@
 # GenWow · AI 构图辅助相机
 
+## 产品体验与安装
+
+- [评审体验入口（含 APK 下载与安装步骤）](https://pengjinrui278.github.io/genwow-ui-review/experience.html)
+- [下载 Android v5 安装包](https://github.com/chiiiiiiing/AI-camera/releases/download/v0.5.0-demo.20261020/GenWow-v5-debug.apk)
+- [v5 版本说明](https://github.com/chiiiiiiing/AI-camera/releases/tag/v0.5.0-demo.20261020)
+- [在线 UI 预览](https://pengjinrui278.github.io/genwow-ui-review/)
+
+帧好GenWow，面向摄影新手的AI构图辅助相机，实时引导取景，轻松拍出好构图。
+
+体验包支持 Android 7.0 及以上 ARM 手机。网页为交互预览，真实 AI、相机和自动拍摄请安装 APK 体验；iPhone 只能查看网页。
+
+当前评审版本包含主体连续跟踪、短暂漏检保留目标、目标圈内保持约一秒自动拍摄，以及明确区分的主体中心与目标位置。构建与 lint 通过；全量 368 项单测中 362 项通过、6 项既有失败，详见 [v5 验证记录](docs/capture-target-dwell-v5.md)。
+
 Android 离线相机：V9 ONNX 模型生成图像 embedding，通过模板检索与场景布局推荐构图，再结合 IMU、人脸与物体检测提供可验证的单步引导。当前优化面向中端 Android 手机。
 
 ## 从哪里开始
@@ -33,6 +46,13 @@ python -B ai/tools/validate_android_v9_assets.py --asset-root aicamera-app/app/s
 ```
 
 数据工具和 C++ 回归命令分别见对应目录 README。`.github/workflows/` 自动检查 Android 单测、打包模型/索引、C++ 与模型数据契约。
+
+桌面功能回放台（无需 Android Studio 或真机；在电脑 JVM 上用桌面版 ONNX Runtime 跑真实 `student_model.onnx` + 406 模板索引 + 构图状态机，产出 `ui-review/replay-data/replay.json` 供网页回放）：
+
+```sh
+cd aicamera-app
+./gradlew :app:replayEngine
+```
 
 ## 当前能力与边界
 

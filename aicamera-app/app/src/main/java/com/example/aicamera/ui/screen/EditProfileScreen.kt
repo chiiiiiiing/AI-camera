@@ -24,6 +24,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -79,12 +81,47 @@ fun EditProfileScreen(
     val communityRepo = remember { CommunityRepository.getInstance(context) }
     val scope = rememberCoroutineScope()
 
-    var username by remember { mutableStateOf(authRepo.currentUsername ?: "") }
+    // 游客也有真实 users 行（AuthRepository 会补建），这里用统一显示名初始化。
+    var username by remember { mutableStateOf(authRepo.displayUsername) }
     var bio by remember { mutableStateOf(authRepo.currentBio ?: "") }
     var avatarUri by remember { mutableStateOf<Uri?>(authRepo.currentAvatarUri?.let { Uri.parse(it) }) }
+    var avatarPersisting by remember { mutableStateOf(false) }
+    var profileSeeded by remember { mutableStateOf(false) }
+    val activeUser by authRepo.activeUser.collectAsState()
+
+    // 冷启动恢复会话是异步的；首次拿到真实用户行时以数据库为准，
+    // 避免页面停留在 displayUsername 的默认昵称/旧头像。
+    LaunchedEffect(activeUser?.accountKey) {
+        val user = activeUser ?: return@LaunchedEffect
+        if (!profileSeeded) {
+            if (user.username.isNotBlank()) username = user.username
+            if (user.bio.isNotBlank()) bio = user.bio
+            if (user.avatarUri.isNotBlank()) avatarUri = Uri.parse(user.avatarUri)
+            profileSeeded = true
+        } else {
+            if (username.isBlank()) username = user.username
+            if (bio.isBlank()) bio = user.bio
+            if (avatarUri == null && user.avatarUri.isNotBlank()) avatarUri = Uri.parse(user.avatarUri)
+        }
+    }
 
     val avatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) avatarUri = uri
+        if (uri != null) {
+            // content:// 临时授权在重启后失效，先复制到 App 私有目录再保存。
+            avatarPersisting = true
+            scope.launch {
+                try {
+                    val persisted = authRepo.persistAvatar(uri)
+                    if (persisted != null) {
+                        avatarUri = Uri.parse(persisted)
+                    } else {
+                        Toast.makeText(context, "头像读取失败，请重新选择", Toast.LENGTH_SHORT).show()
+                    }
+                } finally {
+                    avatarPersisting = false
+                }
+            }
+        }
     }
 
     Column(
@@ -161,35 +198,25 @@ fun EditProfileScreen(
 
         Spacer(Modifier.height(26.dp))
         BrandPrimaryButton(
-            label = "保存资料",
-            enabled = true,
+            label = if (avatarPersisting) "正在保存头像…" else "保存资料",
+            enabled = !avatarPersisting,
             onClick = {
                 val trimmed = username.trim()
                 if (trimmed.length !in 2..20) {
                     Toast.makeText(context, "昵称需要 2-20 个字符", Toast.LENGTH_SHORT).show()
                 } else {
-                    // 用 displayUsername 而不是 currentUsername：
-                    // 游客没有真实用户名，其社区数据写在统一显示名（"摄影师"）下，
-                    // 首次设置昵称时也要把这些数据一起迁移过去，否则游客时期的
-                    // 作品/点赞/收藏会全部变孤儿。
+                    // 先用统一显示名迁移社区侧引用（帖子/评论/点赞/收藏/关注），
+                    // 再等待 Room 写入个人资料；两步都完成后才返回，避免页面读到旧昵称。
                     val oldName = authRepo.displayUsername
-                    // 先迁移社区侧引用（帖子/评论/点赞/收藏/关注），再改本地用户名，
-                    // 否则个人主页会立刻变空、旧作品变孤儿。
                     scope.launch {
-                        if (!oldName.isNullOrBlank() && oldName != trimmed) {
-                            runCatching { communityRepo.renameAuthor(oldName, trimmed) }
-                                .onFailure { Toast.makeText(context, "社区数据迁移失败，昵称未修改", Toast.LENGTH_SHORT).show() }
-                                .onSuccess {
-                                    authRepo.updateUsername(trimmed)
-                                    authRepo.updateBio(bio)
-                                    avatarUri?.let { authRepo.saveAvatarUri(it.toString()) }
-                                    onBack()
-                                }
-                        } else {
-                            authRepo.updateUsername(trimmed)
-                            authRepo.updateBio(bio)
-                            avatarUri?.let { authRepo.saveAvatarUri(it.toString()) }
+                        try {
+                            if (!oldName.isNullOrBlank() && oldName != trimmed) {
+                                communityRepo.renameAuthor(oldName, trimmed)
+                            }
+                            authRepo.updateProfile(trimmed, bio, avatarUri?.toString())
                             onBack()
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "保存失败：${e.message}", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }

@@ -298,6 +298,48 @@ class GuidanceStepSequencerTest {
     }
 
     @Test
+    fun `SUBJECT 方向抖动需要连续三帧才切换`() {
+        driveToSubjectStep()
+        val first = seq.onFrame(
+            input(angle = 0f, subjectFrac = 0.42f, hasSubject = true, expectsSubject = true),
+            GuidanceCue.MOVE_LEFT, 0.6f
+        )
+        assertEquals(GuidanceCue.MOVE_LEFT, first.cue)
+
+        val oneFrameBack = seq.onFrame(
+            input(angle = 0f, subjectFrac = 0.42f, hasSubject = true, expectsSubject = true),
+            GuidanceCue.MOVE_RIGHT, 0.6f
+        )
+        assertEquals("单帧反向不能立刻改箭头", GuidanceCue.MOVE_LEFT, oneFrameBack.cue)
+
+        var last = oneFrameBack
+        repeat(3) {
+            last = seq.onFrame(
+                input(angle = 0f, subjectFrac = 0.42f, hasSubject = true, expectsSubject = true),
+                GuidanceCue.MOVE_RIGHT, 0.6f
+            )
+        }
+        assertEquals("反向持续三帧后才切换", GuidanceCue.MOVE_RIGHT, last.cue)
+    }
+
+    @Test
+    fun `SUBJECT 轻微回摆不立刻退回 LEVEL`() {
+        driveToSubjectStep()
+        repeat(3) {
+            val out = seq.onFrame(
+                input(angle = 10f, hasSubject = true, expectsSubject = true),
+                GuidanceCue.ROLL_COUNTERCLOCKWISE, 0.5f
+            )
+            assertEquals("9°–14° 的短暂回摆不应打断主体步骤", GuidanceStep.SUBJECT, out.step)
+        }
+        val out = seq.onFrame(
+            input(angle = 10f, hasSubject = true, expectsSubject = true),
+            GuidanceCue.ROLL_COUNTERCLOCKWISE, 0.5f
+        )
+        assertEquals("持续回摆四帧才回到 LEVEL", GuidanceStep.LEVEL, out.step)
+    }
+
+    @Test
     fun `SUBJECT 对齐 6 帧后进入 DONE`() {
         driveToSubjectStep()
         var step = seq.step

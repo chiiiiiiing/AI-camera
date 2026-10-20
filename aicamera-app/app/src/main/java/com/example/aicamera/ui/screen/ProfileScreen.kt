@@ -116,11 +116,13 @@ fun ProfileScreen(
     SystemBarsAppearance(light = true)
     val context = LocalContext.current
     val authRepo = remember { AuthRepository.getInstance(context) }
-    val currentUser = authRepo.displayUsername
+    // 观察活跃用户：保存昵称/头像后，个人主页无需重启即可刷新。
+    val activeUser by authRepo.activeUser.collectAsState()
+    val currentUser = activeUser?.username?.takeIf { it.isNotBlank() } ?: authRepo.displayUsername
     val isCurrentUser = profileUsername == null || profileUsername == currentUser
     val username = profileUsername ?: currentUser
     val bio = if (isCurrentUser) {
-        authRepo.currentBio ?: "用 AI 构图，记录每一帧美好"
+        activeUser?.bio?.takeIf { it.isNotBlank() } ?: "用 AI 构图，记录每一帧美好"
     } else {
         when (username) {
             "Helena" -> "AI 构图助手 Helena | 热爱光影与咖啡"
@@ -163,8 +165,9 @@ fun ProfileScreen(
 
     // 头像选择（仅当前用户）
     var avatarUri by remember { mutableStateOf<Uri?>(null) }
-    LaunchedEffect(isCurrentUser) {
-        avatarUri = if (isCurrentUser) authRepo.currentAvatarUri?.let { Uri.parse(it) } else null
+    LaunchedEffect(isCurrentUser, activeUser?.avatarUri) {
+        val stored = activeUser?.avatarUri?.takeIf { it.isNotBlank() } ?: authRepo.currentAvatarUri
+        avatarUri = if (isCurrentUser) stored?.let { Uri.parse(it) } else null
     }
     val avatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         if (uri != null) {
@@ -303,6 +306,7 @@ fun ProfileScreen(
                             ProfilePostGrid(
                                 posts = userPosts,
                                 currentUser = currentUser,
+                                currentAvatarUri = activeUser?.avatarUri,
                                 viewModel = communityViewModel,
                                 onNavigateToProfile = onNavigateToProfile,
                                 onPostClick = { selectedPost = it },
@@ -319,6 +323,7 @@ fun ProfileScreen(
                             ProfilePostGrid(
                                 posts = likedPosts,
                                 currentUser = currentUser,
+                                currentAvatarUri = activeUser?.avatarUri,
                                 viewModel = communityViewModel,
                                 onNavigateToProfile = onNavigateToProfile,
                                 onPostClick = { selectedPost = it },
@@ -335,6 +340,7 @@ fun ProfileScreen(
                             ProfilePostGrid(
                                 posts = favoritedPosts,
                                 currentUser = currentUser,
+                                currentAvatarUri = activeUser?.avatarUri,
                                 viewModel = communityViewModel,
                                 onNavigateToProfile = onNavigateToProfile,
                                 onPostClick = { selectedPost = it },
@@ -348,7 +354,11 @@ fun ProfileScreen(
                                 subtitle = "你的评论历史会显示在这里"
                             )
                         } else {
-                            ProfileCommentList(comments = userComments)
+                            ProfileCommentList(
+                                comments = userComments,
+                                currentUser = currentUser,
+                                currentAvatarUri = activeUser?.avatarUri,
+                            )
                         }
                     }
                 }
@@ -372,6 +382,7 @@ fun ProfileScreen(
                 post = post,
                 viewModel = communityViewModel,
                 currentUser = currentUser,
+                currentAvatarUri = activeUser?.avatarUri,
                 onDismiss = { selectedPost = null },
                 onNavigateToProfile = onNavigateToProfile,
                 communityAssetMapper = { key -> communityAssetResource(key ?: "") },
@@ -397,6 +408,13 @@ private fun ProfileAvatarCircle(
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
+        // 内置头像垫底：旧 content:// 头像在重启后可能失效，不能让界面只剩白块。
+        Image(
+            painter = painterResource(fallbackAvatar),
+            contentDescription = "头像",
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
         if (avatarUri != null) {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
@@ -407,13 +425,6 @@ private fun ProfileAvatarCircle(
                 contentDescription = "头像",
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
-            )
-        } else {
-            Image(
-                painter = painterResource(fallbackAvatar),
-                contentDescription = "头像",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
             )
         }
     }
@@ -552,6 +563,7 @@ private fun ProfileTabBar(
 private fun ProfilePostGrid(
     posts: List<CommunityPost>,
     currentUser: String,
+    currentAvatarUri: String?,
     viewModel: CommunityViewModel?,
     onNavigateToProfile: (String) -> Unit,
     onPostClick: (CommunityPost) -> Unit,
@@ -564,6 +576,7 @@ private fun ProfilePostGrid(
                     ProfilePostCard(
                         post = post,
                         currentUser = currentUser,
+                        currentAvatarUri = currentAvatarUri,
                         viewModel = viewModel,
                         onNavigateToProfile = onNavigateToProfile,
                         onClick = { onPostClick(post) },
@@ -582,6 +595,7 @@ private fun ProfilePostGrid(
 private fun ProfilePostCard(
     post: CommunityPost,
     currentUser: String,
+    currentAvatarUri: String?,
     viewModel: CommunityViewModel?,
     onNavigateToProfile: (String) -> Unit,
     onClick: () -> Unit,
@@ -619,14 +633,14 @@ private fun ProfilePostCard(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Image(
-                painter = painterResource(authorAvatar(post.author)),
+            AuthorAvatar(
+                author = post.author,
+                currentUser = currentUser,
+                currentAvatarUri = currentAvatarUri,
                 contentDescription = "${post.author} 的头像",
                 modifier = Modifier
                     .size(16.dp)
-                    .clip(CircleShape)
                     .clickable { onNavigateToProfile(post.author) },
-                contentScale = ContentScale.Crop,
             )
             Text(
                 text = post.author,
@@ -662,20 +676,24 @@ private fun ProfilePostCard(
 // ── 评论列表 ────────────────────────────────────────────────────
 
 @Composable
-private fun ProfileCommentList(comments: List<CommunityComment>, modifier: Modifier = Modifier) {
+private fun ProfileCommentList(
+    comments: List<CommunityComment>,
+    currentUser: String,
+    currentAvatarUri: String?,
+    modifier: Modifier = Modifier,
+) {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         comments.forEach { comment ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.Top,
             ) {
-                Image(
-                    painter = painterResource(authorAvatar(comment.author)),
+                AuthorAvatar(
+                    author = comment.author,
+                    currentUser = currentUser,
+                    currentAvatarUri = currentAvatarUri,
                     contentDescription = "${comment.author} 的头像",
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clip(CircleShape),
-                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(34.dp),
                 )
                 Column(
                     modifier = Modifier
@@ -779,6 +797,36 @@ internal fun ProfileAvatar(
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
+        Canvas(Modifier.matchParentSize()) {
+            drawRoundRect(
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.90f),
+                        Color(0xFFFFEAF5),
+                        Color(0xFFE8DEFF),
+                    ),
+                ),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(32.dp.toPx(), 32.dp.toPx()),
+            )
+        }
+        Canvas(Modifier.size(42.dp)) {
+            val stroke = Stroke(1.5.dp.toPx(), cap = StrokeCap.Round)
+            drawCircle(
+                BrandOnSurface,
+                radius = 7.dp.toPx(),
+                center = Offset(size.width / 2f, 12.dp.toPx()),
+                style = stroke,
+            )
+            drawArc(
+                BrandOnSurface,
+                startAngle = 198f,
+                sweepAngle = 144f,
+                useCenter = false,
+                topLeft = Offset(5.dp.toPx(), 20.dp.toPx()),
+                size = Size(32.dp.toPx(), 19.dp.toPx()),
+                style = stroke,
+            )
+        }
         if (avatarUri != null) {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
@@ -790,37 +838,6 @@ internal fun ProfileAvatar(
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
             )
-        } else {
-            Canvas(Modifier.matchParentSize()) {
-                drawRoundRect(
-                    brush = Brush.linearGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.90f),
-                            Color(0xFFFFEAF5),
-                            Color(0xFFE8DEFF),
-                        ),
-                    ),
-                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(32.dp.toPx(), 32.dp.toPx()),
-                )
-            }
-            Canvas(Modifier.size(42.dp)) {
-                val stroke = Stroke(1.5.dp.toPx(), cap = StrokeCap.Round)
-                drawCircle(
-                    BrandOnSurface,
-                    radius = 7.dp.toPx(),
-                    center = Offset(size.width / 2f, 12.dp.toPx()),
-                    style = stroke,
-                )
-                drawArc(
-                    BrandOnSurface,
-                    startAngle = 198f,
-                    sweepAngle = 144f,
-                    useCenter = false,
-                    topLeft = Offset(5.dp.toPx(), 20.dp.toPx()),
-                    size = Size(32.dp.toPx(), 19.dp.toPx()),
-                    style = stroke,
-                )
-            }
         }
         Box(
             modifier = Modifier

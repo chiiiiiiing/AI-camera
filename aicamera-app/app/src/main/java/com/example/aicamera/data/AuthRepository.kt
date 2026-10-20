@@ -2,6 +2,7 @@ package com.example.aicamera.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.net.Uri
 import android.util.Log
 import com.example.aicamera.data.api.AuthApi
 import com.example.aicamera.data.db.LocalUser
@@ -14,8 +15,13 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import java.io.File
 import java.security.SecureRandom
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
@@ -48,6 +54,8 @@ class AuthRepository private constructor(
     private val userDao: UserDao
 ) {
 
+    private val appContext: Context = context.applicationContext
+
     private val prefs: SharedPreferences =
         context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
 
@@ -62,10 +70,34 @@ class AuthRepository private constructor(
             runCatching {
                 migrateLegacyPrefsToRoom()
                 migrateLegacyAccount()
+                // 冷启动时恢复 session 对应的真实用户；否则界面会回退到游客显示名，
+                // 看起来像"账号变成了别人的"。
+                restoreActiveUser()
             }.onFailure { e ->
-                Log.w(TAG, "旧数据迁移失败: ${e.message}", e)
+                Log.w(TAG, "旧数据迁移/会话恢复失败: ${e.message}", e)
             }
         }
+    }
+
+    /** 按已保存的 session account 恢复活跃用户；游客行缺失时补建。 */
+    private suspend fun restoreActiveUser() {
+        val account = prefs.getString(KEY_SESSION_ACCOUNT, null) ?: return
+        val existing = userDao.getByKey(account)
+        val user = existing ?: if (account == GUEST_ACCOUNT_KEY) {
+            LocalUser(
+                accountKey = account,
+                username = GUEST_DISPLAY_NAME,
+                passwordHash = null,
+                passwordSalt = null,
+                phone = "",
+                email = "",
+                avatarUri = "",
+                bio = ""
+            ).also { userDao.upsert(it) }
+        } else {
+            return
+        }
+        setActiveUser(user)
     }
 
     // ── 公开状态查询 ──────────────────────────────────────────
@@ -109,9 +141,22 @@ class AuthRepository private constructor(
         }
         CoroutineScope(SupervisorJob() + Dispatchers.IO + handler).launch {
             runCatching {
-                cachedActiveUser = userDao.getByKey(GUEST_ACCOUNT_KEY)
+                // 游客也必须有真实的 users 行：否则 updateActiveUser 找不到账号，
+                // 改昵称/头像只迁移了社区数据，个人资料却永远停在默认值。
+                val existing = userDao.getByKey(GUEST_ACCOUNT_KEY)
+                val guest = existing ?: LocalUser(
+                    accountKey = GUEST_ACCOUNT_KEY,
+                    username = GUEST_DISPLAY_NAME,
+                    passwordHash = null,
+                    passwordSalt = null,
+                    phone = "",
+                    email = "",
+                    avatarUri = "",
+                    bio = ""
+                ).also { userDao.upsert(it) }
+                setActiveUser(guest)
             }.onFailure { e ->
-                Log.w(TAG, "读取游客缓存失败: ${e.message}", e)
+                Log.w(TAG, "读取/创建游客缓存失败: ${e.message}", e)
             }
         }
         Log.i(TAG, "已创建游客会话（免注册体验）")
@@ -150,6 +195,15 @@ class AuthRepository private constructor(
     /** ★ Room 活跃用户内存缓存：登录时写入，更新时同步，避免主线程读 Room */
     @Volatile
     private var cachedActiveUser: LocalUser? = null
+
+    /** 个人资料变更的可观察状态：头像/昵称保存后，社区/相机/个人主页一起刷新。 */
+    private val _activeUser = MutableStateFlow<LocalUser?>(null)
+    val activeUser: StateFlow<LocalUser?> = _activeUser.asStateFlow()
+
+    private fun setActiveUser(user: LocalUser?) {
+        cachedActiveUser = user
+        _activeUser.value = user
+    }
 
     // ── 验证码 ───────────────────────────────────────────────
 
@@ -336,7 +390,7 @@ class AuthRepository private constructor(
             return LoginResult.Error("密码错误")
         }
         val token = startSession(key)
-        cachedActiveUser = matched
+        setActiveUser(matched)
         Log.i(TAG, "登录成功（本地）")
         return LoginResult.Success(matched.username, token)
     }
@@ -383,12 +437,14 @@ class AuthRepository private constructor(
             .remove(KEY_SESSION_TOKEN)
             .remove(KEY_SESSION_ACCOUNT)
             .apply()
+        setActiveUser(null)
         Log.i(TAG, "已登出")
     }
 
     /** 清除所有数据（用于"注销账号"） */
     fun clearAll() {
         prefs.edit().clear().apply()
+        setActiveUser(null)
         Log.i(TAG, "所有认证数据已清除")
     }
 
@@ -470,10 +526,57 @@ class AuthRepository private constructor(
 
     private suspend fun updateActiveUser(mutate: (LocalUser) -> LocalUser) {
         val account = prefs.getString(KEY_SESSION_ACCOUNT, null) ?: return
-        val existing = userDao.getByKey(account) ?: return
+        // 账号行缺失时也要补建，不能静默丢弃个人资料更新。
+        val existing = userDao.getByKey(account) ?: LocalUser(
+            accountKey = account,
+            username = "",
+            passwordHash = null,
+            passwordSalt = null,
+            phone = "",
+            email = "",
+            avatarUri = "",
+            bio = ""
+        )
         val updated = mutate(existing)
         userDao.upsert(updated)
-        cachedActiveUser = updated
+        setActiveUser(updated)
+    }
+
+    /**
+     * 把相册选择结果复制到 App 私有目录。
+     *
+     * GetContent 返回的 content:// URI 只带临时读权限，进程重启后通常失效，
+     * 直接存进 Room 会导致重进 App 头像变白。复制成 file:// 后长期有效。
+     */
+    suspend fun persistAvatar(source: Uri): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            val dir = File(appContext.filesDir, "profile_avatars").apply { mkdirs() }
+            val account = prefs.getString(KEY_SESSION_ACCOUNT, null) ?: GUEST_ACCOUNT_KEY
+            val accountTag = Integer.toHexString(account.hashCode())
+            val target = File(dir, "avatar_${accountTag}_${System.currentTimeMillis()}.img")
+            val copied = appContext.contentResolver.openInputStream(source)?.use { input ->
+                target.outputStream().use { output -> input.copyTo(output) }
+                true
+            } ?: false
+            if (!copied || target.length() <= 0L) {
+                target.delete()
+                error("无法读取所选图片")
+            }
+            Uri.fromFile(target).toString()
+        }.onFailure {
+            Log.w(TAG, "头像持久化失败: ${it.message}")
+        }.getOrNull()
+    }
+
+    /** 保存个人资料（昵称/简介/头像），并等待 Room 写入完成后返回。 */
+    suspend fun updateProfile(username: String, bio: String, avatarUri: String?) {
+        updateActiveUser { existing ->
+            existing.copy(
+                username = username,
+                bio = bio,
+                avatarUri = avatarUri ?: existing.avatarUri
+            )
+        }
     }
 
     /** 写入/更新本地用户记录（密码非空时刷新哈希） */
@@ -522,7 +625,7 @@ class AuthRepository private constructor(
             .putString(KEY_SESSION_ACCOUNT, accountKey)
             .apply()
         // 加载用户到内存缓存
-        cachedActiveUser = userDao.getByKey(accountKey)
+        setActiveUser(userDao.getByKey(accountKey))
         return token
     }
 

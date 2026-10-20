@@ -118,4 +118,31 @@ class HorizonJudgeTest {
         repeat(6) { judge.observe(obs, it * 100L) }
         assertNotEquals(HorizonJudge.State.UPSIDE_DOWN, judge.state)
     }
+
+    // ═══════════════════════════════════════════════════════════
+    // 手持策略：只放宽 App 实时引导，不影响核心严格默认值
+    // ═══════════════════════════════════════════════════════════
+
+    @Test
+    fun `手持策略 5 度倾斜连续 3 帧即可进入 ALIGNED`() {
+        val judge = HorizonJudge(HandheldHorizonPolicy)
+        val handShake = HorizonObservation(rollDegrees = 5f, isUpright = true, confidence = 1f)
+        repeat(3) { judge.observe(handShake, it * 100L) }
+        assertEquals(HorizonJudge.State.ALIGNED, judge.state)
+    }
+
+    @Test
+    fun `手持策略 8 度内不退出 超过 9 度连续两帧才退出`() {
+        val judge = HorizonJudge(HandheldHorizonPolicy)
+        val leveled = HorizonObservation(rollDegrees = 5f, isUpright = true, confidence = 1f)
+        repeat(3) { judge.observe(leveled, it * 100L) }
+
+        val withinExit = HorizonObservation(rollDegrees = 8f, isUpright = true, confidence = 1f)
+        repeat(3) { judge.observe(withinExit, 400 + it * 100L) }
+        assertEquals("8° 在手持退出容差内", HorizonJudge.State.ALIGNED, judge.state)
+
+        val beyondExit = HorizonObservation(rollDegrees = 10f, isUpright = true, confidence = 1f)
+        repeat(2) { judge.observe(beyondExit, 800 + it * 100L) }
+        assertEquals("连续两帧超过 9° 才退出", HorizonJudge.State.NOT_LEVEL, judge.state)
+    }
 }

@@ -72,7 +72,7 @@ class GuidanceGeometryTest {
     fun `diagonal point outside circular target is not aligned`() {
         val cue = GuidanceGeometry.guidanceCue(0.59f, 0.59f, true,
             targetCx = 0.5f, targetCy = 0.5f, targetTolerance = 0.12f)
-        assertTrue(cue == GuidanceCue.MOVE_RIGHT || cue == GuidanceCue.MOVE_DOWN)
+        assertEquals(GuidanceCue.MOVE_DOWN_RIGHT, cue)
         assertTrue(!GuidanceGeometry.isSubjectAligned(0.59f, 0.59f, 0.5f, 0.5f, 0.12f))
     }
 

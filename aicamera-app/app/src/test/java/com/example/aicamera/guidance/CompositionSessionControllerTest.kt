@@ -48,8 +48,7 @@ class CompositionSessionControllerTest {
         )
         for (id in 1L..12L) controller.observe(portrait(id, .59f, .59f))
         assertTrue(controller.state.value is CompositionSessionController.State.Adjusting)
-        assertTrue(controller.action.value == CompositionSessionController.GuidanceAction.MoveRight ||
-            controller.action.value == CompositionSessionController.GuidanceAction.MoveDown)
+        assertEquals(CompositionSessionController.GuidanceAction.MoveDownRight, controller.action.value)
         for (id in 13L..22L) controller.observe(portrait(id, .55f, .55f))
         assertEquals(CompositionSessionController.State.Ready, controller.state.value)
     }

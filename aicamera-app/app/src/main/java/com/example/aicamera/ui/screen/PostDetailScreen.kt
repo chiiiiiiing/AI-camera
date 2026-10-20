@@ -50,6 +50,7 @@ fun PostDetailDialog(
     post: CommunityPost,
     viewModel: CommunityViewModel,
     currentUser: String,
+    currentAvatarUri: String?,
     onDismiss: () -> Unit,
     onNavigateToProfile: (String) -> Unit = {},
     communityAssetMapper: (String?) -> Int,
@@ -119,14 +120,13 @@ fun PostDetailDialog(
                             .clickable(onClick = onDismiss)
                             .padding(8.dp),
                     )
-                    Image(
-                        painter = painterResource(authorAvatar(post.author)),
-                        contentDescription = null,
+                    AuthorAvatar(
+                        author = post.author,
+                        currentUser = currentUser,
+                        currentAvatarUri = currentAvatarUri,
                         modifier = Modifier
                             .size(34.dp)
-                            .clip(CircleShape)
                             .clickable { onNavigateToProfile(post.author) },
-                        contentScale = ContentScale.Crop,
                     )
                     Spacer(Modifier.size(8.dp))
                     Text(
